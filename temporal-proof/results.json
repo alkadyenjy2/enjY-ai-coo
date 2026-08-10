@@ -1,0 +1,247 @@
+{
+  "timestamp": "2026-08-09T22:46:06.198Z",
+  "overallResult": "TEMPORAL_CONFORMANCE = PROVEN",
+  "testResults": [
+    {
+      "testId": "T01",
+      "testName": "State Transitions (RECEIVED -> COMPLETED)",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 23,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "EXECUTED",
+          "VERIFIED",
+          "COMPLETED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 1,
+          "recordMemory": 1
+        },
+        "sideEffectCount": 3,
+        "finalStatus": "COMPLETED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "All 6 core state transitions verified in sequence."
+      }
+    },
+    {
+      "testId": "T02",
+      "testName": "Transient Retry Backoff",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 23,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "EXECUTED",
+          "VERIFIED",
+          "COMPLETED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 3,
+          "recordMemory": 1
+        },
+        "sideEffectCount": 3,
+        "finalStatus": "COMPLETED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Transient errors retried 2 times and recovered on attempt 3."
+      }
+    },
+    {
+      "testId": "T02",
+      "testName": "Non-Retryable Fatal Exception",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 17,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "FAILED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 1
+        },
+        "sideEffectCount": 1,
+        "finalStatus": "FAILED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Non-retryable policy breach stopped execution after exactly 1 attempt."
+      }
+    },
+    {
+      "testId": "T03",
+      "testName": "Idempotency & Replay Determinism",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 23,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "EXECUTED",
+          "VERIFIED",
+          "COMPLETED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 1,
+          "recordMemory": 1
+        },
+        "sideEffectCount": 3,
+        "finalStatus": "COMPLETED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Replay & query executed without duplicated side-effects (Side-effects: 3)."
+      }
+    },
+    {
+      "testId": "T04",
+      "testName": "Human-in-the-loop Approval Signal",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 29,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "WAITING_FOR_APPROVAL",
+          "DISPATCHED",
+          "EXECUTED",
+          "VERIFIED",
+          "COMPLETED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 1,
+          "recordMemory": 1
+        },
+        "sideEffectCount": 3,
+        "finalStatus": "COMPLETED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Workflow correctly paused at WAITING_FOR_APPROVAL and resumed upon APPROVED signal."
+      }
+    },
+    {
+      "testId": "T04",
+      "testName": "Human-in-the-loop Rejection Signal",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 17,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "WAITING_FOR_APPROVAL",
+          "REJECTED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1
+        },
+        "sideEffectCount": 1,
+        "finalStatus": "REJECTED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Workflow correctly paused and terminated upon REJECTED signal."
+      }
+    },
+    {
+      "testId": "T05",
+      "testName": "Loop Guardrail Iteration Limit",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 47,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "EXECUTED",
+          "VERIFIED",
+          "COMPLETED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 5,
+          "recordMemory": 1
+        },
+        "sideEffectCount": 7,
+        "finalStatus": "COMPLETED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Loop executed exactly 5 iterations as constrained by guardrail."
+      }
+    },
+    {
+      "testId": "T06",
+      "testName": "Evidence Gate Pass",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 29,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "EXECUTED",
+          "VERIFIED",
+          "COMPLETED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 1,
+          "verifyEvidence": 1,
+          "recordMemory": 1
+        },
+        "sideEffectCount": 4,
+        "finalStatus": "COMPLETED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Evidence verified successfully. Proof hash: PROOF_VERIFIED_HASH_56455249"
+      }
+    },
+    {
+      "testId": "T06",
+      "testName": "Evidence Gate Block Missing Proof",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 23,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "EXECUTED",
+          "FAILED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 1,
+          "verifyEvidence": 1
+        },
+        "sideEffectCount": 2,
+        "finalStatus": "FAILED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Evidence gate correctly blocked transition to VERIFIED when evidence was invalid/missing."
+      }
+    },
+    {
+      "testId": "T07",
+      "testName": "Recovery & State Capture",
+      "status": "PASS",
+      "evidence": {
+        "eventHistoryCount": 17,
+        "stateTrace": [
+          "RECEIVED",
+          "ROUTED",
+          "DISPATCHED",
+          "FAILED"
+        ],
+        "activityAttempts": {
+          "classifyDirective": 1,
+          "executeDeterministic": 3
+        },
+        "sideEffectCount": 1,
+        "finalStatus": "FAILED",
+        "finalContractResult": "CONFORMS_TO_CONTRACT",
+        "details": "Failure gracefully caught and recorded in state history: Activity task failed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Core AI Operations Agent",
+  "description": "A reusable AI operating system with adaptive memory, project discovery, workflow automation, connector ecosystem, and operational command center.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

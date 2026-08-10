@@ -1,0 +1,158 @@
+{
+  "timestamp": "2026-08-09T22:52:41.537Z",
+  "overallResult": "REAL_E2E_TEMPORAL_BINDING = PROVEN",
+  "results": [
+    {
+      "step": "1. Health Check",
+      "endpoint": "GET /api/health",
+      "status": "PASS",
+      "details": "Server alive with Temporal Engine Active: true",
+      "payload": {
+        "status": "ok",
+        "system": "Core AI Operations Agent",
+        "version": "2.5.0",
+        "hasApiKey": true,
+        "temporalEngineActive": true,
+        "executionHistoryCount": 0,
+        "timestamp": "2026-08-09T22:52:39.689Z"
+      }
+    },
+    {
+      "step": "2. Synchronous Execution",
+      "endpoint": "POST /api/temporal/execute-sync",
+      "status": "PASS",
+      "details": "Workflow executed synchronously to COMPLETED state. Workflow ID: wf-core-1786315959700-n8855",
+      "payload": {
+        "success": true,
+        "workflowId": "wf-core-1786315959700-n8855",
+        "runId": "019fe8ba-6d96-7d88-b7c9-c850a5a05934",
+        "finalState": {
+          "currentStatus": "COMPLETED",
+          "stateHistory": [
+            "RECEIVED",
+            "ROUTED",
+            "DISPATCHED",
+            "EXECUTED",
+            "VERIFIED",
+            "COMPLETED"
+          ],
+          "approvalStatus": "AUTO_APPROVED",
+          "verificationStatus": "NOT_REQUIRED",
+          "loopIterationsExecuted": 1,
+          "intent": "GENERAL_EXECUTION",
+          "executionResult": "Executed action for directive: E2E Synchronous Execution Command"
+        },
+        "conformanceResult": "TEMPORAL_CONFORMANCE = PROVEN"
+      }
+    },
+    {
+      "step": "3. Async Workflow Start",
+      "endpoint": "POST /api/temporal/start",
+      "status": "PASS",
+      "details": "Async Workflow started with ID: wf-core-1786315959808-fpzh8",
+      "payload": {
+        "success": true,
+        "workflowId": "wf-core-1786315959808-fpzh8",
+        "runId": "019fe8ba-6e03-78d7-9c0d-162e5fff0b1f",
+        "initialState": {
+          "currentStatus": "ROUTED",
+          "stateHistory": [
+            "RECEIVED",
+            "ROUTED"
+          ],
+          "approvalStatus": "AUTO_APPROVED",
+          "verificationStatus": "NOT_REQUIRED",
+          "loopIterationsExecuted": 0
+        },
+        "message": "Temporal AI CORE Workflow started successfully."
+      }
+    },
+    {
+      "step": "4. Pause State Check",
+      "endpoint": "GET /api/temporal/status/wf-core-1786315959808-fpzh8",
+      "status": "PASS",
+      "details": "Workflow correctly paused in WAITING_FOR_APPROVAL state.",
+      "payload": {
+        "success": true,
+        "workflowId": "wf-core-1786315959808-fpzh8",
+        "state": {
+          "currentStatus": "WAITING_FOR_APPROVAL",
+          "stateHistory": [
+            "RECEIVED",
+            "ROUTED",
+            "WAITING_FOR_APPROVAL"
+          ],
+          "approvalStatus": "WAITING",
+          "verificationStatus": "NOT_REQUIRED",
+          "loopIterationsExecuted": 0,
+          "intent": "DESTRUCTIVE_ACTION"
+        }
+      }
+    },
+    {
+      "step": "5. Signal Approval",
+      "endpoint": "POST /api/temporal/signal/wf-core-1786315959808-fpzh8",
+      "status": "PASS",
+      "details": "Signal delivered successfully through Express server endpoint.",
+      "payload": {
+        "success": true,
+        "workflowId": "wf-core-1786315959808-fpzh8",
+        "approved": true,
+        "state": {
+          "currentStatus": "COMPLETED",
+          "stateHistory": [
+            "RECEIVED",
+            "ROUTED",
+            "WAITING_FOR_APPROVAL",
+            "DISPATCHED",
+            "EXECUTED",
+            "VERIFIED",
+            "COMPLETED"
+          ],
+          "approvalStatus": "APPROVED",
+          "verificationStatus": "NOT_REQUIRED",
+          "loopIterationsExecuted": 1,
+          "intent": "DESTRUCTIVE_ACTION",
+          "executionResult": "Executed action for directive: Delete Production Database Snapshot"
+        },
+        "message": "Signaled human approval (true) to workflow."
+      }
+    },
+    {
+      "step": "6. Post-Signal Completion Check",
+      "endpoint": "GET /api/temporal/status/wf-core-1786315959808-fpzh8",
+      "status": "PASS",
+      "details": "Workflow successfully resumed and reached COMPLETED status.",
+      "payload": {
+        "success": true,
+        "workflowId": "wf-core-1786315959808-fpzh8",
+        "state": {
+          "currentStatus": "COMPLETED",
+          "stateHistory": [
+            "RECEIVED",
+            "ROUTED",
+            "WAITING_FOR_APPROVAL",
+            "DISPATCHED",
+            "EXECUTED",
+            "VERIFIED",
+            "COMPLETED"
+          ],
+          "approvalStatus": "APPROVED",
+          "verificationStatus": "NOT_REQUIRED",
+          "loopIterationsExecuted": 1,
+          "intent": "DESTRUCTIVE_ACTION",
+          "executionResult": "Executed action for directive: Delete Production Database Snapshot"
+        }
+      }
+    },
+    {
+      "step": "7. Event History Audit",
+      "endpoint": "GET /api/temporal/history/wf-core-1786315959808-fpzh8",
+      "status": "PASS",
+      "details": "Retrieved 29 Temporal event history records.",
+      "payload": {
+        "eventCount": 29
+      }
+    }
+  ]
+}
