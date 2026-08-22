@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Layers,
   Brain,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Project, Connector, Workflow as WorkflowType, LessonLearned, ExecutionLog, UserProfile, AIModelOption } from '../types';
 import { AdaptiveBehaviorCard } from './AdaptiveBehaviorCard';
+import { checkEnvStatus, EnvValidationSummary } from '../utils/envValidator';
 
 interface DashboardViewProps {
   projects: Project[];
@@ -46,6 +47,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const connectedCount = connectors.filter(c => c.status === 'connected' || c.status === 'authorized').length;
   const activeWfCount = workflows.filter(w => w.active).length;
+
+  const [envSummary, setEnvSummary] = useState<EnvValidationSummary | null>(null);
+  const [checkingEnv, setCheckingEnv] = useState(false);
+
+  const handleCheckEnv = async () => {
+    setCheckingEnv(true);
+    try {
+      const summary = await checkEnvStatus();
+      setEnvSummary(summary);
+    } catch (err) {
+      console.error('Error checking env status:', err);
+    } finally {
+      setCheckingEnv(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -151,7 +167,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-[10px] text-purple-400 font-mono mt-1">{activeModel.speed}</div>
         </div>
 
-        {/* System Health */}
+        {/* System Health & Env Secrets Audit */}
         <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl text-zinc-200">
           <div className="flex items-center justify-between text-zinc-500 mb-1 font-mono">
             <span className="text-[10px] font-bold uppercase tracking-wider">INGRESS</span>
@@ -160,6 +176,70 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-xs font-bold text-emerald-400 font-mono">3000 : 0.0.0.0</div>
           <div className="text-[10px] text-zinc-500 font-mono mt-1">Cloud Run</div>
         </div>
+      </div>
+
+      {/* Environment Variables Audit & System Status */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-zinc-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-400">
+              System Status & Environment Secrets Audit
+            </h3>
+          </div>
+          <button
+            onClick={handleCheckEnv}
+            disabled={checkingEnv}
+            className="flex items-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold px-3.5 py-1.5 rounded-xl transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <Activity className={`w-3.5 h-3.5 ${checkingEnv ? 'animate-spin' : ''}`} />
+            {checkingEnv ? 'Checking Environment...' : 'Check Env Status'}
+          </button>
+        </div>
+
+        {envSummary ? (
+          <div className="mt-4 space-y-3 font-mono">
+            <div className="flex flex-wrap items-center justify-between text-xs bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-400">Status Summary:</span>
+                <span className="px-2.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold">
+                  {envSummary.presentCount} PRESENT
+                </span>
+                <span className="px-2.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[11px] font-bold">
+                  {envSummary.absentCount} ABSENT
+                </span>
+              </div>
+              <span className="text-[10px] text-zinc-500">
+                Last Checked: {new Date(envSummary.timestamp).toLocaleTimeString()}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {envSummary.results.map((item) => (
+                <div
+                  key={item.key}
+                  className="bg-zinc-950/70 border border-zinc-800/60 p-2.5 rounded-xl flex items-center justify-between text-xs"
+                >
+                  <span className="text-zinc-300 truncate font-mono text-[11px]">{item.key}</span>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      item.status === 'PRESENT'
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                    }`}
+                  >
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3 text-xs text-zinc-500 font-mono flex items-center justify-between">
+            <span>Click &quot;Check Env Status&quot; to iterate through the 9 required environment variables and view their status.</span>
+            <span className="text-[10px] text-zinc-600">9 Secrets Configured</span>
+          </div>
+        )}
       </div>
 
       {/* Core Architecture Overview Visualizer - Bento Grid */}

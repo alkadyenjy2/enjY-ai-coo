@@ -17,6 +17,14 @@ import * as activities from "./temporal-proof/activities";
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
 
+// Global Process Crash Prevention Guard
+process.on("uncaughtException", (err) => {
+  console.warn("⚠️ Uncaught Exception intercepted in server process:", err?.message || err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.warn("⚠️ Unhandled Rejection intercepted in server process:", (reason as any)?.message || reason);
+});
+
 const app = express();
 const PORT = 3000;
 
@@ -1436,6 +1444,40 @@ app.get("/api/connectors/status", (req, res) => {
   res.json({
     timestamp: new Date().toISOString(),
     liveConnectors: audit
+  });
+});
+
+// API Route: Environment Variables Status Check Endpoint
+app.get("/api/env-status", (req, res) => {
+  const keys = [
+    'GEMINI_API_KEY',
+    'POSTIZ_API_KEY',
+    'WHOP_API_KEY',
+    'OUTSCRAPER_API_KEY',
+    'GHL_API_KEY',
+    'GHL_LOCATION_ID',
+    'TAVILY_API_KEY',
+    'STRIPE_SECRET_KEY',
+    'STRIPE_WEBHOOK_SECRET'
+  ];
+
+  const variables: Record<string, 'PRESENT' | 'ABSENT'> = {};
+  let presentCount = 0;
+  let absentCount = 0;
+
+  keys.forEach(key => {
+    const present = Boolean(process.env[key] && process.env[key]!.trim().length > 0);
+    variables[key] = present ? 'PRESENT' : 'ABSENT';
+    if (present) presentCount++;
+    else absentCount++;
+  });
+
+  res.json({
+    timestamp: new Date().toISOString(),
+    total: keys.length,
+    presentCount,
+    absentCount,
+    variables
   });
 });
 

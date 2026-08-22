@@ -24,7 +24,7 @@ async function runRealE2ESuite() {
       headers: { 'Content-Type': 'application/json' },
       ...options
     });
-    const json = await res.json();
+    const json: any = await res.json();
     return { status: res.status, json };
   }
 
