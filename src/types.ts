@@ -158,3 +158,21 @@ export interface ExecutionLog {
   project?: string;
   durationMs?: number;
 }
+
+export interface CommandTemplate {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+  category: 'workflow' | 'diagnostics' | 'deployment' | 'leads' | 'social' | 'custom';
+  isPinned: boolean;
+  tags: string[];
+  lastUsedAt?: string;
+  usageCount: number;
+  variables?: {
+    name: string;
+    label: string;
+    defaultValue?: string;
+    placeholder?: string;
+  }[];
+}

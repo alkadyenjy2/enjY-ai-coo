@@ -7,7 +7,8 @@ import {
   LessonLearned,
   AIModelOption,
   ExecutionLog,
-  ChatMessage
+  ChatMessage,
+  CommandTemplate
 } from '../types';
 
 export const initialUserProfile: UserProfile = {
@@ -471,5 +472,81 @@ export const initialChatMessages: ChatMessage[] = [
       verify: 'Endpoints responding on port 3000.',
       report: 'System operational.'
     }
+  }
+];
+
+export const initialCommandTemplates: CommandTemplate[] = [
+  {
+    id: 'tmpl-1',
+    title: 'Daily HQ Health & Status Audit',
+    description: 'Inspect all connector endpoints, memory synchronization, and active workflows.',
+    prompt: 'Give me today\'s report. Inspect all connector latencies, memory persistence status, and recent error rates.',
+    category: 'diagnostics',
+    isPinned: true,
+    tags: ['daily', 'audit', 'health'],
+    usageCount: 42,
+    lastUsedAt: '2026-08-21T16:30:00Z'
+  },
+  {
+    id: 'tmpl-2',
+    title: 'Run Autonomous Workflow Pipeline',
+    description: 'Trigger the multi-step lead enrichment and CRM synchronization workflow.',
+    prompt: 'Run the workflow "Daily System HQ Health & Lead Digest" and report node-level execution results.',
+    category: 'workflow',
+    isPinned: true,
+    tags: ['workflow', 'automation', 'crm'],
+    usageCount: 28,
+    lastUsedAt: '2026-08-21T15:10:00Z'
+  },
+  {
+    id: 'tmpl-3',
+    title: 'Roofing Leads Scraping & Enrichment',
+    description: 'Scrape, qualify, and score high-intent roofing contractor leads using Outscraper & Gemini.',
+    prompt: 'Check the leads. Run Outscraper scrape for {{location}} target niche {{niche}}, qualify with Gemini, and sync top leads to GoHighLevel CRM.',
+    category: 'leads',
+    isPinned: true,
+    tags: ['outscraper', 'leads', 'ghl'],
+    usageCount: 35,
+    lastUsedAt: '2026-08-21T17:45:00Z',
+    variables: [
+      { name: 'location', label: 'Target Location', defaultValue: 'Dallas, TX', placeholder: 'City, State' },
+      { name: 'niche', label: 'Niche / Specialty', defaultValue: 'Residential Roofing', placeholder: 'Niche' }
+    ]
+  },
+  {
+    id: 'tmpl-4',
+    title: 'Social Engine Research & Post Generation',
+    description: 'Research trending tech/business topics on Tavily and craft multi-platform copy for Postiz.',
+    prompt: 'Research trending insights on {{topic}} using Tavily search and generate a multi-platform social batch formatted for Postiz scheduling.',
+    category: 'social',
+    isPinned: false,
+    tags: ['tavily', 'postiz', 'content'],
+    usageCount: 19,
+    lastUsedAt: '2026-08-20T19:00:00Z',
+    variables: [
+      { name: 'topic', label: 'Research Topic', defaultValue: 'AI Operations & Autonomous Agents 2026', placeholder: 'Topic' }
+    ]
+  },
+  {
+    id: 'tmpl-5',
+    title: 'Diagnose & Self-Fix Code Errors',
+    description: 'Execute the error remediation protocol: Diagnose -> Verify -> Fix -> Test -> Record Lesson.',
+    prompt: 'Fix the error. Review recent execution failures, pinpoint root cause, execute the fix, and register verified solution in the Lessons Learned memory layer.',
+    category: 'diagnostics',
+    isPinned: true,
+    tags: ['self-heal', 'debugging', 'lessons'],
+    usageCount: 14,
+    lastUsedAt: '2026-08-21T12:20:00Z'
+  },
+  {
+    id: 'tmpl-6',
+    title: 'Deploy Project to Production',
+    description: 'Validate build artifacts, run security and secrets audit, and trigger deployment pipeline.',
+    prompt: 'Deploy this project. Verify container build, check environment secrets audit, and confirm live ingress routing on port 3000.',
+    category: 'deployment',
+    isPinned: false,
+    tags: ['deployment', 'cloud-run', 'ci-cd'],
+    usageCount: 8,
+    lastUsedAt: '2026-08-19T14:15:00Z'
   }
 ];

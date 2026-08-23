@@ -26,6 +26,7 @@ import {
   initialAIModels,
   initialExecutionLogs,
   initialChatMessages,
+  initialCommandTemplates,
 } from './data/mockInitialData';
 
 import {
@@ -38,6 +39,7 @@ import {
   AIModelOption,
   ExecutionLog,
   ChatMessage,
+  CommandTemplate,
 } from './types';
 
 export default function App() {
@@ -53,6 +55,7 @@ export default function App() {
   const [activeModel, setActiveModel] = useState<AIModelOption>(initialAIModels[0]);
   const [logs, setLogs] = useState<ExecutionLog[]>(initialExecutionLogs);
   const [messages, setMessages] = useState<ChatMessage[]>(initialChatMessages);
+  const [commandTemplates, setCommandTemplates] = useState<CommandTemplate[]>(initialCommandTemplates);
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
@@ -214,6 +217,30 @@ export default function App() {
     setLessons(prev => [newLes, ...prev]);
   };
 
+  // Command Template Handlers
+  const handleSaveCommandTemplate = (template: Omit<CommandTemplate, 'id' | 'usageCount'>) => {
+    const newTmpl: CommandTemplate = {
+      ...template,
+      id: `tmpl-${Date.now()}`,
+      usageCount: 0,
+    };
+    setCommandTemplates(prev => [newTmpl, ...prev]);
+  };
+
+  const handleUpdateCommandTemplate = (template: CommandTemplate) => {
+    setCommandTemplates(prev => prev.map(t => (t.id === template.id ? template : t)));
+  };
+
+  const handleDeleteCommandTemplate = (templateId: string) => {
+    setCommandTemplates(prev => prev.filter(t => t.id !== templateId));
+  };
+
+  const handleTogglePinCommandTemplate = (templateId: string) => {
+    setCommandTemplates(prev =>
+      prev.map(t => (t.id === templateId ? { ...t, isPinned: !t.isPinned } : t))
+    );
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
       {/* Top Navbar */}
@@ -266,6 +293,11 @@ export default function App() {
               activeProject={activeProject}
               activeModel={activeModel}
               memoryItems={memoryItems}
+              commandTemplates={commandTemplates}
+              onSaveTemplate={handleSaveCommandTemplate}
+              onUpdateTemplate={handleUpdateCommandTemplate}
+              onDeleteTemplate={handleDeleteCommandTemplate}
+              onTogglePinTemplate={handleTogglePinCommandTemplate}
             />
           )}
 

@@ -14,10 +14,12 @@ import {
   Brain,
   AlertCircle,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  Bookmark
 } from 'lucide-react';
-import { ChatMessage, UserProfile, Project, AIModelOption, MemoryItem } from '../types';
+import { ChatMessage, UserProfile, Project, AIModelOption, MemoryItem, CommandTemplate } from '../types';
 import { ArchitectureMonitor } from './ArchitectureMonitor';
+import { CommandTemplateLibrary } from './CommandTemplateLibrary';
 
 interface CommandCenterViewProps {
   messages: ChatMessage[];
@@ -27,6 +29,11 @@ interface CommandCenterViewProps {
   activeProject: Project;
   activeModel: AIModelOption;
   memoryItems: MemoryItem[];
+  commandTemplates: CommandTemplate[];
+  onSaveTemplate: (template: Omit<CommandTemplate, 'id' | 'usageCount'>) => void;
+  onUpdateTemplate: (template: CommandTemplate) => void;
+  onDeleteTemplate: (templateId: string) => void;
+  onTogglePinTemplate: (templateId: string) => void;
 }
 
 export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
@@ -37,6 +44,11 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
   activeProject,
   activeModel,
   memoryItems,
+  commandTemplates,
+  onSaveTemplate,
+  onUpdateTemplate,
+  onDeleteTemplate,
+  onTogglePinTemplate,
 }) => {
   const [inputText, setInputText] = useState('');
   const [expandedThoughts, setExpandedThoughts] = useState<Record<string, boolean>>({});
@@ -57,6 +69,19 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
     const textToSend = inputText;
     setInputText('');
     await onSendMessage(textToSend);
+  };
+
+  const handleExecuteTemplate = async (prompt: string, templateId: string) => {
+    // Increment usage counter on template
+    const tmpl = commandTemplates.find(t => t.id === templateId);
+    if (tmpl) {
+      onUpdateTemplate({
+        ...tmpl,
+        usageCount: tmpl.usageCount + 1,
+        lastUsedAt: new Date().toISOString(),
+      });
+    }
+    await onSendMessage(prompt);
   };
 
   const quickCommands = [
@@ -100,6 +125,17 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
         </div>
       </div>
 
+      {/* Reusable Command Templates Library Bar */}
+      <CommandTemplateLibrary
+        templates={commandTemplates}
+        onExecuteTemplate={handleExecuteTemplate}
+        onSaveTemplate={onSaveTemplate}
+        onUpdateTemplate={onUpdateTemplate}
+        onDeleteTemplate={onDeleteTemplate}
+        onTogglePin={onTogglePinTemplate}
+        isLoading={isLoading}
+      />
+
       {/* Quick Command Pills */}
       <div className="bg-zinc-950 px-4 py-2 border-b border-zinc-800 flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs font-mono">
         <span className="text-[10px] uppercase font-bold text-zinc-500 shrink-0 mr-1 flex items-center gap-1">
@@ -110,7 +146,7 @@ export const CommandCenterView: React.FC<CommandCenterViewProps> = ({
             key={idx}
             onClick={() => onSendMessage(cmd)}
             disabled={isLoading}
-            className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-mono whitespace-nowrap transition-all active:scale-95 disabled:opacity-50"
+            className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white text-[11px] font-mono whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {cmd}
           </button>
