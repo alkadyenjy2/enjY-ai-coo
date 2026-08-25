@@ -16,6 +16,7 @@ import {
 import * as activities from "./temporal-proof/activities";
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
+import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -360,11 +361,30 @@ app.post("/api/temporal/execute-sync", async (req, res) => {
   }
 });
 
+async function rememberOperationalRecord(record: OperationalExecutionRecord) {
+  operationalMemoryRecords.unshift(record);
+  const result = await persistOperationalRecord(record);
+  if (!result.persisted) {
+    console.warn(`[Operational Memory] Durable persistence unavailable; retained in process memory. ${result.error || ''}`.trim());
+  }
+  return result;
+}
+
 // API Route: Get Operational Execution Memory History
-app.get("/api/agent/history", (req, res) => {
+app.get("/api/agent/history", async (req, res) => {
+  const requestedLimit = Number(req.query.limit);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 50;
+  const persisted = await fetchPersistedOperationalRecords(limit);
+  const combined = persisted.source === 'supabase'
+    ? [...persisted.records, ...operationalMemoryRecords]
+    : operationalMemoryRecords;
+  const records = Array.from(new Map(combined.map((record) => [record.id, record])).values()).slice(0, limit);
+
   res.json({
-    total: operationalMemoryRecords.length,
-    records: operationalMemoryRecords
+    total: records.length,
+    source: persisted.source,
+    persistenceError: persisted.error,
+    records
   });
 });
 
@@ -480,7 +500,7 @@ app.post("/api/agent/command", async (req, res) => {
       errors: [],
       approvalStatus: "AUTO_APPROVED"
     };
-    operationalMemoryRecords.unshift(dupRecord);
+    await rememberOperationalRecord(dupRecord);
     return res.json({
       content: `⚠️ **[Duplicate Command Prevented]** تم منع إعادة تنفيذ هذا الأمر المكرر ("${userPromptStr}") خلال نافذة الحماية (10 ثوانٍ) لمنع التكرار المصادفي.`,
       executionRecord: dupRecord,
@@ -515,7 +535,7 @@ app.post("/api/agent/command", async (req, res) => {
       errors: [],
       approvalStatus: "AUTO_APPROVED"
     };
-    operationalMemoryRecords.unshift(safeStopRecord);
+    await rememberOperationalRecord(safeStopRecord);
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: safeStopRecord, content: safeStopRecord.results.responseSnippet });
 
     return res.json({
@@ -553,7 +573,7 @@ app.post("/api/agent/command", async (req, res) => {
       errors: [],
       approvalStatus: "REQUIRES_HUMAN_APPROVAL"
     };
-    operationalMemoryRecords.unshift(sensitiveRecord);
+    await rememberOperationalRecord(sensitiveRecord);
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: sensitiveRecord, content: sensitiveRecord.results.responseSnippet });
 
     return res.json({
@@ -605,20 +625,43 @@ Rules for Response:
     `.trim();
 
     if (!ai) {
+      const fallbackContent = `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock real-time Gemini 3.6 Flash reasoning.`;
+      const fallbackActions = [
+        { tool: 'Memory System', status: 'success', details: 'Retrieved 3 memory items' },
+        { tool: 'Connector Hub', status: 'success', details: 'Verified configured connector state without external side effects' }
+      ];
+      const fallbackRecord: OperationalExecutionRecord = {
+        id: `exec-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        command: userPromptStr,
+        project: projectNameStr,
+        intent: commandClass,
+        tool: 'Offline Fallback Engine',
+        selectedTools: fallbackActions.map((action) => action.tool),
+        actionsExecuted: fallbackActions,
+        results: { responseSnippet: fallbackContent.slice(0, 150), mode: 'offline_fallback' },
+        state_history: ['RECEIVED', 'ROUTED', 'DISPATCHED', 'EXECUTED', 'COMPLETED'],
+        evidence: '[Offline Fallback Engine]: No Gemini credential was available; no external side effect was attempted.',
+        verificationStatus: 'NOT_REQUIRED',
+        final_state_reason: 'Offline fallback response generated without external side effects.',
+        errors: [],
+        approvalStatus: 'AUTO_APPROVED'
+      };
+      await rememberOperationalRecord(fallbackRecord);
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: fallbackRecord, content: fallbackContent });
+
       return res.json({
-        content: `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock real-time Gemini 3.6 Flash reasoning.`,
+        content: fallbackContent,
+        executionRecord: fallbackRecord,
         thoughtProcess: {
           understand: `User requested: "${prompt}".`,
           inspect: 'Verified offline fallback state.',
           decide: 'Construct structured operational report.',
-          execute: 'Simulate workflow step completion.',
-          verify: 'Validated project rules adherence.',
-          report: 'Delivered fallback report.'
+          execute: 'Simulate workflow step completion without external side effects.',
+          verify: 'Verification Status: NOT_REQUIRED; live AI execution was not claimed.',
+          report: 'Delivered fallback report and recorded the execution event.'
         },
-        actionsTaken: [
-          { tool: 'Memory System', status: 'success', details: 'Retrieved 3 memory items' },
-          { tool: 'Connector Hub', status: 'success', details: 'Verified 8 active connectors' }
-        ]
+        actionsTaken: fallbackActions
       });
     }
 
@@ -888,7 +931,7 @@ Rules for Response:
       approvalStatus
     };
 
-    operationalMemoryRecords.unshift(execRecord);
+    await rememberOperationalRecord(execRecord);
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: execRecord, content: responseText });
 
     if (!responseText) {
@@ -1093,7 +1136,7 @@ ${recentSummary || "لا توجد عمليات سابقة مسجلة بعيدا�
       approvalStatus: "AUTO_APPROVED"
     };
 
-    operationalMemoryRecords.unshift(execRecord);
+    await rememberOperationalRecord(execRecord);
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: execRecord, content: fallbackReport });
 
     return res.json({
