@@ -1,3 +1,10 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+function safeEqualHex(expected: string, received: string): boolean {
+  if (!/^[a-f0-9]+$/i.test(received) || expected.length !== received.length) return false;
+  return timingSafeEqual(Buffer.from(expected, 'utf8'), Buffer.from(received, 'utf8'));
+}
+
 export interface StripeCheckoutInput {
   productName: string;
   priceUSD: number;
@@ -85,21 +92,36 @@ export class StripeAdapter {
   }
 
   public verifyAndProcessWebhook(rawBody: string, sig: string): { valid: boolean; eventType: string; payload: any } {
-    // In actual production with webhook secret, we verify signature.
-    // For test & core integration, we parse event safely.
+    const endpointSecret = (process.env.STRIPE_WEBHOOK_SECRET || '').trim();
+    if (!endpointSecret || typeof rawBody !== 'string' || !sig) {
+      return { valid: false, eventType: 'unknown', payload: null };
+    }
+
+    const signatureParts = sig.split(',').map((part) => part.trim());
+    const timestampValue = signatureParts.find((part) => part.startsWith('t='))?.slice(2) || '';
+    const timestamp = Number(timestampValue);
+    const signatures = signatureParts
+      .filter((part) => part.startsWith('v1='))
+      .map((part) => part.slice(3));
+
+    if (!Number.isInteger(timestamp) || Math.abs(Math.floor(Date.now() / 1000) - timestamp) > 300 || signatures.length === 0) {
+      return { valid: false, eventType: 'unknown', payload: null };
+    }
+
+    const signedPayload = `${timestamp}.${rawBody}`;
+    const expectedSignature = createHmac('sha256', endpointSecret).update(signedPayload, 'utf8').digest('hex');
+    const valid = signatures.some((candidate) => safeEqualHex(expectedSignature, candidate));
+    if (!valid) return { valid: false, eventType: 'unknown', payload: null };
+
     try {
-      const parsed = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
+      const parsed = JSON.parse(rawBody);
       return {
         valid: true,
         eventType: parsed.type || 'checkout.session.completed',
         payload: parsed.data?.object || parsed
       };
-    } catch (e) {
-      return {
-        valid: false,
-        eventType: 'unknown',
-        payload: null
-      };
+    } catch {
+      return { valid: false, eventType: 'unknown', payload: null };
     }
   }
 }

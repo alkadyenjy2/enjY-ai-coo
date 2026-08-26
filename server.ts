@@ -17,6 +17,7 @@ import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
 import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
 import { getAuthContext, getAuthorizedOrganizations, getOrganizationAccess, requireAuth, requireOrganizationAccess } from "./src/auth/server";
+import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhooks";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -29,7 +30,12 @@ process.on("unhandledRejection", (reason) => {
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({
+  limit: "1mb",
+  verify: (req, _res, buffer) => {
+    (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+  },
+}));
 
 // Operational Memory Audit Store (In-Memory Execution Log)
 export interface OperationalExecutionRecord {
@@ -1561,9 +1567,29 @@ app.get("/api/env-status", (req, res) => {
 });
 
 // API Webhook Routes: Phase 7 Live Event Routing
+const processedWebhookIds = new Set<string>();
+const GHL_CURRENT_PUBLIC_KEY = process.env.GHL_WEBHOOK_PUBLIC_KEY || `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAi2HR1srL4o18O8BRa7gVJY7G7bupbN3H9AwJrHCDiOg=
+-----END PUBLIC KEY-----`;
+const GHL_LEGACY_PUBLIC_KEY = process.env.GHL_WEBHOOK_LEGACY_PUBLIC_KEY || `-----BEGIN PUBLIC KEY-----
+MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAokvo/r9tVgcfZ5DysOSC
+Frm602qYV0MaAiNnX9O8KxMbiyRKWeL9JpCpVpt4XHIcBOK4u3cLSqJGOLaPuXw6
+dO0t6Q/ZVdAV5Phz+ZtzPL16iCGeK9po6D6JHBpbi989mmzMryUnQJezlYJ3DVF8
+csedpinheNnyYeFXolrJvcsjDtfAeRx5ByHQmTnSdFUzuAnC9/GepgLT9SM4nCpv
+uxmZMxrJt5Rw+VUaQ9B8JSvbMPpez4peKaJPZHBbU3OdeCVx5klVXXZQGNHOs8gF
+3kvoV5rTnXV0IknLBXlcKKAQLZcY/Q9rG6Ifi9c+5vqlvHPCUJFT5XUGG5RKgOKU
+J062fRtN+rLYZUV+BjafxQauvC8wSWeYja63VSUruvmNj8xkx2zE/Juc+yjLjTXp
+IocmaiFeAO6fUtNjDeFVkhf5LNb59vECyrHD2SQIrhgXpO4Q3dVNA5rw576PwTzN
+h/AMfHKIjE4xQA1SZuYJmNnmVZLIZBlQAF9Ntd03rfadZ+yDiOXCCs9FkHibELhC
+HULgCsnuDJHcrGNd5/Ddm5hxGQ0ASitgHeMZ0kcIOwKDOzOU53lDza6/Y09T7sYJ
+PQe7z0cvj7aE4B+Ax1ZoZGPzpJlZtGXCsu9aTEGEnKzmsFqwcSsnw3JB31IGKAyk
+T1hhTiaCeIY/OwwwNUY2yvcCAwEAAQ==
+-----END PUBLIC KEY-----`;
+
 app.post("/api/webhooks/stripe", async (req, res) => {
   try {
-    const rawBody = JSON.stringify(req.body);
+    const rawBodyBuffer = (req as express.Request & { rawBody?: Buffer }).rawBody;
+    const rawBody = rawBodyBuffer?.toString("utf8") || "";
     const sig = (req.headers["stripe-signature"] as string) || "";
     const verification = stripeAdapter.verifyAndProcessWebhook(rawBody, sig);
 
@@ -1575,7 +1601,7 @@ app.post("/api/webhooks/stripe", async (req, res) => {
     if (verification.eventType === "checkout.session.completed") {
       const payload = verification.payload;
       await temporalManager.startWorkflow({
-        command: `Process Paid Customer Order for ${payload.customer_email || "Buyer"}`,
+        command: `Process Paid Customer Order for event ${payload.id || "unknown"}`,
         requireHumanApproval: false,
         stripePayload: {
           productName: payload.description || "Digital Product Purchase",
@@ -1593,7 +1619,19 @@ app.post("/api/webhooks/stripe", async (req, res) => {
 
 app.post("/api/webhooks/whop", async (req, res) => {
   try {
+    const rawBody = ((req as express.Request & { rawBody?: Buffer }).rawBody || Buffer.from('')).toString('utf8');
+    const verification = verifyWhopWebhook(rawBody, {
+      id: req.header('webhook-id'),
+      timestamp: req.header('webhook-timestamp'),
+      signature: req.header('webhook-signature'),
+    }, process.env.WHOP_WEBHOOK_SECRET);
+    if (!verification.valid) return res.status(401).json({ error: 'Invalid webhook signature' });
+
     const payload = req.body;
+    const webhookId = req.header('webhook-id');
+    if (webhookId && processedWebhookIds.has(webhookId)) {
+      return res.json({ received: true, duplicate: true });
+    }
     await temporalManager.startWorkflow({
       command: `Process Whop Webhook Event: ${payload.action || "membership.created"}`,
       requireHumanApproval: false,
@@ -1603,9 +1641,10 @@ app.post("/api/webhooks/whop", async (req, res) => {
         priceUSD: payload.data?.price || 49.00
       }
     });
+    if (webhookId) processedWebhookIds.add(webhookId);
     res.json({ received: true, action: payload.action || "processed" });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Webhook processing failed" });
   }
 });
 
@@ -1620,10 +1659,20 @@ app.post("/api/webhooks/postiz", async (req, res) => {
 
 app.post("/api/webhooks/ghl", async (req, res) => {
   try {
+    const rawBody = ((req as express.Request & { rawBody?: Buffer }).rawBody || Buffer.from('')).toString('utf8');
+    const verification = verifyHighLevelWebhook(
+      rawBody,
+      req.header('x-ghl-signature') || undefined,
+      req.header('x-wh-signature') || undefined,
+      GHL_CURRENT_PUBLIC_KEY,
+      GHL_LEGACY_PUBLIC_KEY,
+    );
+    if (!verification.valid) return res.status(401).json({ error: 'Invalid webhook signature' });
+
     const payload = req.body;
     res.json({ received: true, contactId: payload.contact_id || payload.id, stage: payload.pipeline_stage });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch {
+    res.status(500).json({ error: "Webhook processing failed" });
   }
 });
 
