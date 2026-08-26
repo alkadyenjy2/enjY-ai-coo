@@ -4,7 +4,7 @@ import { test } from 'node:test';
 
 process.env.VERCEL = '1';
 process.env.NODE_ENV = 'production';
-const { app } = await import('../server.ts');
+const { default: app } = await import('../api/index.ts');
 
 test('Express API exposes health and readiness routes in Vercel mode', async () => {
   const server = createServer(app);
