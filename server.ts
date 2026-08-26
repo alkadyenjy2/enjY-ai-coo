@@ -16,6 +16,7 @@ import * as activities from "./temporal-proof/activities";
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
 import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
+import { getAuthContext, getAuthorizedOrganizations, getOrganizationAccess, requireAuth, requireOrganizationAccess } from "./src/auth/server";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -26,7 +27,7 @@ process.on("unhandledRejection", (reason) => {
 });
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -181,6 +182,43 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// API Routes: Authentication and organization context
+app.get("/api/auth/me", requireAuth, async (req, res) => {
+  const auth = getAuthContext(res);
+  if (!auth) return res.status(401).json({ success: false, error: "Authentication required." });
+
+  try {
+    const organizations = await getAuthorizedOrganizations(auth);
+    return res.json({
+      authenticated: true,
+      user: {
+        id: auth.user.id,
+        email: auth.user.email || null,
+        displayName: auth.user.user_metadata?.display_name || auth.user.user_metadata?.full_name || null,
+        avatarUrl: auth.user.user_metadata?.avatar_url || null,
+      },
+      organizations,
+    });
+  } catch (error: any) {
+    return res.status(503).json({ success: false, error: "User organization context is unavailable." });
+  }
+});
+
+app.get("/api/organizations", requireAuth, async (req, res) => {
+  const auth = getAuthContext(res);
+  if (!auth) return res.status(401).json({ success: false, error: "Authentication required." });
+
+  try {
+    return res.json({ organizations: await getAuthorizedOrganizations(auth) });
+  } catch (error: any) {
+    return res.status(503).json({ success: false, error: "Organizations could not be loaded." });
+  }
+});
+
+// Protected API surfaces. Webhook routes remain signature-authenticated separately.
+app.use(["/api/agent", "/api/connectors", "/api/temporal", "/api/env-status"], requireAuth);
+app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard", "/api/temporal"], requireOrganizationAccess);
 
 // API Routes: Temporal Workflow Control & Monitoring
 app.post("/api/temporal/start", async (req, res) => {
