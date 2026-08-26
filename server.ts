@@ -27,7 +27,7 @@ process.on("unhandledRejection", (reason) => {
   console.warn("⚠️ Unhandled Rejection intercepted in server process:", (reason as any)?.message || reason);
 });
 
-const app = express();
+export const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({
@@ -188,6 +188,31 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// API Route: Readiness Check
+const readinessHandler = (_req: express.Request, res: express.Response) => {
+  const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+  const hasSupabase = Boolean(
+    (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
+    (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY),
+  );
+  const hasExternalTemporal = Boolean(process.env.TEMPORAL_ADDRESS);
+  const requireLiveDependencies = process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
+  const checks = {
+    process: true,
+    gemini: hasGemini,
+    supabase: hasSupabase,
+    temporal: hasExternalTemporal || !requireLiveDependencies,
+  };
+  const ready = checks.process && (!requireLiveDependencies || (checks.gemini && checks.supabase && checks.temporal));
+  return res.status(ready ? 200 : 503).json({
+    status: ready ? "ready" : "degraded",
+    requireLiveDependencies,
+    checks,
+    timestamp: new Date().toISOString(),
+  });
+};
+app.get(["/api/ready", "/api/readiness"], readinessHandler);
 
 // API Routes: Authentication and organization context
 app.get("/api/auth/me", requireAuth, async (req, res) => {
@@ -1697,4 +1722,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
