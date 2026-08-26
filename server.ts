@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import { Connection, Client } from "@temporalio/client";
@@ -75,9 +74,8 @@ class TemporalWorkflowManager {
         this.testEnv = await TestWorkflowEnvironment.createLocal();
         this.client = this.testEnv.client;
 
-        const __filename = fileURLToPath(import.meta.url);
-        const __dirname = path.dirname(__filename);
-        const workflowsPath = path.resolve(__dirname, "./temporal-proof/workflows.ts");
+        const runtimeDir = path.dirname(__filename);
+        const workflowsPath = path.resolve(runtimeDir, "./temporal-proof/workflows.ts");
 
         this.worker = await Worker.create({
           connection: this.testEnv.nativeConnection,
