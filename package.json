@@ -24,6 +24,7 @@
     "@temporalio/worker": "^1.22.0",
     "@temporalio/workflow": "^1.22.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "browser-use-sdk": "^3.11.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "lucide-react": "^0.546.0",
