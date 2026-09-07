@@ -14,7 +14,8 @@
     "test:webhook-signatures": "node --import tsx --test --test-concurrency=1 tests/webhook-signature.test.ts tests/webhooks-adapter.test.ts",
     "test:vercel-routing": "node --import tsx --test --test-concurrency=1 tests/vercel-routing.test.mjs",
     "test:operational-logs": "node --import tsx --test --test-concurrency=1 tests/operational-logs.test.ts",
-    "test:browser-use-temporal": "node --import tsx --test --test-concurrency=1 tests/temporal-browser-use.test.ts"
+    "test:browser-use-temporal": "node --import tsx --test --test-concurrency=1 tests/temporal-browser-use.test.ts",
+    "test:production-guardrails": "node --import tsx --test --test-concurrency=1 tests/production-guardrails.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -39,7 +40,7 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
-    "tailwindcss": "^4.1.14",
+    "tailwindcss": "^4.4.21",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
