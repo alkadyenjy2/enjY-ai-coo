@@ -32,3 +32,6 @@ jobs:
 
       - name: Browser Use adapter contract test
         run: node --import tsx --test --test-concurrency=1 tests/browser-use-adapter.test.ts
+
+      - name: Browser Use Temporal workflow test
+        run: npm run test:browser-use-temporal
