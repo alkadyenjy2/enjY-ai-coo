@@ -29,3 +29,6 @@ jobs:
 
       - name: Operational log mapping test
         run: npm run test:operational-logs
+
+      - name: Browser Use adapter contract test
+        run: node --import tsx --test --test-concurrency=1 tests/browser-use-adapter.test.ts
