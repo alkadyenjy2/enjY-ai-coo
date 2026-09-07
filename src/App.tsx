@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navbar } from './components/Navbar';
 import { Sidebar, NavView } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
@@ -24,7 +24,6 @@ import {
   initialProjects,
   initialLessonsLearned,
   initialAIModels,
-  initialExecutionLogs,
   initialChatMessages,
   initialCommandTemplates,
 } from './data/mockInitialData';
@@ -41,6 +40,7 @@ import {
   ChatMessage,
   CommandTemplate,
 } from './types';
+import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('dashboard');
@@ -53,12 +53,39 @@ export default function App() {
   const [lessons, setLessons] = useState<LessonLearned[]>(initialLessonsLearned);
   const [models] = useState<AIModelOption[]>(initialAIModels);
   const [activeModel, setActiveModel] = useState<AIModelOption>(initialAIModels[0]);
-  const [logs, setLogs] = useState<ExecutionLog[]>(initialExecutionLogs);
+  const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>(initialChatMessages);
   const [commandTemplates, setCommandTemplates] = useState<CommandTemplate[]>(initialCommandTemplates);
 
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOperationalHistory = async () => {
+      try {
+        const response = await fetch('/api/agent/history?limit=50');
+        if (!response.ok) {
+          throw new Error(`Operational history request failed with HTTP ${response.status}.`);
+        }
+
+        const data = await response.json();
+        if (!cancelled) {
+          setLogs(mapOperationalRecordsToExecutionLogs(Array.isArray(data.records) ? data.records : []));
+        }
+      } catch (error) {
+        console.error('Operational history load failed:', error);
+        if (!cancelled) setLogs([]);
+      }
+    };
+
+    void loadOperationalHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Send Command to Agent (Calls backend Express /api/agent/command -> Gemini 3.6 Flash)
   const handleSendMessage = async (text: string) => {
@@ -98,18 +125,12 @@ export default function App() {
 
       setMessages(prev => [...prev, agentMsg]);
 
-      // Add Execution Log
-      const newLog: ExecutionLog = {
-        id: `log-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        action: `Command Execution: "${text.slice(0, 30)}..."`,
-        status: 'success',
-        details: `Executed via ${activeModel.name}. Adhered to ${userProfile.communicationPreference} preference.`,
-        project: activeProject.name,
-        durationMs: 380,
-      };
-
-      setLogs(prev => [newLog, ...prev]);
+      if (data.executionRecord) {
+        setLogs(prev => [
+          ...mapOperationalRecordsToExecutionLogs([data.executionRecord]),
+          ...prev.filter(log => log.id !== data.executionRecord.id),
+        ]);
+      }
     } catch (err) {
       console.error('Agent execution error:', err);
       const errorMsg: ChatMessage = {
@@ -243,7 +264,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
-      {/* Top Navbar */}
       <Navbar
         activeModel={activeModel}
         models={models}
@@ -255,9 +275,7 @@ export default function App() {
         onOpenCommandCenter={() => setCurrentView('chat')}
       />
 
-      {/* Main Body */}
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
-        {/* Left Sidebar */}
         <Sidebar
           currentView={currentView}
           onSelectView={setCurrentView}
@@ -267,7 +285,6 @@ export default function App() {
           lessonsCount={lessons.length}
         />
 
-        {/* Primary View Canvas */}
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
           {currentView === 'dashboard' && (
             <DashboardView
@@ -366,7 +383,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* Bento Grid Status Footer Bar */}
       <footer className="bg-zinc-950 border-t border-zinc-800 px-4 py-2.5 text-xs font-mono text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-7xl w-full mx-auto">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
@@ -385,7 +401,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Discovery Quiz Modal */}
       <OnboardingQuizModal
         isOpen={isOnboardingOpen}
         onClose={() => setIsOnboardingOpen(false)}
