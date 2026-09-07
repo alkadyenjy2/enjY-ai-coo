@@ -13,7 +13,8 @@
     "test:auth-e2e": "npm run build && node --test --test-concurrency=1 tests/auth.e2e.test.mjs",
     "test:webhook-signatures": "node --import tsx --test --test-concurrency=1 tests/webhook-signature.test.ts tests/webhooks-adapter.test.ts",
     "test:vercel-routing": "node --import tsx --test --test-concurrency=1 tests/vercel-routing.test.mjs",
-    "test:operational-logs": "node --import tsx --test --test-concurrency=1 tests/operational-logs.test.ts"
+    "test:operational-logs": "node --import tsx --test --test-concurrency=1 tests/operational-logs.test.ts",
+    "test:browser-use-temporal": "node --import tsx --test --test-concurrency=1 tests/temporal-browser-use.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
