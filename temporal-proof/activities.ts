@@ -7,6 +7,7 @@ import { ghlAdapter, GHLDeliveryResult } from '../src/adapters/ghl';
 import { stripeAdapter, StripeCheckoutInput, StripeCheckoutResult } from '../src/adapters/stripe';
 import { memoryLearningEngine, FeedbackEntry, PromptOptimizationResult } from '../src/adapters/memory';
 import { operationsManager, UserRoleContext, CostControlReport } from '../src/adapters/operations';
+import { BrowserUseAdapter, BrowserUseExecutionResult } from '../src/adapters/browserUse';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ActionInput {
@@ -125,7 +126,7 @@ export async function geminiGenerateContentActivity(prompt: string, systemInstru
   operationsManager.logApiCall('gemini');
 
   if (!process.env.GEMINI_API_KEY) {
-    return `[GEMINI_SIMULATION] Content generated for: "${prompt.slice(0, 50)}..." using optimal structural template.`;
+    return `[GEMINI_SIMULATION] Content generated for: \"${prompt.slice(0, 50)}...\" using optimal structural template.`;
   }
 
   try {
@@ -204,5 +205,23 @@ export async function operationsAuditActivity(): Promise<{ secrets: any; costRep
   };
 }
 
+let browserUseAdapter: BrowserUseAdapter | undefined;
 
+export function configureBrowserUseAdapter(adapter: BrowserUseAdapter) {
+  browserUseAdapter = adapter;
+}
 
+export async function browserUseExecuteActivity(input: { task: string }): Promise<BrowserUseExecutionResult> {
+  globalContext.activityAttempts['browserUseExecute'] = (globalContext.activityAttempts['browserUseExecute'] || 0) + 1;
+  if (!browserUseAdapter) {
+    throw new Error('BROWSER_USE_NOT_CONFIGURED');
+  }
+
+  const result = await browserUseAdapter.execute(input);
+  if (result.status.toLowerCase() === 'failed') {
+    throw new Error(`BROWSER_USE_FAILED:${result.sessionId}`);
+  }
+
+  globalContext.sideEffectCount++;
+  return result;
+}
