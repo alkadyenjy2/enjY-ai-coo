@@ -1,32 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { TestWorkflowEnvironment } from '@temporalio/testing';
 import { Worker } from '@temporalio/worker';
+import { BrowserUseAdapter } from '../src/adapters/browserUse';
 import { aiCoreRuntimeWorkflow } from '../temporal-proof/workflows';
 import * as activities from '../temporal-proof/activities';
 
-test('Browser Use workflow executes through a Temporal activity and completes with evidence', async () => {
+test('Browser Use workflow executes through the adapter and Temporal activity', async () => {
   const testEnv = await TestWorkflowEnvironment.createLocal();
 
   try {
     const browserCalls: string[] = [];
+    activities.configureBrowserUseAdapter(new BrowserUseAdapter({
+      run: async (task) => {
+        browserCalls.push(task);
+        return {
+          sessionId: 'session-1',
+          status: 'completed',
+          output: { title: 'Example' },
+          evidence: [{ type: 'page', url: 'https://example.com' }]
+        };
+      }
+    }));
+
     const worker = await Worker.create({
       connection: testEnv.nativeConnection,
       namespace: testEnv.namespace,
       taskQueue: 'browser-use-contract',
-      workflowsPath: require.resolve('../temporal-proof/workflows'),
-      activities: {
-        ...activities,
-        browserUseExecuteActivity: async (input: { task: string }) => {
-          browserCalls.push(input.task);
-          return {
-            sessionId: 'session-1',
-            status: 'completed',
-            output: { title: 'Example' },
-            evidence: [{ type: 'page', url: 'https://example.com' }]
-          };
-        }
-      }
+      workflowsPath: path.resolve(process.cwd(), 'temporal-proof/workflows.ts'),
+      activities
     });
 
     const result = await worker.runUntil(async () => testEnv.client.workflow.execute(aiCoreRuntimeWorkflow, {
@@ -46,7 +49,7 @@ test('Browser Use workflow executes through a Temporal activity and completes wi
     assert.equal(result.currentStatus, 'COMPLETED');
     assert.equal(result.verificationStatus, 'VERIFIED');
     assert.equal(result.executionResult, 'BROWSER_USE_COMPLETED:session-1:completed');
-    assert.ok(result.browserUseResult);
+    assert.deepEqual(result.browserUseResult?.output, { title: 'Example' });
   } finally {
     await testEnv.teardown();
   }
