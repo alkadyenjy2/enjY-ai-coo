@@ -1,14 +1,7 @@
-import type { RiskLevel, TaskNode } from "../task-graph/types";
+import type { TaskNode } from "../task-graph/types";
+import type { CapabilityGrant, PolicyDecision } from "./types";
 
-export interface CapabilityGrant {
-  name: string;
-  allowed: boolean;
-  maxRisk: RiskLevel;
-}
-
-export type PolicyDecision = "ALLOW" | "REQUIRES_APPROVAL" | "REJECT";
-
-const rank: Record<RiskLevel, number> = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
+const rank = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 } as const;
 
 export function evaluateTaskPolicy(task: TaskNode, grants: CapabilityGrant[]): PolicyDecision {
   const grant = grants.find((item) => item.name === task.capability);
