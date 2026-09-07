@@ -23,7 +23,8 @@ const {
   ghlDeliverLeadActivity,
   memoryRecordFeedbackActivity,
   memoryOptimizePromptActivity,
-  operationsAuditActivity
+  operationsAuditActivity,
+  browserUseExecuteActivity
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: '10 seconds',
   retry: {
@@ -44,6 +45,7 @@ export interface WorkflowInput {
   provideEvidence?: boolean;
   evidenceText?: string;
   maxLoopIterations?: number;
+  browserUsePayload?: { task: string };
   postizPayload?: {
     title?: string;
     content: string;
@@ -89,6 +91,7 @@ export interface CoreState {
   stateHistory: string[];
   intent?: string;
   executionResult?: string;
+  browserUseResult?: any;
   postizResult?: any;
   whopResult?: any;
   tavilyResult?: any;
@@ -130,17 +133,13 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
     state.stateHistory.push(nextStatus);
   }
 
-  // Phase 1: Routing & Classification
   transitionTo('ROUTED');
   const classification = await classifyDirectiveActivity(input.command);
   state.intent = classification.intent;
 
-  // Phase 2: Human-in-the-Loop Check (T04)
   if (input.requireHumanApproval) {
     state.approvalStatus = 'WAITING';
     transitionTo('WAITING_FOR_APPROVAL');
-    
-    // Wait for human signal
     await condition(() => humanApprovedDecision !== null, '60 seconds');
 
     if (humanApprovedDecision === true) {
@@ -152,7 +151,6 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
     }
   }
 
-  // Phase 3: Loop Execution & Dispatch (T05)
   transitionTo('DISPATCHED');
   const maxLoops = input.maxLoopIterations || 1;
   
@@ -160,7 +158,11 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
     state.loopIterationsExecuted++;
     
     try {
-      if (input.postizPayload) {
+      if (input.browserUsePayload) {
+        const browserResult = await browserUseExecuteActivity(input.browserUsePayload);
+        state.browserUseResult = browserResult;
+        state.executionResult = `BROWSER_USE_COMPLETED:${browserResult.sessionId}:${browserResult.status}`;
+      } else if (input.postizPayload) {
         const pResult = await postizPublishActivity(input.postizPayload);
         state.postizResult = pResult;
         state.executionResult = `POSTIZ_PUBLISHED:${pResult.id}:${pResult.status}`;
@@ -215,7 +217,6 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
 
   transitionTo('EXECUTED');
 
-  // Phase 4: Evidence Gate Verification (T06)
   if (input.requireEvidence === true) {
     const evidenceRes = await verifyEvidenceActivity({
       evidence: input.evidenceText,
@@ -237,7 +238,6 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
     transitionTo('VERIFIED');
   }
 
-  // Phase 5: Memory Recording & Completion
   await recordMemoryActivity({
     testId: input.testId,
     finalState: state.currentStatus,
