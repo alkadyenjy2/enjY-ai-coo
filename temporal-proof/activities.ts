@@ -218,8 +218,8 @@ export async function browserUseExecuteActivity(input: { task: string }): Promis
   }
 
   const result = await browserUseAdapter.execute(input);
-  if (result.status.toLowerCase() === 'failed') {
-    throw new Error(`BROWSER_USE_FAILED:${result.sessionId}`);
+  if (['failed', 'cancelled', 'error', 'timed_out'].includes(result.status.toLowerCase())) {
+    throw new Error(`BROWSER_USE_FAILED:${result.sessionId}:${result.status}`);
   }
 
   globalContext.sideEffectCount++;
