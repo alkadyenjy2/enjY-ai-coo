@@ -1,89 +1,117 @@
-# AI CORE COO — AI Operations Command Center
+# AI CORE COO — AI Automation & Operations Systems
 
-> A production-oriented AI operations system designed to turn natural-language business commands into governed, observable, and verifiable workflows.
+> AI automation systems that turn business conversations and operational events into qualified leads, CRM records, booked appointments, follow-ups, and verifiable execution.
 
-## Portfolio Case Study
+## Portfolio Case Study — Clinic Lead-to-Booking Automation
 
-**Role:** AI Automation / AI Systems Engineer
+**Role:** AI Automation Engineer / AI Systems Builder
 
-**Problem**
+**Use case:** Aesthetic-clinic lead automation across messaging channels.
 
-Business operations often span research, content, payments, lead generation, CRM delivery, browser tasks, and memory. The goal of AI CORE COO is to provide one command center that can interpret an operator's request, route it to the right capability, execute it through durable workflows, apply approval and evidence gates, and record the operational outcome.
+**Workflow:**
 
-**What I built**
+```text
+Lead Message → AI Receptionist → Qualification → CRM → Booking → Confirmation → Reminder → Follow-up → Human Handoff → Reporting
+```
+
+### Working automation demo
+
+The portfolio demo uses **Make** as the orchestration layer, **Gemini** for AI lead qualification, and **Supabase** for structured CRM-style persistence and execution data.
+
+Current non-production scenario:
+
+- Make webhook intake
+- AI qualification with lead score `0–100`
+- Classification: `qualified | unqualified | needs_human`
+- Primary-service extraction
+- Idempotent lead upsert into Supabase
+- Automated next-action selection
+- Webhook response for the demo UI
+
+The demo is intentionally isolated from the production Roofing revenue workflow.
+
+## Core AI Operations System
+
+AI CORE COO is an operating layer around AI models rather than a simple chatbot.
 
 - Natural-language command center backed by an Express API and Gemini.
 - Durable orchestration with Temporal workflows and retry policies.
 - Human-approval signaling for side-effecting operations.
-- Evidence/verification gates before a workflow is considered complete.
-- Operational history mapped into execution logs for observability.
-- Provider boundaries for external capabilities including Browser Use Cloud.
+- Evidence/verification gates before completion.
+- Operational history and execution logs for observability.
+- Provider boundaries for external capabilities.
 - Integrations for research, publishing, payments, lead qualification, CRM delivery, and operational auditing.
-- Automated CI checks covering type safety, builds, operational-log mapping, and Browser Use/Temporal contracts.
+- Automated CI checks covering type safety, builds, operational-log mapping, and integration contracts.
+
+## Reliability Patterns
+
+- Event IDs and correlation IDs
+- Idempotency keys
+- Explicit qualification states
+- CRM/source-of-truth boundaries
+- Retry and error-handler design
+- Execution logging
+- Human handoff for uncertain or clinical-specific requests
+- Verification before declaring an automation complete
 
 ## Architecture
 
 ```text
-Operator (Voice/Text)
-        |
-        v
-AI CORE COO Command Center
-        |
-        v
-Intent / Tool Selection
-        |
-        v
-Temporal Workflow
-   |       |        |
-Approval  Execute  Verify
-   |       |        |
-   |       +--> Provider Adapters
-   |               |-- Browser Use Cloud
-   |               |-- Stripe
-   |               |-- Postiz
-   |               |-- Whop
-   |               |-- Research / Leads / CRM
-   |
-   +------> Audit / Execution History / Memory
+Customer Message
+      ↓
+Intake Layer
+      ↓
+AI Classification
+      ↓
+Qualification + Lead Score
+      ↓
+CRM / Data Layer
+      ↓
+Booking
+      ↓
+Confirmation + Reminder
+      ↓
+Follow-up / Human Handoff
+      ↓
+Reporting
 ```
-
-The important design decision is that external providers remain behind application-owned execution contracts. For example, Browser Use is an execution adapter rather than a separate agent; its SDK details do not leak into the core execution contract.
-
-## Engineering Proof
-
-The repository contains a real Temporal workflow state machine with explicit states such as `RECEIVED`, `ROUTED`, `DISPATCHED`, `WAITING_FOR_APPROVAL`, `EXECUTED`, `VERIFIED`, `COMPLETED`, `REJECTED`, and `FAILED`. The workflow also supports retry behavior and non-retryable policy breaches.
-
-Browser Use Cloud is connected through a thin adapter that validates the task, executes the Cloud run, waits for completion, and returns session/status/output/evidence data to the core system.
-
-CI verifies the implementation rather than relying only on UI behavior.
 
 ## Stack
 
-- React 19 + Vite
-- TypeScript
+- Make — workflow orchestration
+- Supabase — data/CRM persistence
+- Google Gemini — AI qualification
+- React 19 + Vite + TypeScript
 - Express
-- Google Gemini (`@google/genai`)
 - Temporal
-- Supabase
 - Browser Use Cloud
 - Tailwind CSS
 - GitHub Actions
 - Vercel
 
-## Why this project matters
+## Engineering Proof
 
-This is intentionally more than a chatbot UI. The portfolio value is in the operating-system layer around the model: orchestration, approval boundaries, execution adapters, verification, auditability, retries, and operational history.
+The repository contains a real Temporal workflow state machine with explicit states such as `RECEIVED`, `ROUTED`, `DISPATCHED`, `WAITING_FOR_APPROVAL`, `EXECUTED`, `VERIFIED`, `COMPLETED`, `REJECTED`, and `FAILED`.
+
+External providers remain behind application-owned execution contracts. The portfolio focuses on the engineering layer around the model: orchestration, reliability, approvals, verification, auditability, integrations, and operational history.
 
 ## Portfolio Positioning
 
-This project demonstrates experience relevant to:
+Relevant roles:
 
 - AI Automation Engineer
-- AI Engineer / Agent Engineer
-- AI Operations / AI COO systems
-- Workflow Automation Engineer
 - AI Integration Engineer
+- AI Operations Engineer
+- AI Agent Engineer
+- Workflow Automation Engineer
+- AI Systems Engineer
+
+## About the Builder
+
+**Enjy Alkady** — AI automation and operations systems builder focused on practical business automation, CRM workflows, AI qualification, integrations, and reliable execution.
+
+The portfolio emphasizes working systems and verifiable architecture over chatbot-only demos.
 
 ## Status
 
-The codebase is actively being hardened and documented as a portfolio case study. Claims in this README are limited to capabilities represented in the repository; production-scale usage metrics are not claimed unless independently measured.
+Portfolio systems are actively being hardened and documented. Claims are limited to capabilities represented by the repositories and connected automation environments; production-scale metrics are not claimed unless independently measured.
