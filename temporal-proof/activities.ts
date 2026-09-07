@@ -7,7 +7,7 @@ import { ghlAdapter, GHLDeliveryResult } from '../src/adapters/ghl';
 import { stripeAdapter, StripeCheckoutInput, StripeCheckoutResult } from '../src/adapters/stripe';
 import { memoryLearningEngine, FeedbackEntry, PromptOptimizationResult } from '../src/adapters/memory';
 import { operationsManager, UserRoleContext, CostControlReport } from '../src/adapters/operations';
-import { BrowserUseAdapter, BrowserUseExecutionResult } from '../src/adapters/browserUse';
+import { BrowserUseAdapter, BrowserUseExecutionResult, createBrowserUseCloudClient } from '../src/adapters/browserUse';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ActionInput {
@@ -209,6 +209,14 @@ let browserUseAdapter: BrowserUseAdapter | undefined;
 
 export function configureBrowserUseAdapter(adapter: BrowserUseAdapter) {
   browserUseAdapter = adapter;
+}
+
+if (process.env.BROWSER_USE_API_KEY) {
+  try {
+    configureBrowserUseAdapter(createBrowserUseCloudClient());
+  } catch (error: any) {
+    console.warn('Browser Use Cloud adapter initialization failed:', error?.message || error);
+  }
 }
 
 export async function browserUseExecuteActivity(input: { task: string }): Promise<BrowserUseExecutionResult> {
