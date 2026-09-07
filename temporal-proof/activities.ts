@@ -8,6 +8,7 @@ import { stripeAdapter, StripeCheckoutInput, StripeCheckoutResult } from '../src
 import { memoryLearningEngine, FeedbackEntry, PromptOptimizationResult } from '../src/adapters/memory';
 import { operationsManager, UserRoleContext, CostControlReport } from '../src/adapters/operations';
 import { BrowserUseAdapter, BrowserUseExecutionResult, createBrowserUseCloudClient } from '../src/adapters/browserUse';
+import { persistOperationalRecord } from '../src/adapters/persistence';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ActionInput {
@@ -32,6 +33,20 @@ export const globalContext: ActivityContext = {
 export function resetGlobalContext() {
   globalContext.sideEffectCount = 0;
   globalContext.activityAttempts = {};
+}
+
+function requireLiveDependencies(): boolean {
+  return process.env.REQUIRE_LIVE_DEPENDENCIES === 'true' || process.env.NODE_ENV === 'production';
+}
+
+export function calculateQualificationScore(lead: LeadRecord): number {
+  const rating = Math.max(0, Math.min(5, Number(lead.rating || 0)));
+  const reviews = Math.max(0, Number(lead.reviewCount || 0));
+  const ratingSignal = Math.round(rating * 10);
+  const reviewSignal = Math.min(15, Math.floor(Math.log10(reviews + 1) * 6));
+  const websiteSignal = lead.website?.trim() ? 10 : 0;
+  const contactSignal = lead.phone?.trim() || lead.email?.trim() ? 10 : 0;
+  return Math.max(0, Math.min(100, ratingSignal + reviewSignal + websiteSignal + contactSignal));
 }
 
 export async function classifyDirectiveActivity(command: string): Promise<{ intent: string; confidence: number }> {
@@ -82,11 +97,36 @@ export async function verifyEvidenceActivity(evidencePayload: { evidence?: strin
 
 export async function recordMemoryActivity(record: any): Promise<{ recordId: string; status: string }> {
   globalContext.activityAttempts['recordMemory'] = (globalContext.activityAttempts['recordMemory'] || 0) + 1;
-  globalContext.sideEffectCount++;
-  return {
-    recordId: `mem-${Date.now()}`,
-    status: 'PERSISTED'
+
+  const memoryRecord = {
+    id: `mem-${Date.now()}-${Buffer.from(JSON.stringify(record)).toString('hex').slice(0, 8)}`,
+    timestamp: new Date().toISOString(),
+    command: record?.command || 'Temporal memory checkpoint',
+    project: record?.project || 'AI CORE',
+    intent: record?.intent || 'MEMORY_RECORD',
+    tool: 'Temporal Memory Activity',
+    selectedTools: [],
+    actionsExecuted: [{ tool: 'Temporal Memory Activity', status: 'success', details: 'Recorded workflow memory checkpoint.' }],
+    results: { testId: record?.testId || null, finalState: record?.finalState || null, history: record?.history || [] },
+    state_history: Array.isArray(record?.history) ? record.history : [],
+    evidence: 'Workflow memory checkpoint persisted through the operational persistence adapter.',
+    verificationStatus: 'VERIFIED' as const,
+    final_state_reason: 'Workflow memory checkpoint recorded.',
+    errors: [],
+    approvalStatus: 'AUTO_APPROVED' as const,
   };
+
+  const result = await persistOperationalRecord(memoryRecord);
+  if (result.persisted && result.recordId) {
+    globalContext.sideEffectCount++;
+    return { recordId: result.recordId, status: 'PERSISTED' };
+  }
+
+  if (requireLiveDependencies()) {
+    throw new Error(`DURABLE_MEMORY_UNAVAILABLE:${result.error || 'Supabase persistence is unavailable.'}`);
+  }
+
+  return { recordId: memoryRecord.id, status: 'OFFLINE_FALLBACK' };
 }
 
 export async function postizPublishActivity(input: PostizPostInput): Promise<PostizPostResult> {
@@ -126,6 +166,9 @@ export async function geminiGenerateContentActivity(prompt: string, systemInstru
   operationsManager.logApiCall('gemini');
 
   if (!process.env.GEMINI_API_KEY) {
+    if (requireLiveDependencies()) {
+      throw new Error('GEMINI_LIVE_DEPENDENCY_UNAVAILABLE');
+    }
     return `[GEMINI_SIMULATION] Content generated for: \"${prompt.slice(0, 50)}...\" using optimal structural template.`;
   }
 
@@ -141,6 +184,9 @@ export async function geminiGenerateContentActivity(prompt: string, systemInstru
     });
     return response.text || 'Generated content empty';
   } catch (e: any) {
+    if (requireLiveDependencies()) {
+      throw new Error(`GEMINI_LIVE_CALL_FAILED:${e?.message || 'unknown error'}`);
+    }
     return `[GEMINI_FALLBACK] Generated structured response for prompt: ${prompt}`;
   }
 }
@@ -165,14 +211,14 @@ export async function geminiQualifyLeadsActivity(leads: LeadRecord[]): Promise<L
   operationsManager.logApiCall('gemini');
 
   return leads.map((lead) => {
-    const score = Math.floor(70 + Math.random() * 25);
+    const score = calculateQualificationScore(lead);
     return {
       ...lead,
       qualificationScore: score,
       qualificationStatus: score >= 80 ? 'QUALIFIED' : 'NEEDS_REVIEW',
       qualificationReason: score >= 80 
-        ? 'High review rating, active website, high likelihood of commercial roofing intent.'
-        : 'Moderate rating, requires owner verification call.'
+        ? 'High review rating, active website, and strong contactability signals.'
+        : 'Deterministic score below qualification threshold; requires review.'
     };
   });
 }
