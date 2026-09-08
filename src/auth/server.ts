@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import type { NextFunction, Request, Response } from "express";
 
@@ -30,6 +31,64 @@ function extractBearerToken(req: Request): string | null {
   const header = req.header("authorization") || "";
   const match = header.match(/^Bearer\s+(.+)$/i);
   return match?.[1]?.trim() || null;
+}
+
+function isTemporalRequest(req: Request): boolean {
+  return req.path.startsWith("/temporal") || req.originalUrl.includes("/api/temporal");
+}
+
+function getTemporalOwnershipSecret(): string | null {
+  const secret = (
+    process.env.TEMPORAL_WORKFLOW_OWNERSHIP_SECRET ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    ""
+  ).trim();
+  return secret || null;
+}
+
+function signTemporalWorkflowId(organizationId: string, workflowId: string): string | null {
+  const secret = getTemporalOwnershipSecret();
+  if (!secret) return null;
+  const signature = createHmac("sha256", secret)
+    .update(`${organizationId}.${workflowId}`)
+    .digest("base64url");
+  return `t:${organizationId}:${workflowId}:${signature}`;
+}
+
+function unwrapTemporalWorkflowId(value: string, organizationId: string): string | null {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^t:([0-9a-f-]{36}):([^:]+):([A-Za-z0-9_-]+)$/i);
+  if (!match) return null;
+  const [, signedOrganizationId, workflowId, suppliedSignature] = match;
+  if (signedOrganizationId.toLowerCase() !== organizationId.toLowerCase()) return null;
+
+  const secret = getTemporalOwnershipSecret();
+  if (!secret) return null;
+  const expectedSignature = createHmac("sha256", secret)
+    .update(`${organizationId}.${workflowId}`)
+    .digest("base64url");
+
+  const supplied = Buffer.from(suppliedSignature);
+  const expected = Buffer.from(expectedSignature);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  return workflowId;
+}
+
+function installTemporalResponseBinding(req: Request, res: Response, organizationId: string): void {
+  if (!isTemporalRequest(req)) return;
+  const originalJson = res.json.bind(res);
+  res.json = ((body: any) => {
+    if (body && typeof body === "object" && typeof body.workflowId === "string") {
+      const signedWorkflowId = signTemporalWorkflowId(organizationId, body.workflowId);
+      if (signedWorkflowId) {
+        body = { ...body, workflowId: signedWorkflowId };
+      } else if (process.env.NODE_ENV === "production") {
+        return originalJson({ success: false, error: "Temporal workflow ownership signing is not configured." });
+      }
+    }
+    return originalJson(body);
+  }) as Response["json"];
 }
 
 export async function authenticateRequest(req: Request): Promise<AuthContext | null> {
@@ -124,6 +183,30 @@ export async function requireOrganizationAccess(req: Request, res: Response, nex
   };
   res.locals.organizationId = access.organizationId;
   res.locals.organizationRole = access.role;
+
+  if (isTemporalRequest(req)) {
+    const workflowIdParam = String(req.params?.workflowId || "").trim();
+    if (workflowIdParam) {
+      const workflowId = unwrapTemporalWorkflowId(workflowIdParam, access.organizationId);
+      if (!workflowId) {
+        const allowLegacy = process.env.NODE_ENV !== "production" && process.env.ALLOW_LEGACY_TEMPORAL_WORKFLOW_IDS === "true";
+        if (!allowLegacy) {
+          res.status(403).json({ success: false, error: "Temporal workflow ownership proof is invalid or missing." });
+          return;
+        }
+      } else {
+        req.params.workflowId = workflowId;
+      }
+    }
+
+    if (process.env.NODE_ENV === "production" && !getTemporalOwnershipSecret()) {
+      res.status(503).json({ success: false, error: "Temporal workflow ownership signing is not configured." });
+      return;
+    }
+
+    installTemporalResponseBinding(req, res, access.organizationId);
+  }
+
   next();
 }
 
