@@ -12,6 +12,11 @@ export default defineConfig(() => {
       },
     },
     server: {
+      // Bind on all interfaces and accept proxied preview hosts (Arena preview,
+      // Vercel preview, etc.). Without this Vite 6 answers 403 "Blocked request.
+      // This host is not allowed." for any reverse-proxied hostname.
+      host: true,
+      allowedHosts: true as const,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

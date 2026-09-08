@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Stethoscope,
   LayoutDashboard,
   Terminal,
   HelpCircle,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export type NavView =
+  | 'clinic'
   | 'dashboard'
   | 'chat'
   | 'onboarding'
@@ -44,6 +46,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   lessonsCount,
 }) => {
   const navItems = [
+    {
+      id: 'clinic' as NavView,
+      label: 'Clinic Demo',
+      icon: Stethoscope,
+      badge: 'CASE STUDY',
+      badgeColor: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
+      description: 'Lead → Booking Automation'
+    },
     {
       id: 'dashboard' as NavView,
       label: 'Operations HQ',

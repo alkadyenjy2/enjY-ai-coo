@@ -18,6 +18,7 @@ import { operationsManager } from "./src/adapters/operations";
 import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
 import { getAuthContext, getAuthorizedOrganizations, getOrganizationAccess, requireAuth, requireOrganizationAccess } from "./src/auth/server";
 import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhooks";
+import { clinicRouter } from "./src/clinic/routes";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -246,6 +247,10 @@ app.get("/api/organizations", requireAuth, async (req, res) => {
     return res.status(503).json({ success: false, error: "Organizations could not be loaded." });
   }
 });
+
+// Public API Routes: Clinic Automation Portfolio Demo (no auth by design — it is
+// the public case study). Exposes demo data only; never service-role keys.
+app.use("/api/clinic", clinicRouter);
 
 // Protected API surfaces. Webhook routes remain signature-authenticated separately.
 app.use(["/api/agent", "/api/connectors", "/api/temporal", "/api/env-status"], requireAuth);
@@ -1705,7 +1710,9 @@ app.post("/api/webhooks/ghl", async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      // Accept proxied preview hostnames (Arena preview, Vercel preview, ...)
+      // instead of answering 403 "Blocked request. This host is not allowed."
+      server: { middlewareMode: true, host: true, allowedHosts: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
