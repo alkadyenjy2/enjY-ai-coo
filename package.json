@@ -16,7 +16,8 @@
     "test:operational-logs": "node --import tsx --test --test-concurrency=1 tests/operational-logs.test.ts",
     "test:browser-use-temporal": "node --import tsx --test --test-concurrency=1 tests/temporal-browser-use.test.ts",
     "test:production-guardrails": "node --import tsx --test --test-concurrency=1 tests/production-guardrails.test.ts",
-    "test:clinic-demo": "node --import tsx --test --test-concurrency=1 tests/clinic-demo.test.ts tests/clinic-routes.test.ts"
+    "test:clinic-demo": "node --import tsx --test --test-concurrency=1 tests/clinic-demo.test.ts tests/clinic-routes.test.ts",
+    "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
