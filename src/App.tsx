@@ -15,6 +15,7 @@ import { WorkflowStudioView } from './components/WorkflowStudioView';
 import { CodingWorkspaceView } from './components/CodingWorkspaceView';
 import { ProjectsInheritanceView } from './components/ProjectsInheritanceView';
 import { LessonsLearnedView } from './components/LessonsLearnedView';
+import { ClinicDemoView } from './components/clinic/ClinicDemoView';
 
 import {
   initialUserProfile,
@@ -43,7 +44,8 @@ import {
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<NavView>('dashboard');
+  // The clinic automation case study is the portfolio entry point.
+  const [currentView, setCurrentView] = useState<NavView>('clinic');
   const [userProfile, setUserProfile] = useState<UserProfile>(initialUserProfile);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>(initialMemoryItems);
   const [connectors, setConnectors] = useState<Connector[]>(initialConnectors);
@@ -300,6 +302,8 @@ export default function App() {
               onRunQuickCommand={handleRunQuickCommand}
             />
           )}
+
+          {currentView === 'clinic' && <ClinicDemoView />}
 
           {currentView === 'chat' && (
             <CommandCenterView
