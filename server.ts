@@ -19,6 +19,7 @@ import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./sr
 import { getAuthContext, getAuthorizedOrganizations, getOrganizationAccess, requireAuth, requireOrganizationAccess } from "./src/auth/server";
 import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhooks";
 import { clinicRouter } from "./src/clinic/routes";
+import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -484,7 +485,7 @@ export function classifyCommand(promptStr: string): CommandClass {
     return "UNKNOWN";
   }
 
-  const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|update|patch|execute|run workflow|تشغيل/i.test(p);
+  const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|update|patch|execute|run workflow|تشغيل|send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail/i.test(p);
   const hasUrl = /(https?:\/\/[^\s]+)/.test(promptStr) || /بحث|أبحاث|مصادر|رابط|روابط|research|sources|urls?/i.test(p);
   const isPlanning = !isExecutionIntent && /خطة|plan|planning|يلا نعمل|دعنا نضع|استراتيجية|خطوات|roadmap|صمم خطة|ضع خطة/i.test(p);
 
@@ -526,7 +527,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
 const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
-  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status"],
+  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email"],
   SYSTEM_HEALTH: ["check_connector_status"],
   REPORTING: ["check_connector_status"],
   RESEARCH: [],
@@ -545,7 +546,7 @@ function isToolAllowed(intent: string, toolName: string): boolean {
 
 // API Route: Agent Command Execution (Chat / Command Center)
 app.post("/api/agent/command", async (req, res) => {
-  const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash" } = req.body;
+  const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash", gmailApprovalConfirmed = false } = req.body;
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
   const projectNameStr = typeof activeProject?.name === "string" ? activeProject.name : "Core Operations HQ";
   const commandClass = classifyCommand(userPromptStr);
@@ -627,7 +628,9 @@ app.post("/api/agent/command", async (req, res) => {
 
   // 3. Sensitive Action Gate (NEEDS_APPROVAL)
   const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);
-  if (isSensitiveAction) {
+  const isEmailSendAction = /(send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail)/i.test(userPromptStr);
+  const emailApprovalGranted = isEmailSendAction && gmailApprovalConfirmed === true;
+  if (isSensitiveAction && !emailApprovalGranted) {
     const sensitiveRecord: OperationalExecutionRecord = {
       id: `exec-${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -783,6 +786,19 @@ Rules for Response:
             },
             required: ["table", "matchColumn", "matchValue", "updatePayload"]
           }
+        },
+        {
+          name: "send_email",
+          description: "Sends one explicit email through the connected Gmail account. Only use when the request is explicitly approved by the human operator.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              to: { type: Type.STRING, description: "Recipient email address." },
+              subject: { type: Type.STRING, description: "Email subject." },
+              body: { type: Type.STRING, description: "Plain-text email body." }
+            },
+            required: ["to", "subject", "body"]
+          }
         }
       );
     } else if (commandClass === "SYSTEM_HEALTH" || commandClass === "REPORTING") {
@@ -843,6 +859,31 @@ Rules for Response:
         });
         verificationStatus = "FAILED";
         responseText = `🚫 **[Intent Policy Gate Blocked]** أداة \`${call.name}\` غير مسموح بها للقصد \`${commandClass}\`.`;
+      } else if (call.name === "send_email") {
+        if (!emailApprovalGranted) {
+          executionErrors.push("Explicit human approval is required before sending email.");
+          verificationStatus = "FAILED";
+          responseText = "🔒 **[Human Approval Required]** إرسال الإيميل متوقف حتى يتم تأكيد الموافقة البشرية صراحةً.";
+          actionsTakenList.push({ tool: 'Human Approval Gate', status: 'blocked', details: 'send_email requires gmailApprovalConfirmed=true.' });
+        } else {
+          const args = (call.args || {}) as any;
+          try {
+            const sendResult = await gmailRouter({ action: "send", params: { to: args.to, subject: args.subject, body: args.body } });
+            const messageId = (sendResult as any)?.messageId;
+            if (!messageId) throw new Error("Gmail send returned no messageId.");
+            const verifyResult = await gmailRouter({ action: "verify", params: { messageId } });
+            const verified = Boolean((verifyResult as any)?.verified);
+            verificationStatus = verified ? "VERIFIED" : "FAILED";
+            actionsTakenList.push({ tool: 'Gmail Send Tool', status: 'success', details: `Sent email to ${args.to}; messageId=${messageId}` });
+            actionsTakenList.push({ tool: 'Gmail Verification Tool', status: verified ? 'success' : 'failed', details: `Post-send Gmail verification: ${JSON.stringify(verifyResult)}` });
+            responseText = verified ? `### 📧 Gmail — Email Sent & Verified\n* **To:** \`${args.to}\`\n* **Subject:** \`${args.subject}\`\n* **Message ID:** \`${messageId}\`\n* **Verification:** \`VERIFIED\`` : `⚠️ تم إرسال الإيميل لكن فشل التحقق من حالة الرسالة في Gmail. Message ID: \`${messageId}\``;
+          } catch (gmailErr: any) {
+            executionErrors.push(gmailErr?.message || String(gmailErr));
+            verificationStatus = "FAILED";
+            actionsTakenList.push({ tool: 'Gmail Send Tool', status: 'error', details: gmailErr?.message || String(gmailErr) });
+            responseText = `❌ فشل تنفيذ Gmail send_email: ${gmailErr?.message || String(gmailErr)}`;
+          }
+        }
       } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
@@ -1474,6 +1515,11 @@ app.post("/api/connectors/test", async (req, res) => {
     });
   }
 
+  if (connLower.includes("gmail")) {
+    const hasGmail = Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN);
+    return res.json({ status: hasGmail ? "REAL_LIVE" : "UNCONFIGURED", connectorId: "gmail", message: hasGmail ? "Gmail OAuth credentials configured." : "Gmail OAuth credentials missing.", authPresent: hasGmail, actualCall: false, latencyMs: 5, capabilitiesDiscovered: ["send_email", "verify_sent_email", "list_recent_emails"], evidence: hasGmail ? "Gmail OAuth runtime credentials present." : "Missing Gmail OAuth runtime credentials." });
+  }
+
   if (connLower.includes("gemini")) {
     const hasGemini = Boolean(process.env.GEMINI_API_KEY);
     return res.json({
@@ -1573,7 +1619,10 @@ app.get("/api/env-status", (req, res) => {
     'GHL_LOCATION_ID',
     'TAVILY_API_KEY',
     'STRIPE_SECRET_KEY',
-    'STRIPE_WEBHOOK_SECRET'
+    'STRIPE_WEBHOOK_SECRET',
+    'GMAIL_CLIENT_ID',
+    'GMAIL_CLIENT_SECRET',
+    'GMAIL_REFRESH_TOKEN'
   ];
 
   const variables: Record<string, 'PRESENT' | 'ABSENT'> = {};
