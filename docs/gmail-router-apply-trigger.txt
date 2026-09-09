@@ -1,1 +1,1 @@
-One-shot Gmail router integration workflow trigger. This file is intentionally temporary and can be removed after the workflow commits the integration.
+Retriggered after fixing npm lockfile synchronization in the one-shot Gmail router integration workflow.
