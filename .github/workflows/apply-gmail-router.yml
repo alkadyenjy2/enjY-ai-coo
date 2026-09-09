@@ -1,0 +1,106 @@
+name: Apply Gmail Router Integration
+
+on:
+  push:
+    branches: [feat/gmail-router-live]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Patch server.ts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('server.ts')
+          s = p.read_text()
+
+          s = s.replace(
+              'import { clinicRouter } from "./src/clinic/routes";\n',
+              'import { clinicRouter } from "./src/clinic/routes";\nimport { gmailRouter } from "./src/api/agent/tools/gmail-router";\n',
+              1,
+          )
+
+          s = s.replace(
+              'const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|update|patch|execute|run workflow|تشغيل/i.test(p);',
+              'const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|update|patch|execute|run workflow|تشغيل|send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail/i.test(p);',
+              1,
+          )
+
+          s = s.replace(
+              'EXECUTION: ["query_supabase", "update_supabase", "check_connector_status"],',
+              'EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email"],',
+              1,
+          )
+
+          s = s.replace(
+              'const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash" } = req.body;',
+              'const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash", gmailApprovalConfirmed = false } = req.body;',
+              1,
+          )
+
+          old_gate = 'const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);\n  if (isSensitiveAction) {'
+          new_gate = 'const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);\n  const isEmailSendAction = /(send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail)/i.test(userPromptStr);\n  const emailApprovalGranted = isEmailSendAction && gmailApprovalConfirmed === true;\n  if (isSensitiveAction && !emailApprovalGranted) {'
+          s = s.replace(old_gate, new_gate, 1)
+
+          needle = '''        {\n          name: "update_supabase",\n          description: "Executes an update query against Supabase database REST API and requires post-read verification.",'''
+          insert = '''        {\n          name: "update_supabase",\n          description: "Executes an update query against Supabase database REST API and requires post-read verification.",'''
+          # Insert send_email declaration immediately after the update_supabase declaration block by targeting its closing required line.
+          marker = '''            required: ["table", "matchColumn", "matchValue", "updatePayload"]\n          }\n        }\n      );'''
+          replacement = '''            required: ["table", "matchColumn", "matchValue", "updatePayload"]\n          }\n        },\n        {\n          name: "send_email",\n          description: "Sends one explicit email through the connected Gmail account. Only use when the request is explicitly approved by the human operator.",\n          parameters: {\n            type: Type.OBJECT,\n            properties: {\n              to: { type: Type.STRING, description: "Recipient email address." },\n              subject: { type: Type.STRING, description: "Email subject." },\n              body: { type: Type.STRING, description: "Plain-text email body." }\n            },\n            required: ["to", "subject", "body"]\n          }\n        }\n      );'''
+          if marker not in s:
+              raise SystemExit('send_email declaration insertion marker not found')
+          s = s.replace(marker, replacement, 1)
+
+          dispatch_marker = '''      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {'''
+          dispatch = '''      } else if (call.name === "send_email") {\n        if (!emailApprovalGranted) {\n          executionErrors.push("Explicit human approval is required before sending email.");\n          verificationStatus = "FAILED";\n          responseText = "🔒 **[Human Approval Required]** إرسال الإيميل متوقف حتى يتم تأكيد الموافقة البشرية صراحةً.";\n          actionsTakenList.push({\n            tool: 'Human Approval Gate',\n            status: 'blocked',\n            details: 'send_email requires gmailApprovalConfirmed=true in the authenticated command request.'\n          });\n        } else {\n          const args = (call.args || {}) as any;\n          try {\n            const sendResult = await gmailRouter({\n              action: "send",\n              params: { to: args.to, subject: args.subject, body: args.body }\n            });\n            const messageId = (sendResult as any)?.messageId;\n            if (!messageId) throw new Error("Gmail send returned no messageId.");\n\n            const verifyResult = await gmailRouter({\n              action: "verify",\n              params: { messageId }\n            });\n            const verified = Boolean((verifyResult as any)?.verified);\n            verificationStatus = verified ? "VERIFIED" : "FAILED";\n            actionsTakenList.push({\n              tool: 'Gmail Send Tool',\n              status: 'success',\n              details: `Sent email to ${args.to}; messageId=${messageId}`\n            });\n            actionsTakenList.push({\n              tool: 'Gmail Verification Tool',\n              status: verified ? 'success' : 'failed',\n              details: `Post-send Gmail verification: ${JSON.stringify(verifyResult)}`\n            });\n            responseText = verified\n              ? `### 📧 Gmail — Email Sent & Verified\\n* **To:** \\`${args.to}\\`\\n* **Subject:** \\`${args.subject}\\`\\n* **Message ID:** \\`${messageId}\\`\\n* **Verification:** \\`VERIFIED\\``\n              : `⚠️ تم إرسال الإيميل لكن فشل التحقق من حالة الرسالة في Gmail. Message ID: \\`${messageId}\\``;\n          } catch (gmailErr: any) {\n            executionErrors.push(gmailErr?.message || String(gmailErr));\n            verificationStatus = "FAILED";\n            actionsTakenList.push({\n              tool: 'Gmail Send Tool',\n              status: 'error',\n              details: gmailErr?.message || String(gmailErr)\n            });\n            responseText = `❌ فشل تنفيذ Gmail send_email: ${gmailErr?.message || String(gmailErr)}`;\n          }\n        }\n      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {'''
+          if dispatch_marker not in s:
+              raise SystemExit('Gmail dispatch insertion marker not found')
+          s = s.replace(dispatch_marker, dispatch, 1)
+
+          gmail_status_marker = '''  if (connLower.includes("gemini")) {'''
+          gmail_status = '''  if (connLower.includes("gmail")) {\n    const hasGmail = Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN);\n    return res.json({\n      status: hasGmail ? "REAL_LIVE" : "UNCONFIGURED",\n      connectorId: "gmail",\n      message: hasGmail ? "Gmail OAuth credentials configured." : "Gmail OAuth credentials (GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN) missing.",\n      authPresent: hasGmail,\n      actualCall: false,\n      latencyMs: 5,\n      capabilitiesDiscovered: ["send_email", "verify_sent_email", "list_recent_emails"],\n      evidence: hasGmail ? "Gmail OAuth runtime credentials present." : "Missing Gmail OAuth runtime credentials."\n    });\n  }\n\n  if (connLower.includes("gemini")) {'''
+          if gmail_status_marker not in s:
+              raise SystemExit('Gmail connector status marker not found')
+          s = s.replace(gmail_status_marker, gmail_status, 1)
+
+          env_marker = '''    'STRIPE_WEBHOOK_SECRET'\n  ];'''
+          env_replacement = '''    'STRIPE_WEBHOOK_SECRET',\n    'GMAIL_CLIENT_ID',\n    'GMAIL_CLIENT_SECRET',\n    'GMAIL_REFRESH_TOKEN'\n  ];'''
+          if env_marker not in s:
+              raise SystemExit('env status marker not found')
+          s = s.replace(env_marker, env_replacement, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Verify build
+        run: npm run lint && npm run build
+
+      - name: Commit patched server
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts
+          git commit -m "feat: wire Gmail tool into JARVIS command router"
+          git push
+
+      - name: Remove temporary workflow
+        if: success()
+        run: |
+          git rm .github/workflows/apply-gmail-router.yml
+          git commit -m "chore: remove temporary Gmail patch workflow"
+          git push
