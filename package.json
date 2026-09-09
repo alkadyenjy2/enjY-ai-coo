@@ -18,6 +18,7 @@
     "test:production-guardrails": "node --import tsx --test --test-concurrency=1 tests/production-guardrails.test.ts",
     "test:clinic-demo": "node --import tsx --test --test-concurrency=1 tests/clinic-demo.test.ts tests/clinic-routes.test.ts",
     "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs",
+    "gmail:oauth": "node --import tsx scripts/gmail-oauth.ts",
     "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts"
   },
   "dependencies": {
