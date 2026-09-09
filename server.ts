@@ -52,6 +52,9 @@ app.use(express.json({
   },
 }));
 
+// Telegram transport is mounted before the SPA fallback so webhook requests reach JARVIS.
+app.use("/api/telegram", createTelegramRouter());
+
 // Operational Memory Audit Store (In-Memory Execution Log)
 export interface OperationalExecutionRecord {
   id: string;
