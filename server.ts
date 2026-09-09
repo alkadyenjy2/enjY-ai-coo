@@ -20,6 +20,7 @@ import { getAuthContext, getAuthorizedOrganizations, getOrganizationAccess, requ
 import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhooks";
 import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
+import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -30,6 +31,18 @@ process.on("unhandledRejection", (reason) => {
 });
 
 export const app = express();
+
+app.locals.jarvisTelegramHandler = async ({ chatId, text }: { chatId: number; text: string }) => {
+  const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/agent/command`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt: text, userProfile: { source: "telegram", telegramChatId: chatId }, activeProject: "AI CORE COO", memoryContext: "", model: "gemini-3.6-flash" }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || `JARVIS returned ${response.status}`);
+  const output = typeof data?.response === "string" ? data.response : typeof data?.message === "string" ? data.message : JSON.stringify(data);
+  await sendTelegramMessage(chatId, output);
+};
 const PORT = Number(process.env.PORT || 3000);
 
 app.use(express.json({
