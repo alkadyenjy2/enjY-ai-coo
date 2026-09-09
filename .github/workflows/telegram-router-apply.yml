@@ -1,6 +1,10 @@
 name: Apply Telegram router
 
 on:
+  push:
+    paths:
+      - ".github/workflows/telegram-router-apply.yml"
+      - "src/api/telegram.ts"
   workflow_dispatch:
 
 permissions:
