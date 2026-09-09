@@ -1,0 +1,75 @@
+diff --git a/server.ts b/server.ts
+--- a/server.ts
++++ b/server.ts
+@@
+ import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhooks";
+ import { clinicRouter } from "./src/clinic/routes";
++import { gmailRouter } from "./src/api/agent/tools/gmail-router";
+@@
+-  const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|update|patch|execute|run workflow|تشغيل/i.test(p);
++  const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|update|patch|execute|run workflow|تشغيل|send_email|send email|ابعت.*(ايميل|إيميل)|ارسل.*(ايميل|إيميل)|إرسال.*بريد/i.test(p);
+@@
+ const INTENT_TOOL_POLICY: Record<string, string[]> = {
+   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
+-  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status"],
++  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email"],
+@@
+ app.post("/api/agent/command", async (req, res) => {
+-  const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash" } = req.body;
++  const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash", gmailApprovalConfirmed = false } = req.body;
+@@
+   // 3. Sensitive Action Gate (NEEDS_APPROVAL)
+   const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);
+-  if (isSensitiveAction) {
++  if (isSensitiveAction && !gmailApprovalConfirmed) {
+@@
+         {
+           name: "update_supabase",
+@@
+           }
++        },
++        {
++          name: "send_email",
++          description: "Sends exactly one plaintext email through the configured Gmail account. Only use after explicit human approval.",
++          parameters: {
++            type: Type.OBJECT,
++            properties: {
++              to: { type: Type.STRING, description: "Recipient email address." },
++              subject: { type: Type.STRING, description: "Email subject." },
++              body: { type: Type.STRING, description: "Plaintext email body." }
++            },
++            required: ["to", "subject", "body"]
++          }
+         }
+       );
+@@
+       } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
+@@
+-      } else if (call.name === "check_connector_status") {
++      } else if (call.name === "send_email" && gmailApprovalConfirmed) {
++        const { to, subject, body } = call.args as { to?: string; subject?: string; body?: string };
++        try {
++          const sent = await gmailRouter({ action: "send", params: { to, subject, body } });
++          actionsTakenList.push({
++            tool: "Gmail Send Tool",
++            status: "success",
++            details: `Sent one email to ${to}. Gmail messageId=${sent.messageId || "unknown"}.`
++          });
++          if (!sent.messageId) throw new Error("GMAIL_SEND_NO_MESSAGE_ID: Gmail did not return a message id.");
++
++          const verification = await gmailRouter({ action: "verify", params: { messageId: sent.messageId } });
++          verificationStatus = verification.verified ? "VERIFIED" : "FAILED";
++          actionsTakenList.push({
++            tool: "Gmail Verification Tool",
++            status: verification.verified ? "success" : "failed",
++            details: `Post-send verification: ${JSON.stringify(verification)}`
++          });
++          responseText = `### 📧 Gmail Execution & Verification\n* **المستلم:** \`${to}\`\n* **الموضوع:** \`${subject}\`\n* **Message ID:** \`${sent.messageId}\`\n* **نتيجة الإرسال:** \`SENT\`\n* **نتيجة التحقق:** \`${verificationStatus}\``;
++        } catch (gmailErr: any) {
++          executionErrors.push(gmailErr?.message || String(gmailErr));
++          verificationStatus = "FAILED";
++          actionsTakenList.push({ tool: "Gmail Send/Verification Tool", status: "error", details: gmailErr?.message || String(gmailErr) });
++          responseText = `### ❌ Gmail Execution Failed\n* **حالة التحقق:** \`FAILED\`\n* **الخطأ:** \`${gmailErr?.message || String(gmailErr)}\``;
++        }
++      } else if (call.name === "check_connector_status") {
+*** End Patch
