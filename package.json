@@ -17,10 +17,12 @@
     "test:browser-use-temporal": "node --import tsx --test --test-concurrency=1 tests/temporal-browser-use.test.ts",
     "test:production-guardrails": "node --import tsx --test --test-concurrency=1 tests/production-guardrails.test.ts",
     "test:clinic-demo": "node --import tsx --test --test-concurrency=1 tests/clinic-demo.test.ts tests/clinic-routes.test.ts",
-    "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs"
+    "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs",
+    "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
+    "@googleapis/gmail": "^15.0.0",
     "@tailwindcss/vite": "^4.1.14",
     "@temporalio/client": "^1.22.0",
     "@temporalio/testing": "^1.22.0",
@@ -30,6 +32,8 @@
     "browser-use-sdk": "^3.11.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "google-auth-library": "^10.5.0",
+    "googleapis": "^159.0.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "react": "^19.0.1",
@@ -43,7 +47,6 @@
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
     "@types/express": "^4.17.21"
