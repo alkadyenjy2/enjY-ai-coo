@@ -1,10 +1,9 @@
 import { google } from "googleapis";
-import { OAuth2Client } from "google-auth-library";
 
 const GMAIL_SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send";
 const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
-function getOAuthClient(): OAuth2Client {
+function getOAuthClient() {
   const clientId = process.env.GMAIL_CLIENT_ID;
   const clientSecret = process.env.GMAIL_CLIENT_SECRET;
   const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
@@ -15,7 +14,11 @@ function getOAuthClient(): OAuth2Client {
     );
   }
 
-  const oauth2Client = new OAuth2Client(clientId, clientSecret, process.env.GMAIL_REDIRECT_URI || "http://localhost:53682/oauth2callback");
+  const oauth2Client = new google.auth.OAuth2(
+    clientId,
+    clientSecret,
+    process.env.GMAIL_REDIRECT_URI || "http://localhost:53682/oauth2callback",
+  );
   oauth2Client.setCredentials({ refresh_token: refreshToken });
   return oauth2Client;
 }
@@ -26,7 +29,7 @@ function getGmailClient() {
 
 function assertEmailAddress(value: string): string {
   const email = String(value || "").trim();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!/^([^\s@]+)@([^\s@]+)\.([^\s@]+)$/.test(email)) {
     throw new Error(`GMAIL_INVALID_RECIPIENT: Invalid recipient address '${email}'.`);
   }
   return email;
