@@ -1,0 +1,39 @@
+name: Apply Telegram Route Fix
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Patch Telegram route registration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('server.ts')
+          s = p.read_text()
+          marker = 'app.use(express.json({\n  limit: "1mb",\n  verify: (req, _res, buffer) => {\n    (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);\n  },\n}));\n\n'
+          insertion = marker + '// Telegram transport is mounted before the SPA fallback so webhook requests reach JARVIS.\napp.use("/api/telegram", createTelegramRouter());\n\n'
+          if 'app.use("/api/telegram", createTelegramRouter());' in s:
+              print('Telegram route already mounted; nothing to do.')
+          elif marker not in s:
+              raise SystemExit('Expected express.json marker not found; refusing unsafe patch.')
+          else:
+              p.write_text(s.replace(marker, insertion, 1))
+              print('Telegram route mounted.')
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add server.ts
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: mount Telegram transport before SPA fallback'
+          git push
