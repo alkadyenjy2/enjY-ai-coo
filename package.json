@@ -19,7 +19,8 @@
     "test:clinic-demo": "node --import tsx --test --test-concurrency=1 tests/clinic-demo.test.ts tests/clinic-routes.test.ts",
     "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs",
     "gmail:oauth": "node --import tsx scripts/gmail-oauth.ts",
-    "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts"
+    "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts",
+    "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -47,7 +48,7 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
-    "tailwindcss": "^4.1.14",
+    "tailwindcss": "^4.1.21",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
     "@types/express": "^4.17.21"
