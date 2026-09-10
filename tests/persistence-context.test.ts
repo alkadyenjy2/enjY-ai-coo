@@ -11,6 +11,7 @@ const record = {
   intent: 'test_execution',
   tool: 'none',
   selectedTools: [],
+  actionsExecuted: [],
   results: {},
   state_history: [],
   evidence: 'test',
