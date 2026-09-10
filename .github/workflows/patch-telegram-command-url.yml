@@ -1,0 +1,38 @@
+name: Patch Telegram command URL
+
+on:
+  push:
+    paths:
+      - .github/workflows/patch-telegram-command-url.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/telegram-vercel-command-url
+      - name: Patch server.ts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("server.ts")
+          s = p.read_text()
+          old = '  const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/agent/command`, {'
+          new = '  const baseUrl = (process.env.APP_URL || "").trim().replace(/\\/$/, "");\n  if (!baseUrl) throw new Error("APP_URL is required for Telegram command execution.");\n  const response = await fetch(`${baseUrl}/api/agent/command`, {'
+          if s.count(old) != 1:
+              raise SystemExit(f"Expected exactly one target line, found {s.count(old)}")
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server.ts
+          git diff --cached --check
+          git diff --cached -- server.ts
+          git commit -m "fix: use production app URL for Telegram command execution"
+          git push origin HEAD:fix/telegram-vercel-command-url
