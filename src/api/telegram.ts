@@ -1,4 +1,4 @@
-import type { Request, Response, Router } from "express";
+import type { Request, Response as ExpressResponse, Router } from "express";
 import express from "express";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createClient, type Session } from "@supabase/supabase-js";
@@ -104,7 +104,7 @@ function installTelegramAuthFetchBridge(): void {
   if (telegramAuthFetchInstalled) return;
   telegramAuthFetchInstalled = true;
 
-  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<globalThis.Response> => {
     if (!isTelegramCommandRequest(input)) return originalFetch(input, init);
 
     const context = telegramAuthContext.getStore();
@@ -163,7 +163,7 @@ export async function sendTelegramMessage(chatId: number, text: string): Promise
 export function createTelegramRouter(): Router {
   const router = express.Router();
 
-  router.post("/webhook", express.json({ limit: "256kb" }), async (req: Request, res: Response) => {
+  router.post("/webhook", express.json({ limit: "256kb" }), async (req: Request, res: ExpressResponse) => {
     const expectedSecret = getWebhookSecret();
     if (expectedSecret && req.header("x-telegram-bot-api-secret-token") !== expectedSecret) {
       return res.status(401).json({ ok: false, error: "invalid webhook secret" });
@@ -197,7 +197,7 @@ export function createTelegramRouter(): Router {
     });
   });
 
-  router.get("/status", (_req: Request, res: Response) => {
+  router.get("/status", (_req: Request, res: ExpressResponse) => {
     const configured = Boolean(getTelegramToken());
     const webhookSecretConfigured = Boolean(getWebhookSecret());
     const commandAuthConfigured = Boolean(getTelegramRefreshToken() && getTelegramOrganizationId());
