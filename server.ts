@@ -33,7 +33,9 @@ process.on("unhandledRejection", (reason) => {
 export const app = express();
 
 app.locals.jarvisTelegramHandler = async ({ chatId, text }: { chatId: number; text: string }) => {
-  const response = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/agent/command`, {
+  const baseUrl = (process.env.APP_URL || "").trim().replace(/\/$/, "");
+  if (!baseUrl) throw new Error("APP_URL is required for Telegram command execution.");
+  const response = await fetch(`${baseUrl}/api/agent/command`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ prompt: text, userProfile: { source: "telegram", telegramChatId: chatId }, activeProject: "AI CORE COO", memoryContext: "", model: "gemini-3.6-flash" }),
