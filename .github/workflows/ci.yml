@@ -30,6 +30,9 @@ jobs:
       - name: Operational log mapping test
         run: npm run test:operational-logs
 
+      - name: Persistence tenant context test
+        run: npm run test:persistence-context
+
       - name: Telegram transport test
         run: npm run test:telegram
 

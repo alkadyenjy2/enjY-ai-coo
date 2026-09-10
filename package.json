@@ -14,6 +14,7 @@
     "test:webhook-signatures": "node --import tsx --test --test-concurrency=1 tests/webhook-signature.test.ts tests/webhooks-adapter.test.ts",
     "test:vercel-routing": "node --import tsx --test --test-concurrency=1 tests/vercel-routing.test.mjs",
     "test:operational-logs": "node --import tsx --test --test-concurrency=1 tests/operational-logs.test.ts",
+    "test:persistence-context": "node --import tsx --test --test-concurrency=1 tests/persistence-context.test.ts",
     "test:browser-use-temporal": "node --import tsx --test --test-concurrency=1 tests/temporal-browser-use.test.ts",
     "test:production-guardrails": "node --import tsx --test --test-concurrency=1 tests/production-guardrails.test.ts",
     "test:clinic-demo": "node --import tsx --test --test-concurrency=1 tests/clinic-demo.test.ts tests/clinic-routes.test.ts",
