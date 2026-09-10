@@ -20,8 +20,12 @@ async function withServer(handler: (baseUrl: string) => Promise<void>) {
 test("Telegram status reports unconfigured when no bot token is present", async () => {
   const previousToken = process.env.TELEGRAM_BOT_TOKEN;
   const previousSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const previousRefresh = process.env.JARVIS_TELEGRAM_REFRESH_TOKEN;
+  const previousOrg = process.env.JARVIS_TELEGRAM_ORGANIZATION_ID;
   delete process.env.TELEGRAM_BOT_TOKEN;
   delete process.env.TELEGRAM_WEBHOOK_SECRET;
+  delete process.env.JARVIS_TELEGRAM_REFRESH_TOKEN;
+  delete process.env.JARVIS_TELEGRAM_ORGANIZATION_ID;
 
   try {
     await withServer(async (baseUrl) => {
@@ -31,6 +35,8 @@ test("Telegram status reports unconfigured when no bot token is present", async 
       assert.equal(body.ok, true);
       assert.equal(body.configured, false);
       assert.equal(body.webhookSecretConfigured, false);
+      assert.equal(body.commandAuthConfigured, false);
+      assert.equal(body.allowedChatIdsConfigured, false);
       assert.deepEqual(body.capabilities, []);
     });
   } finally {
@@ -38,14 +44,20 @@ test("Telegram status reports unconfigured when no bot token is present", async 
     else process.env.TELEGRAM_BOT_TOKEN = previousToken;
     if (previousSecret === undefined) delete process.env.TELEGRAM_WEBHOOK_SECRET;
     else process.env.TELEGRAM_WEBHOOK_SECRET = previousSecret;
+    if (previousRefresh === undefined) delete process.env.JARVIS_TELEGRAM_REFRESH_TOKEN;
+    else process.env.JARVIS_TELEGRAM_REFRESH_TOKEN = previousRefresh;
+    if (previousOrg === undefined) delete process.env.JARVIS_TELEGRAM_ORGANIZATION_ID;
+    else process.env.JARVIS_TELEGRAM_ORGANIZATION_ID = previousOrg;
   }
 });
 
 test("Telegram webhook delegates a text update to the JARVIS handler", async () => {
   const previousToken = process.env.TELEGRAM_BOT_TOKEN;
   const previousSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const previousAllowlist = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
   process.env.TELEGRAM_BOT_TOKEN = "test-token";
   process.env.TELEGRAM_WEBHOOK_SECRET = "test-secret";
+  delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
   const received: Array<{ chatId: number; text: string }> = [];
 
   try {
@@ -80,6 +92,84 @@ test("Telegram webhook delegates a text update to the JARVIS handler", async () 
     else process.env.TELEGRAM_BOT_TOKEN = previousToken;
     if (previousSecret === undefined) delete process.env.TELEGRAM_WEBHOOK_SECRET;
     else process.env.TELEGRAM_WEBHOOK_SECRET = previousSecret;
+    if (previousAllowlist === undefined) delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+    else process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = previousAllowlist;
+  }
+});
+
+test("Telegram webhook rejects chats outside the configured allowlist", async () => {
+  const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+  const previousSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const previousAllowlist = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+  process.env.TELEGRAM_BOT_TOKEN = "test-token";
+  process.env.TELEGRAM_WEBHOOK_SECRET = "test-secret";
+  process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = "99999,88888";
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/telegram/webhook`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-telegram-bot-api-secret-token": "test-secret",
+        },
+        body: JSON.stringify({ message: { chat: { id: 12345 }, text: "send email" } }),
+      });
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), { ok: false, error: "telegram chat is not authorized" });
+    });
+  } finally {
+    if (previousToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = previousToken;
+    if (previousSecret === undefined) delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    else process.env.TELEGRAM_WEBHOOK_SECRET = previousSecret;
+    if (previousAllowlist === undefined) delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+    else process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = previousAllowlist;
+  }
+});
+
+test("Telegram webhook accepts an allowlisted chat", async () => {
+  const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+  const previousSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const previousAllowlist = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+  process.env.TELEGRAM_BOT_TOKEN = "test-token";
+  process.env.TELEGRAM_WEBHOOK_SECRET = "test-secret";
+  process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = "12345";
+  let invoked = false;
+
+  try {
+    const app = express();
+    app.locals.jarvisTelegramHandler = async () => {
+      invoked = true;
+    };
+    app.use("/api/telegram", createTelegramRouter());
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/telegram/webhook`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-telegram-bot-api-secret-token": "test-secret",
+        },
+        body: JSON.stringify({ message: { chat: { id: 12345 }, text: "status" } }),
+      });
+      assert.equal(response.status, 200);
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(invoked, true);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  } finally {
+    if (previousToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = previousToken;
+    if (previousSecret === undefined) delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    else process.env.TELEGRAM_WEBHOOK_SECRET = previousSecret;
+    if (previousAllowlist === undefined) delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+    else process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = previousAllowlist;
   }
 });
 
