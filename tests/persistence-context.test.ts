@@ -11,7 +11,6 @@ const record = {
   intent: 'test_execution',
   tool: 'none',
   selectedTools: [],
-  actionsExecuted: [],
   results: {},
   state_history: [],
   evidence: 'test',
@@ -23,7 +22,11 @@ const record = {
 
 test('persists operational records with authenticated tenant context', async () => {
   const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   const requests: Array<{ url: string; init?: RequestInit }> = [];
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), init });
     return new Response(JSON.stringify([{ id: 'audit-1' }]), { status: 201 });
@@ -47,12 +50,20 @@ test('persists operational records with authenticated tenant context', async () 
     assert.equal((requests[0].init?.headers as Record<string, string>).Authorization, 'Bearer user-access-token');
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    else process.env.SUPABASE_PUBLISHABLE_KEY = originalKey;
   }
 });
 
 test('refuses durable persistence without an authenticated tenant context', async () => {
   const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   let called = false;
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
   globalThis.fetch = (async () => {
     called = true;
     return new Response('[]', { status: 201 });
@@ -65,5 +76,9 @@ test('refuses durable persistence without an authenticated tenant context', asyn
     assert.equal(called, false);
   } finally {
     globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalKey === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    else process.env.SUPABASE_PUBLISHABLE_KEY = originalKey;
   }
 });
