@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { getPersistenceContext } from './request-context';
 
 export interface OperationalRecordLike {
   id: string;
@@ -31,11 +32,7 @@ interface SupabaseConfig {
 }
 
 function getSupabaseConfig(): SupabaseConfig | null {
-  const url = (
-    process.env.SUPABASE_URL ||
-    process.env.VITE_SUPABASE_URL ||
-    ''
-  ).trim();
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const key = (
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
@@ -77,8 +74,19 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
   const config = getSupabaseConfig();
   if (!config) return { persisted: false, source: 'memory', error: 'Supabase runtime credentials are not configured.' };
 
+  const context = getPersistenceContext();
+  if (!context) {
+    return {
+      persisted: false,
+      source: 'memory',
+      error: 'Authenticated tenant persistence context is unavailable.',
+    };
+  }
+
   const metadata = safeMetadata(record);
   const body = {
+    organization_id: context.organizationId,
+    user_id: context.userId,
     title: `AI CORE ${record.intent} — ${record.verificationStatus}`,
     description: record.final_state_reason,
     type: 'ai_core_execution',
@@ -98,7 +106,7 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
       method: 'POST',
       headers: {
         apikey: config.key,
-        Authorization: `Bearer ${config.key}`,
+        Authorization: `Bearer ${context.accessToken}`,
         'Content-Type': 'application/json',
         Prefer: 'return=representation',
       },
@@ -129,8 +137,14 @@ export async function fetchPersistedOperationalRecords(limit = 50): Promise<{ re
   const config = getSupabaseConfig();
   if (!config) return { records: [], source: 'memory', error: 'Supabase runtime credentials are not configured.' };
 
+  const context = getPersistenceContext();
+  if (!context) {
+    return { records: [], source: 'memory', error: 'Authenticated tenant persistence context is unavailable.' };
+  }
+
   const query = new URLSearchParams({
     select: 'id,description,status,event_metadata,workflow_name,execution_id,provider,error_code,error_message,completed_at,created_at',
+    organization_id: `eq.${context.organizationId}`,
     type: 'eq.ai_core_execution',
     order: 'created_at.desc',
     limit: String(Math.min(Math.max(limit, 1), 100)),
@@ -140,7 +154,7 @@ export async function fetchPersistedOperationalRecords(limit = 50): Promise<{ re
     const response = await fetch(`${config.url}/rest/v1/audit_logs?${query.toString()}`, {
       headers: {
         apikey: config.key,
-        Authorization: `Bearer ${config.key}`,
+        Authorization: `Bearer ${context.accessToken}`,
       },
     });
 

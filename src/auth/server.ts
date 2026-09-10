@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import type { NextFunction, Request, Response } from "express";
+import { runPersistenceContext } from "../adapters/request-context";
 
 export interface AuthContext {
   user: User;
@@ -207,7 +208,14 @@ export async function requireOrganizationAccess(req: Request, res: Response, nex
     installTemporalResponseBinding(req, res, access.organizationId);
   }
 
-  next();
+  return runPersistenceContext(
+    {
+      organizationId: access.organizationId,
+      userId: auth.user.id,
+      accessToken: auth.accessToken,
+    },
+    () => next(),
+  );
 }
 
 export function getAuthContext(res: Response): AuthContext | null {
