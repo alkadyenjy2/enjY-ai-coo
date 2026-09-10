@@ -95,6 +95,8 @@ class TemporalWorkflowManager {
         const connection = await Connection.connect({ address: process.env.TEMPORAL_ADDRESS });
         this.client = new Client({ connection });
         console.log(`✅ Connected to external Temporal Server at ${process.env.TEMPORAL_ADDRESS}`);
+      } else if (process.env.NODE_ENV === "production") {
+        throw new Error("PRODUCTION_TEMPORAL_ADDRESS_REQUIRED");
       } else {
         this.testEnv = await TestWorkflowEnvironment.createLocal();
         this.client = this.testEnv.client;
@@ -201,7 +203,7 @@ app.get("/api/health", (req, res) => {
     system: "Core AI Operations Agent",
     version: "2.5.0",
     hasApiKey: Boolean(process.env.GEMINI_API_KEY),
-    temporalEngineActive: true,
+    temporalEngineActive: Boolean(process.env.TEMPORAL_ADDRESS),
     executionHistoryCount: operationalMemoryRecords.length,
     timestamp: new Date().toISOString()
   });
@@ -215,7 +217,7 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY),
   );
   const hasExternalTemporal = Boolean(process.env.TEMPORAL_ADDRESS);
-  const requireLiveDependencies = process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
+  const requireLiveDependencies = process.env.NODE_ENV === "production" || process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
   const checks = {
     process: true,
     gemini: hasGemini,
