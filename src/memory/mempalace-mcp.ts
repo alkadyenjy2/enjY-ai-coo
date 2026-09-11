@@ -20,11 +20,12 @@ export class MemPalaceMcpHttpTransport implements MemPalaceMcpTransport {
 
   async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     if (!this.initialized && method !== 'initialize') {
-      await this.call('initialize', {
+      const init = await this.call<JsonRpcResponse>('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: {},
         clientInfo: { name: 'enjY-ai-coo', version: '1.0' },
       });
+      if (init.error) throw new Error(`MEMPALACE_MCP_${init.error.code}: ${init.error.message}`);
       this.initialized = true;
       await this.notify('notifications/initialized');
     }
@@ -48,6 +49,7 @@ export class MemPalaceMcpHttpTransport implements MemPalaceMcpTransport {
       body: JSON.stringify(body),
     });
     if (!response.ok) throw new Error(`MEMPALACE_HTTP_${response.status}`);
+    if (response.status === 202) return { jsonrpc: '2.0' };
     return (await response.json()) as JsonRpcResponse;
   }
 }
@@ -81,12 +83,11 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
     if (!input.tenantId || !input.agentId || !input.content.trim() || !input.source.trim()) throw new Error('INVALID_MEMORY_WRITE');
     const wing = scopedWing(input.tenantId);
     const room = `memory:${input.memoryType || 'general'}`;
-    const provenance = provenanceId(input.tenantId, `${input.agentId}:${input.source}:${input.content}`);
     const result = await this.tool<{ success?: boolean; drawer_id?: string }>('mempalace_add_drawer', {
       wing,
       room,
       content: input.content,
-      source_file: `ai-core://${provenance}`,
+      source_file: `ai-core://memory/${createHash('sha256').update(`${input.tenantId}:${input.agentId}:${input.source}`).digest('hex').slice(0, 32)}`,
       added_by: input.agentId,
     });
     if (!result.drawer_id) throw new Error('MEMPALACE_WRITE_NO_DRAWER_ID');
@@ -103,15 +104,7 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
     });
     return (result.results ?? []).map((item) => {
       const memoryId = item.drawer_id ?? `${item.wing ?? ''}:${item.room ?? ''}:${item.source_file ?? ''}`;
-      return {
-        memoryId,
-        content: item.text ?? '',
-        relevance: item.similarity ?? 0,
-        source: item.source_file ?? 'mempalace',
-        provenanceId: provenanceId(input.tenantId, memoryId),
-        createdAt: new Date().toISOString(),
-        scope: item.room,
-      };
+      return { memoryId, content: item.text ?? '', relevance: item.similarity ?? 0, source: item.source_file ?? 'mempalace', provenanceId: provenanceId(input.tenantId, memoryId), createdAt: new Date().toISOString(), scope: item.room };
     });
   }
 
@@ -119,13 +112,12 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
     const result = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string; metadata?: Record<string, unknown> }>('mempalace_get_drawer', { drawer_id: memoryId });
     if (!result.drawer_id || result.wing !== scopedWing(tenantId)) return null;
     const metadata = result.metadata ?? {};
-    const provenance = provenanceId(tenantId, memoryId);
     return {
       memoryId,
       content: result.content ?? '',
       relevance: 1,
       source: typeof metadata.source_file === 'string' ? metadata.source_file : 'mempalace',
-      provenanceId: provenance,
+      provenanceId: provenanceId(tenantId, memoryId),
       createdAt: typeof metadata.filed_at === 'string' ? metadata.filed_at : new Date().toISOString(),
       scope: result.room,
       tenantId,
@@ -143,29 +135,12 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
     const existing = await this.read(input.memoryId, input.tenantId);
     if (!existing) throw new Error('MEMORY_NOT_FOUND');
     await this.tool('mempalace_delete_drawer', { drawer_id: input.memoryId });
-    return {
-      memoryId: input.memoryId,
-      status: 'FORGOTTEN',
-      reason: input.reason,
-      requestedBy: input.requestedBy,
-      timestamp: new Date().toISOString(),
-      provenanceId: existing.provenanceId,
-    };
+    return { memoryId: input.memoryId, status: 'FORGOTTEN', reason: input.reason, requestedBy: input.requestedBy, timestamp: new Date().toISOString(), provenanceId: existing.provenanceId };
   }
 
   async provenance(memoryId: string, tenantId: string): Promise<MemoryProvenance | null> {
     const existing = await this.read(memoryId, tenantId);
     if (!existing) return null;
-    return {
-      memoryId,
-      provenanceId: existing.provenanceId,
-      source: existing.source,
-      sourceRef: existing.sourceRef,
-      createdAt: existing.createdAt,
-      author: existing.agentId,
-      tenantId,
-      agentId: existing.agentId,
-      transformations: [],
-    };
+    return { memoryId, provenanceId: existing.provenanceId, source: existing.source, sourceRef: existing.sourceRef, createdAt: existing.createdAt, author: existing.agentId, tenantId, agentId: existing.agentId, transformations: [] };
   }
 }
