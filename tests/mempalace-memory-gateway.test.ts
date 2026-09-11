@@ -7,7 +7,7 @@ class FakeTransport implements MemPalaceMcpTransport {
   private drawer = {
     drawer_id: 'drawer-1',
     content: 'AI CORE memory',
-    wing: 'ai-core:tenant-hash',
+    wing: 'ai-core:80a707af7dc77ee1228f9127',
     room: 'memory:decision',
     metadata: { added_by: 'agent-1', source_file: 'ai-core://memory/prov' },
   };
@@ -17,7 +17,7 @@ class FakeTransport implements MemPalaceMcpTransport {
     if (method !== 'tools/call') return { serverInfo: { name: 'mempalace' } } as T;
     const name = params.name;
     if (name === 'mempalace_add_drawer') return { content: [{ type: 'text', text: JSON.stringify({ success: true, drawer_id: 'drawer-1' }) }] } as T;
-    if (name === 'mempalace_search') return { content: [{ type: 'text', text: JSON.stringify({ results: [{ drawer_id: 'drawer-1', text: 'AI CORE memory', wing: 'ai-core:tenant-hash', room: 'memory:decision', source_file: 'ai-core://memory/prov', similarity: 0.91 }] }) }] } as T;
+    if (name === 'mempalace_search') return { content: [{ type: 'text', text: JSON.stringify({ results: [{ drawer_id: 'drawer-1', text: 'AI CORE memory', wing: 'ai-core:80a707af7dc77ee1228f9127', room: 'memory:decision', source_file: 'ai-core://memory/prov', similarity: 0.91 }] }) }] } as T;
     if (name === 'mempalace_get_drawer') {
       const drawerId = (params.arguments as Record<string, unknown>).drawer_id;
       return { content: [{ type: 'text', text: JSON.stringify(drawerId === 'drawer-1' ? this.drawer : {}) }] } as T;
@@ -36,7 +36,7 @@ test('writes into a tenant-scoped MemPalace wing', async () => {
   assert.ok(call);
   const args = call.params?.arguments as Record<string, unknown>;
   assert.equal(args.room, 'memory:decision');
-  assert.match(String(args.wing), /^ai-core:[a-f0-9]{24}$/);
+  assert.equal(args.wing, 'ai-core:80a707af7dc77ee1228f9127');
 });
 
 test('recall is tenant-scoped and maps MemPalace results', async () => {
@@ -47,9 +47,10 @@ test('recall is tenant-scoped and maps MemPalace results', async () => {
   assert.equal(results[0].content, 'AI CORE memory');
 });
 
-test('read rejects a drawer outside the tenant scope', async () => {
-  const transport = new FakeTransport();
-  const gateway = new MemPalaceMemoryGateway(transport);
+test('read allows the owning tenant and rejects another tenant', async () => {
+  const gateway = new MemPalaceMemoryGateway(new FakeTransport());
+  const owned = await gateway.read('drawer-1', 'tenant-a');
+  assert.equal(owned?.tenantId, 'tenant-a');
   assert.equal(await gateway.read('drawer-1', 'tenant-b'), null);
 });
 
