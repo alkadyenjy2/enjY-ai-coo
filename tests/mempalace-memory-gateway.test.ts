@@ -27,6 +27,16 @@ class FakeTransport implements MemPalaceMcpTransport {
   }
 }
 
+class FallbackWriteTransport extends FakeTransport {
+  override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (method === 'tools/call' && params.name === 'mempalace_add_drawer') {
+      this.calls.push({ method, params });
+      return { content: [{ type: 'text', text: 'Stored successfully.' }] } as T;
+    }
+    return super.call<T>(method, params);
+  }
+}
+
 test('writes into a tenant-scoped MemPalace wing', async () => {
   const transport = new FakeTransport();
   const gateway = new MemPalaceMemoryGateway(transport);
@@ -37,6 +47,15 @@ test('writes into a tenant-scoped MemPalace wing', async () => {
   const args = call.params?.arguments as Record<string, unknown>;
   assert.equal(args.room, 'memory:decision');
   assert.equal(args.wing, 'ai-core:80a707af7dc77ee1228f9127');
+});
+
+test('write verifies persistence when the MCP response omits drawer_id', async () => {
+  const transport = new FallbackWriteTransport();
+  const gateway = new MemPalaceMemoryGateway(transport);
+  const receipt = await gateway.write({ tenantId: 'tenant-a', agentId: 'agent-1', memoryType: 'decision', content: 'AI CORE memory', source: 'test' });
+  assert.equal(receipt.status, 'STORED');
+  assert.equal(receipt.memoryId, 'drawer-1');
+  assert.ok(transport.calls.some((item) => item.params?.name === 'mempalace_search'));
 });
 
 test('recall is tenant-scoped and maps MemPalace results', async () => {
