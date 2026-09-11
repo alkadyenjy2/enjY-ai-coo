@@ -67,24 +67,13 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function unwrapToolResult(result: ToolCallResult): Record<string, unknown> {
   if (result.isError) throw new Error('MEMPALACE_TOOL_ERROR');
-
   const structured = asRecord(result.structuredContent);
   if (structured) return structured;
-
   const direct = asRecord(result.result);
   if (direct) return direct;
-
-  const text = (result.content ?? [])
-    .filter((item) => item.type === 'text' && item.text)
-    .map((item) => item.text)
-    .join('');
+  const text = (result.content ?? []).filter((item) => item.type === 'text' && item.text).map((item) => item.text).join('');
   if (!text) return {};
-
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    return { text };
-  }
+  try { return JSON.parse(text) as Record<string, unknown>; } catch { return { text }; }
 }
 
 function scopedWing(tenantId: string): string {
@@ -115,23 +104,36 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       added_by: input.agentId,
     });
 
-    // MemPalace 3.9.x can return a successful MCP tool result whose human-facing
-    // content does not expose drawer_id. Treat the write as incomplete until we
-    // can independently locate the exact record in the same tenant-scoped room.
     let memoryId = typeof result.drawer_id === 'string' ? result.drawer_id : undefined;
     if (!memoryId) {
+      // Some MemPalace MCP responses intentionally expose only a human-facing
+      // success message. Verify persistence through the read surface instead of
+      // trusting the write acknowledgement or inventing an ID.
       const verified = await this.tool<{
         results?: Array<{ text?: string; wing?: string; room?: string; drawer_id?: string; similarity?: number }>;
-      }>('mempalace_search', {
-        query: input.content,
-        limit: 5,
-        wing,
-        room,
-      });
+      }>('mempalace_search', { query: input.content, limit: 10, wing, room });
       const exact = (verified.results ?? []).find((item) =>
-        item.drawer_id && item.wing === wing && item.room === room && item.text === input.content,
+        item.drawer_id && item.wing === wing && item.room === room &&
+        typeof item.text === 'string' && (item.text === input.content || input.content.includes(item.text)),
       );
       memoryId = exact?.drawer_id;
+    }
+
+    if (!memoryId) {
+      // v3.9 search results can omit drawer_id while list_drawers still exposes
+      // stable logical IDs and content previews. Use the same tenant/room scope
+      // and a unique content marker to recover the persisted logical handle.
+      const listed = await this.tool<{
+        drawers?: Array<{ drawer_id?: string; wing?: string; room?: string; content_preview?: string }>;
+        results?: Array<{ drawer_id?: string; wing?: string; room?: string; content_preview?: string }>;
+      }>('mempalace_list_drawers', { wing, room, limit: 100, offset: 0 });
+      const rows = [...(listed.drawers ?? []), ...(listed.results ?? [])];
+      const match = rows.find((item) => {
+        const preview = item.content_preview ?? '';
+        return item.drawer_id && item.wing === wing && item.room === room && preview &&
+          (input.content === preview || input.content.startsWith(preview) || preview.startsWith(input.content));
+      });
+      memoryId = match?.drawer_id;
     }
 
     if (!memoryId) throw new Error('MEMPALACE_WRITE_NO_DRAWER_ID');
@@ -157,21 +159,14 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
     if (!result.drawer_id || result.wing !== scopedWing(tenantId)) return null;
     const metadata = result.metadata ?? {};
     return {
-      memoryId,
-      content: result.content ?? '',
-      relevance: 1,
+      memoryId, content: result.content ?? '', relevance: 1,
       source: typeof metadata.source_file === 'string' ? metadata.source_file : 'mempalace',
       provenanceId: provenanceId(tenantId, memoryId),
       createdAt: typeof metadata.filed_at === 'string' ? metadata.filed_at : new Date().toISOString(),
-      scope: result.room,
-      tenantId,
+      scope: result.room, tenantId,
       agentId: typeof metadata.added_by === 'string' ? metadata.added_by : 'mempalace',
-      memoryType: result.room?.replace(/^memory:/, '') ?? 'general',
-      importance: undefined,
-      sensitivity: undefined,
-      tags: [],
-      status: 'STORED',
-      sourceRef: undefined,
+      memoryType: result.room?.replace(/^memory:/, '') ?? 'general', importance: undefined,
+      sensitivity: undefined, tags: [], status: 'STORED', sourceRef: undefined,
     };
   }
 
