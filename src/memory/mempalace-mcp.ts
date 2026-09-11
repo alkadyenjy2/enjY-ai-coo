@@ -21,15 +21,12 @@ export class MemPalaceMcpHttpTransport implements MemPalaceMcpTransport {
   async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     if (!this.initialized && method !== 'initialize') {
       const init = await this.call<JsonRpcResponse>('initialize', {
-        protocolVersion: '2024-11-05',
-        capabilities: {},
-        clientInfo: { name: 'enjY-ai-coo', version: '1.0' },
+        protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'enjY-ai-coo', version: '1.0' },
       });
       if (init.error) throw new Error(`MEMPALACE_MCP_${init.error.code}: ${init.error.message}`);
       this.initialized = true;
       await this.notify('notifications/initialized');
     }
-
     const id = this.nextId++;
     const response = await this.request({ jsonrpc: '2.0', id, method, params });
     if (response.error) throw new Error(`MEMPALACE_MCP_${response.error.code}: ${response.error.message}`);
@@ -43,11 +40,7 @@ export class MemPalaceMcpHttpTransport implements MemPalaceMcpTransport {
   private async request(body: Record<string, unknown>): Promise<JsonRpcResponse> {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     if (this.token) headers.authorization = `Bearer ${this.token}`;
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    });
+    const response = await fetch(this.endpoint, { method: 'POST', headers, body: JSON.stringify(body) });
     if (!response.ok) throw new Error(`MEMPALACE_HTTP_${response.status}`);
     if (response.status === 202) return { jsonrpc: '2.0' };
     return (await response.json()) as JsonRpcResponse;
@@ -84,6 +77,15 @@ function provenanceId(tenantId: string, memoryId: string): string {
   return `mempalace:${createHash('sha256').update(`${tenantId}:${memoryId}`).digest('hex').slice(0, 32)}`;
 }
 
+// MemPalace's v3 MCP content-addressed ID recipe: each part is length-prefixed,
+// SHA-256 is hex encoded, then truncated to 24 chars. This lets us verify a
+// successful write even when the MCP response intentionally omits drawer_id.
+function deterministicDrawerId(wing: string, room: string, content: string): string {
+  const key = [wing, room, content].map((part) => `${part.length}:${part}`).join('');
+  const digest = createHash('sha256').update(key).digest('hex').slice(0, 24);
+  return `drawer_${wing}_${room}_${digest}`;
+}
+
 export class MemPalaceMemoryGateway implements MemoryGateway {
   constructor(private readonly transport: MemPalaceMcpTransport) {}
 
@@ -104,36 +106,16 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       added_by: input.agentId,
     });
 
+    // MemPalace 3.9.x may return a human-facing success message without the
+    // logical ID. The ID is deterministic, so recover it locally and verify it
+    // through get_drawer before treating the write as committed.
     let memoryId = typeof result.drawer_id === 'string' ? result.drawer_id : undefined;
     if (!memoryId) {
-      // Some MemPalace MCP responses intentionally expose only a human-facing
-      // success message. Verify persistence through the read surface instead of
-      // trusting the write acknowledgement or inventing an ID.
-      const verified = await this.tool<{
-        results?: Array<{ text?: string; wing?: string; room?: string; drawer_id?: string; similarity?: number }>;
-      }>('mempalace_search', { query: input.content, limit: 10, wing, room });
-      const exact = (verified.results ?? []).find((item) =>
-        item.drawer_id && item.wing === wing && item.room === room &&
-        typeof item.text === 'string' && (item.text === input.content || input.content.includes(item.text)),
-      );
-      memoryId = exact?.drawer_id;
-    }
-
-    if (!memoryId) {
-      // v3.9 search results can omit drawer_id while list_drawers still exposes
-      // stable logical IDs and content previews. Use the same tenant/room scope
-      // and a unique content marker to recover the persisted logical handle.
-      const listed = await this.tool<{
-        drawers?: Array<{ drawer_id?: string; wing?: string; room?: string; content_preview?: string }>;
-        results?: Array<{ drawer_id?: string; wing?: string; room?: string; content_preview?: string }>;
-      }>('mempalace_list_drawers', { wing, room, limit: 100, offset: 0 });
-      const rows = [...(listed.drawers ?? []), ...(listed.results ?? [])];
-      const match = rows.find((item) => {
-        const preview = item.content_preview ?? '';
-        return item.drawer_id && item.wing === wing && item.room === room && preview &&
-          (input.content === preview || input.content.startsWith(preview) || preview.startsWith(input.content));
-      });
-      memoryId = match?.drawer_id;
+      const candidateId = deterministicDrawerId(wing, room, input.content);
+      const verified = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string }>('mempalace_get_drawer', { drawer_id: candidateId });
+      if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) {
+        memoryId = candidateId;
+      }
     }
 
     if (!memoryId) throw new Error('MEMPALACE_WRITE_NO_DRAWER_ID');
