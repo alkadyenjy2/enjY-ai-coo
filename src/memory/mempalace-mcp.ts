@@ -54,13 +54,37 @@ export class MemPalaceMcpHttpTransport implements MemPalaceMcpTransport {
   }
 }
 
-type ToolCallResult = { content?: Array<{ type?: string; text?: string }>; isError?: boolean };
+type ToolCallResult = {
+  content?: Array<{ type?: string; text?: string }>;
+  structuredContent?: unknown;
+  result?: unknown;
+  isError?: boolean;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
 
 function unwrapToolResult(result: ToolCallResult): Record<string, unknown> {
   if (result.isError) throw new Error('MEMPALACE_TOOL_ERROR');
-  const text = (result.content ?? []).filter((item) => item.type === 'text' && item.text).map((item) => item.text).join('');
+
+  const structured = asRecord(result.structuredContent);
+  if (structured) return structured;
+
+  const direct = asRecord(result.result);
+  if (direct) return direct;
+
+  const text = (result.content ?? [])
+    .filter((item) => item.type === 'text' && item.text)
+    .map((item) => item.text)
+    .join('');
   if (!text) return {};
-  try { return JSON.parse(text) as Record<string, unknown>; } catch { return { text }; }
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { text };
+  }
 }
 
 function scopedWing(tenantId: string): string {
@@ -90,8 +114,28 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       source_file: `ai-core://memory/${createHash('sha256').update(`${input.tenantId}:${input.agentId}:${input.source}`).digest('hex').slice(0, 32)}`,
       added_by: input.agentId,
     });
-    if (!result.drawer_id) throw new Error('MEMPALACE_WRITE_NO_DRAWER_ID');
-    return { memoryId: result.drawer_id, status: 'STORED', createdAt: new Date().toISOString(), provenanceId: provenanceId(input.tenantId, result.drawer_id) };
+
+    // MemPalace 3.9.x can return a successful MCP tool result whose human-facing
+    // content does not expose drawer_id. Treat the write as incomplete until we
+    // can independently locate the exact record in the same tenant-scoped room.
+    let memoryId = typeof result.drawer_id === 'string' ? result.drawer_id : undefined;
+    if (!memoryId) {
+      const verified = await this.tool<{
+        results?: Array<{ text?: string; wing?: string; room?: string; drawer_id?: string; similarity?: number }>;
+      }>('mempalace_search', {
+        query: input.content,
+        limit: 5,
+        wing,
+        room,
+      });
+      const exact = (verified.results ?? []).find((item) =>
+        item.drawer_id && item.wing === wing && item.room === room && item.text === input.content,
+      );
+      memoryId = exact?.drawer_id;
+    }
+
+    if (!memoryId) throw new Error('MEMPALACE_WRITE_NO_DRAWER_ID');
+    return { memoryId, status: 'STORED', createdAt: new Date().toISOString(), provenanceId: provenanceId(input.tenantId, memoryId) };
   }
 
   async recall(input: MemoryRecallInput): Promise<MemoryResult[]> {
