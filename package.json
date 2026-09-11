@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:memory-gateway": "node --import tsx --test --test-concurrency=1 tests/memory-gateway.test.ts",
     "test:auth-e2e": "npm run build && node --test --test-concurrency=1 tests/auth.e2e.test.mjs",
     "test:webhook-signatures": "node --import tsx --test --test-concurrency=1 tests/webhook-signature.test.ts tests/webhooks-adapter.test.ts",
     "test:vercel-routing": "node --import tsx --test --test-concurrency=1 tests/vercel-routing.test.mjs",
