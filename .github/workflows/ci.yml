@@ -39,6 +39,9 @@ jobs:
       - name: Memory Gateway contract test
         run: npm run test:memory-gateway
 
+      - name: MemPalace adapter contract test
+        run: npm run test:mempalace-adapter
+
       - name: Browser Use adapter contract test
         run: node --import tsx --test --test-concurrency=1 tests/browser-use-adapter.test.ts
 
