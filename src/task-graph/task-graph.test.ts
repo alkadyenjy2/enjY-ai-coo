@@ -12,7 +12,7 @@ const base: Plan = {
 };
 
 test("accepts a valid DAG", () => assert.deepEqual(validateTaskGraph(base), []));
-test("rejects missing dependencies", () => assert.match(validateTaskGraph({ ...base, nodes: [{ ...base.nodes[0], dependencies: ["missing"] }] }), /Missing dependency/));
+test("rejects missing dependencies", () => assert.ok(validateTaskGraph({ ...base, nodes: [{ ...base.nodes[0], dependencies: ["missing"] }] }).some((error) => error.includes("Missing dependency"))));
 test("rejects cycles", () => {
   const nodes = base.nodes.map((n) => ({ ...n }));
   nodes[0].dependencies = ["b"];
