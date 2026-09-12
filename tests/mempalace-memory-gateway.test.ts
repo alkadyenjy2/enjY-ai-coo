@@ -42,6 +42,16 @@ class FallbackWriteTransport extends FakeTransport {
   }
 }
 
+class SearchWithoutDrawerIdTransport extends FakeTransport {
+  override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (method === 'tools/call' && params.name === 'mempalace_search') {
+      this.calls.push({ method, params });
+      return { content: [{ type: 'text', text: JSON.stringify({ results: [{ text: 'AI CORE memory', wing: tenantWing, room: 'memory:decision', source_file: 'ai-core://memory/prov', similarity: 0.91 }] }) }] } as T;
+    }
+    return super.call<T>(method, params);
+  }
+}
+
 test('writes into a tenant-scoped MemPalace wing', async () => {
   const transport = new FakeTransport();
   const gateway = new MemPalaceMemoryGateway(transport);
@@ -69,6 +79,13 @@ test('recall is tenant-scoped and maps MemPalace results', async () => {
   assert.equal(results.length, 1);
   assert.equal(results[0].memoryId, deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory'));
   assert.equal(results[0].content, 'AI CORE memory');
+});
+
+test('recall derives a deterministic memory id when MCP search omits drawer_id', async () => {
+  const gateway = new MemPalaceMemoryGateway(new SearchWithoutDrawerIdTransport());
+  const results = await gateway.recall({ tenantId: 'tenant-a', query: 'AI CORE', limit: 5 });
+  assert.equal(results.length, 1);
+  assert.equal(results[0].memoryId, deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory'));
 });
 
 test('read allows the owning tenant and rejects another tenant', async () => {
