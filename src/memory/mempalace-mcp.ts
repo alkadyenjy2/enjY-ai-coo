@@ -136,6 +136,17 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       const verified = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string }>('mempalace_get_drawer', { drawer_id: candidateId });
       if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) {
         memoryId = candidateId;
+      } else {
+        const searched = await this.tool<{ results?: Array<{ drawer_id?: string; text?: string; wing?: string; room?: string }> }>('mempalace_search', {
+          query: input.content,
+          limit: 5,
+          wing,
+          room,
+        });
+        const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && item.text === input.content);
+        if (match) {
+          memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId;
+        }
       }
     }
 
