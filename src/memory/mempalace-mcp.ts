@@ -58,15 +58,39 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function parseTextPayload(text: string): Record<string, unknown> | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  try {
+    return asRecord(JSON.parse(trimmed));
+  } catch {
+    return null;
+  }
+}
+
 function unwrapToolResult(result: ToolCallResult): Record<string, unknown> {
   if (result.isError) throw new Error('MEMPALACE_TOOL_ERROR');
   const structured = asRecord(result.structuredContent);
   if (structured) return structured;
   const direct = asRecord(result.result);
-  if (direct) return direct;
-  const text = (result.content ?? []).filter((item) => item.type === 'text' && item.text).map((item) => item.text).join('');
-  if (!text) return {};
-  try { return JSON.parse(text) as Record<string, unknown>; } catch { return { text }; }
+  if (direct) {
+    const nestedContent = Array.isArray(direct.content) ? direct.content : [];
+    const nestedText = nestedContent
+      .filter((item): item is { type?: string; text?: string } => Boolean(item && typeof item === 'object'))
+      .filter((item) => item.type === 'text' && typeof item.text === 'string')
+      .map((item) => item.text as string)
+      .join('');
+    const nestedParsed = parseTextPayload(nestedText);
+    if (nestedParsed) return nestedParsed;
+    return direct;
+  }
+  const text = (result.content ?? [])
+    .filter((item) => item.type === 'text' && item.text)
+    .map((item) => item.text as string)
+    .join('');
+  const parsed = parseTextPayload(text);
+  if (parsed) return parsed;
+  return text ? { text } : {};
 }
 
 function scopedWing(tenantId: string): string {
@@ -144,8 +168,7 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       createdAt: typeof metadata.filed_at === 'string' ? metadata.filed_at : new Date().toISOString(),
       scope: result.room, tenantId,
       agentId: typeof metadata.added_by === 'string' ? metadata.added_by : 'mempalace',
-      memoryType: result.room?.replace(/^memory:/, '') ?? 'general', importance: undefined,
-      sensitivity: undefined, tags: [], status: 'STORED', sourceRef: undefined,
+      memoryType: result.room?.replace(/^memory:/, '') ?? 'general', importance: undefined, sensitivity: undefined, tags: [], status: 'STORED', sourceRef: undefined,
     };
   }
 
