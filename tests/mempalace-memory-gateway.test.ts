@@ -52,6 +52,20 @@ class SearchWithoutDrawerIdTransport extends FakeTransport {
   }
 }
 
+class SearchRecoveryWriteTransport extends FallbackWriteTransport {
+  override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (method === 'tools/call' && params.name === 'mempalace_get_drawer') {
+      this.calls.push({ method, params });
+      return { content: [{ type: 'text', text: JSON.stringify({}) }] } as T;
+    }
+    if (method === 'tools/call' && params.name === 'mempalace_search') {
+      this.calls.push({ method, params });
+      return { content: [{ type: 'text', text: JSON.stringify({ results: [{ text: 'AI CORE memory', wing: tenantWing, room: 'memory:decision', source_file: 'ai-core://memory/prov', similarity: 1 }] }) }] } as T;
+    }
+    return super.call<T>(method, params);
+  }
+}
+
 test('writes into a tenant-scoped MemPalace wing', async () => {
   const transport = new FakeTransport();
   const gateway = new MemPalaceMemoryGateway(transport);
@@ -71,6 +85,15 @@ test('write verifies persistence when the MCP response omits drawer_id', async (
   assert.equal(receipt.status, 'STORED');
   assert.equal(receipt.memoryId, deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory'));
   assert.ok(transport.calls.some((item) => item.params?.name === 'mempalace_get_drawer'));
+});
+
+test('write recovers via exact search when get_drawer cannot resolve the deterministic id', async () => {
+  const transport = new SearchRecoveryWriteTransport();
+  const gateway = new MemPalaceMemoryGateway(transport);
+  const receipt = await gateway.write({ tenantId: 'tenant-a', agentId: 'agent-1', memoryType: 'decision', content: 'AI CORE memory', source: 'test' });
+  assert.equal(receipt.status, 'STORED');
+  assert.equal(receipt.memoryId, deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory'));
+  assert.ok(transport.calls.some((item) => item.params?.name === 'mempalace_search'));
 });
 
 test('recall is tenant-scoped and maps MemPalace results', async () => {
