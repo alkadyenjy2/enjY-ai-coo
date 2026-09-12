@@ -106,9 +106,6 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       added_by: input.agentId,
     });
 
-    // MemPalace 3.9.x may return a human-facing success message without the
-    // logical ID. The ID is deterministic, so recover it locally and verify it
-    // through get_drawer before treating the write as committed.
     let memoryId = typeof result.drawer_id === 'string' ? result.drawer_id : undefined;
     if (!memoryId) {
       const candidateId = deterministicDrawerId(wing, room, input.content);
@@ -131,7 +128,7 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       ...(input.scope ? { room: input.scope } : {}),
     });
     return (result.results ?? []).map((item) => {
-      const memoryId = item.drawer_id ?? `${item.wing ?? ''}:${item.room ?? ''}:${item.source_file ?? ''}`;
+      const memoryId = item.drawer_id ?? (item.wing && item.room && item.text ? deterministicDrawerId(item.wing, item.room, item.text) : `${item.wing ?? ''}:${item.room ?? ''}:${item.source_file ?? ''}`);
       return { memoryId, content: item.text ?? '', relevance: item.similarity ?? 0, source: item.source_file ?? 'mempalace', provenanceId: provenanceId(input.tenantId, memoryId), createdAt: new Date().toISOString(), scope: item.room };
     });
   }
