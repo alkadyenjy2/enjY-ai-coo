@@ -148,3 +148,5 @@ Relevant roles:
 **Enjy Alkady** — AI automation and operations systems builder focused on practical business automation, CRM workflows, AI qualification, integrations, and reliable execution.
 
 The portfolio emphasizes working systems and verifiable architecture over chatbot-only demos.
+
+**Portfolio:** https://enjyfolio-gwdudsqs.manus.space
