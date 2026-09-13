@@ -101,6 +101,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
       <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenOnboarding={() => setIsOnboardingOpen(true)} onOpenCommandCenter={() => setCurrentView('chat')} />
+      <div className="mx-auto w-full max-w-7xl border-x border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-amber-200">DEMO DATA — NOT CONNECTED. Seeded records and simulated workflow states are for portfolio presentation only; live providers require connection.</div>
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         <Sidebar currentView={currentView} onSelectView={setCurrentView} memoryCount={memoryItems.length} connectorsCount={connectors.length} workflowsCount={workflows.length} lessonsCount={lessons.length} />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
@@ -123,7 +124,7 @@ export default function App() {
           <span className="text-zinc-400">LOCAL VERIFICATION</span>
         </div>
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-zinc-500">
-          <span>STATUS: <strong className="text-emerald-400 font-normal">VERIFIED LOCALLY</strong></span>
+          <span>STATUS: <strong className="text-amber-300 font-normal">DEMO / CONNECTION REQUIRED</strong></span>
           <span className="text-zinc-800">•</span>
           <span>LIVE PROVIDERS: <strong className="text-amber-300 font-normal">NOT CLAIMED</strong></span>
         </div>
