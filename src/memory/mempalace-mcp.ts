@@ -101,12 +101,10 @@ function provenanceId(tenantId: string, memoryId: string): string {
   return `mempalace:${createHash('sha256').update(`${tenantId}:${memoryId}`).digest('hex').slice(0, 32)}`;
 }
 
-// MemPalace's v3 MCP content-addressed ID recipe: each part is length-prefixed,
-// SHA-256 is hex encoded, then truncated to 24 chars. This lets us verify a
-// successful write even when the MCP response intentionally omits drawer_id.
+// MemPalace's MCP content-addressed ID recipe: SHA-256 of wing|room|content,
+// hex encoded and truncated to 24 chars.
 function deterministicDrawerId(wing: string, room: string, content: string): string {
-  const key = [wing, room, content].map((part) => `${part.length}:${part}`).join('');
-  const digest = createHash('sha256').update(key).digest('hex').slice(0, 24);
+  const digest = createHash('sha256').update(`${wing}|${room}|${content}`).digest('hex').slice(0, 24);
   return `drawer_${wing}_${room}_${digest}`;
 }
 
@@ -144,9 +142,7 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
           room,
         });
         const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && item.text === input.content);
-        if (match) {
-          memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId;
-        }
+        if (match) memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId;
       }
     }
 
