@@ -5,7 +5,7 @@ import { MemPalaceMemoryGateway, MemPalaceMcpTransport } from '../src/memory/mem
 
 const tenantWing = 'ai-core:80a707af7dc77ee1228f9127';
 const deterministicDrawerId = (wing: string, room: string, content: string) => {
-  const key = [wing, room, content].map((part) => `${part.length}:${part}`).join('');
+  const key = `${wing}|${room}|${content}`;
   return `drawer_${wing}_${room}_${createHash('sha256').update(key).digest('hex').slice(0, 24)}`;
 };
 
