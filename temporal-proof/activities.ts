@@ -8,7 +8,7 @@ import { stripeAdapter, StripeCheckoutInput, StripeCheckoutResult } from '../src
 import { memoryLearningEngine, FeedbackEntry, PromptOptimizationResult } from '../src/adapters/memory';
 import { operationsManager, UserRoleContext, CostControlReport } from '../src/adapters/operations';
 import { BrowserUseAdapter, BrowserUseExecutionResult, createBrowserUseCloudClient } from '../src/adapters/browserUse';
-import { persistOperationalRecord } from '../src/adapters/persistence';
+import { persistOperationalRecord, persistLearningFeedback, fetchPersistedLearningFeedback } from '../src/adapters/persistence';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ActionInput {
@@ -232,12 +232,25 @@ export async function ghlDeliverLeadActivity(lead: LeadRecord): Promise<GHLDeliv
 
 export async function memoryRecordFeedbackActivity(entry: Omit<FeedbackEntry, 'id' | 'timestamp'>): Promise<FeedbackEntry> {
   globalContext.activityAttempts['memoryRecordFeedback'] = (globalContext.activityAttempts['memoryRecordFeedback'] || 0) + 1;
+  const feedback = memoryLearningEngine.recordFeedback(entry);
+  const result = await persistLearningFeedback(feedback);
+  if (!result.persisted) {
+    throw new Error(`DURABLE_LEARNING_UNAVAILABLE:${result.error || 'Learning feedback could not be persisted.'}`);
+  }
   globalContext.sideEffectCount++;
-  return memoryLearningEngine.recordFeedback(entry);
+  return feedback;
 }
 
 export async function memoryOptimizePromptActivity(payload: { topic: string; basePrompt: string }): Promise<PromptOptimizationResult> {
   globalContext.activityAttempts['memoryOptimizePrompt'] = (globalContext.activityAttempts['memoryOptimizePrompt'] || 0) + 1;
+  const persisted = await fetchPersistedLearningFeedback();
+  if (persisted.source !== 'supabase') {
+    if (requireLiveDependencies()) {
+      throw new Error(`DURABLE_LEARNING_UNAVAILABLE:${persisted.error || 'Learning history could not be loaded.'}`);
+    }
+  } else {
+    memoryLearningEngine.hydrateFeedback(persisted.entries);
+  }
   globalContext.sideEffectCount++;
   return memoryLearningEngine.optimizePrompt(payload.topic, payload.basePrompt);
 }
