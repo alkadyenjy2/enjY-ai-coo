@@ -101,7 +101,6 @@ function provenanceId(tenantId: string, memoryId: string): string {
   return `mempalace:${createHash('sha256').update(`${tenantId}:${memoryId}`).digest('hex').slice(0, 32)}`;
 }
 
-// Legacy deterministic candidate used only as a cheap verification probe.
 function deterministicDrawerId(wing: string, room: string, content: string): string {
   const digest = createHash('sha256').update(`${wing}|${room}|${content}`).digest('hex').slice(0, 24);
   return `drawer_${wing}_${room}_${digest}`;
@@ -134,14 +133,32 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) {
         memoryId = candidateId;
       } else {
-        const listed = await this.tool<{ drawers?: Array<{ drawer_id?: string; content?: string; text?: string; wing?: string; room?: string }> }>('mempalace_list_drawers', {
-          wing,
-          room,
-          limit: 100,
-          offset: 0,
-        });
-        const match = (listed.drawers ?? []).find((item) => item.wing === wing && item.room === room && (item.content === input.content || item.text === input.content));
-        if (match && typeof match.drawer_id === 'string') memoryId = match.drawer_id;
+        try {
+          const searched = await this.tool<{ results?: Array<{ drawer_id?: string; text?: string; wing?: string; room?: string }> }>('mempalace_search', {
+            query: input.content,
+            limit: 5,
+            wing,
+            room,
+          });
+          const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && item.text === input.content);
+          if (match) memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId;
+        } catch {
+          // Some older/local MemPalace deployments expose search differently; use listing as a final recovery path.
+        }
+        if (!memoryId) {
+          try {
+            const listed = await this.tool<{ drawers?: Array<{ drawer_id?: string; content?: string; text?: string; wing?: string; room?: string }> }>('mempalace_list_drawers', {
+              wing,
+              room,
+              limit: 100,
+              offset: 0,
+            });
+            const match = (listed.drawers ?? []).find((item) => item.wing === wing && item.room === room && (item.content === input.content || item.text === input.content));
+            if (match && typeof match.drawer_id === 'string') memoryId = match.drawer_id;
+          } catch {
+            // Keep the original hard failure when neither recovery surface can resolve the persisted drawer.
+          }
+        }
       }
     }
 
