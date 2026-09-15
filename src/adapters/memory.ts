@@ -31,14 +31,26 @@ export class MemoryLearningEngine {
       timestamp: new Date().toISOString()
     };
     this.feedbackStore.push(fullEntry);
-    
-    // Adjust weights based on user rating
+    this.applyFeedbackWeight(fullEntry);
+    return fullEntry;
+  }
+
+  private applyFeedbackWeight(entry: FeedbackEntry): void {
     if (this.promptWeights[entry.workflowId]) {
       const delta = (entry.userRating - 3) * 0.05;
       this.promptWeights[entry.workflowId] = Math.min(0.99, Math.max(0.50, this.promptWeights[entry.workflowId] + delta));
     }
-    
-    return fullEntry;
+  }
+
+  public hydrateFeedback(entries: FeedbackEntry[]): void {
+    this.feedbackStore = [...entries];
+    this.promptWeights = {
+      'SOCIAL_MEDIA': 0.85,
+      'DIGITAL_PRODUCTS': 0.90,
+      'ROOFING_LEADS': 0.88,
+      'GENERAL': 0.80
+    };
+    for (const entry of entries) this.applyFeedbackWeight(entry);
   }
 
   public getFeedbackHistory(workflowId?: string): FeedbackEntry[] {
