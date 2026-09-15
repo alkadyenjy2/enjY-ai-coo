@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getPersistenceContext } from './request-context';
+import type { FeedbackEntry } from './memory';
 
 export interface OperationalRecordLike {
   id: string;
@@ -44,6 +45,14 @@ function getSupabaseConfig(): SupabaseConfig | null {
 
   if (!url || !key || !url.startsWith('http')) return null;
   return { url: url.replace(/\/+$/, ''), key };
+}
+
+function getAuthenticatedPersistenceHeaders(config: SupabaseConfig, accessToken: string): Record<string, string> {
+  return {
+    apikey: config.key,
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
 }
 
 function safeMetadata(record: OperationalRecordLike) {
@@ -104,12 +113,7 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
   try {
     const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
       method: 'POST',
-      headers: {
-        apikey: config.key,
-        Authorization: `Bearer ${context.accessToken}`,
-        'Content-Type': 'application/json',
-        Prefer: 'return=representation',
-      },
+      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
       body: JSON.stringify(body),
     });
 
@@ -133,6 +137,89 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
   }
 }
 
+export async function persistLearningFeedback(entry: FeedbackEntry): Promise<PersistenceResult> {
+  const config = getSupabaseConfig();
+  if (!config) return { persisted: false, source: 'memory', error: 'Supabase runtime credentials are not configured.' };
+
+  const context = getPersistenceContext();
+  if (!context) {
+    return { persisted: false, source: 'memory', error: 'Authenticated tenant persistence context is unavailable.' };
+  }
+
+  const payload = {
+    id: entry.id,
+    workflowId: entry.workflowId,
+    userRating: entry.userRating,
+    feedbackText: entry.feedbackText,
+    evidenceHash: entry.evidenceHash,
+    timestamp: entry.timestamp,
+  };
+
+  const body = {
+    organization_id: context.organizationId,
+    user_id: context.userId,
+    title: `AI CORE learning feedback — ${entry.workflowId}`,
+    description: entry.feedbackText || 'AI Core learning feedback event.',
+    type: 'ai_core_learning',
+    status: 'success',
+    event_metadata: { learningType: 'feedback', feedback: payload },
+    workflow_name: 'Core AI Agent Learning',
+    execution_id: entry.id,
+    provider: 'ai_core_learning',
+    payload_hash: createHash('sha256').update(JSON.stringify(payload)).digest('hex'),
+    completed_at: entry.timestamp,
+  };
+
+  try {
+    const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
+      method: 'POST',
+      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      return { persisted: false, source: 'memory', error: `Supabase learning write returned HTTP ${response.status}.` };
+    }
+    const data = await response.json().catch(() => []);
+    const recordId = Array.isArray(data) && data[0]?.id ? String(data[0].id) : undefined;
+    return { persisted: true, source: 'supabase', recordId };
+  } catch (error: any) {
+    return { persisted: false, source: 'memory', error: `Supabase learning write failed: ${error?.message || 'unknown error'}` };
+  }
+}
+
+export async function fetchPersistedLearningFeedback(limit = 100): Promise<{ entries: FeedbackEntry[]; source: 'supabase' | 'memory'; error?: string }> {
+  const config = getSupabaseConfig();
+  if (!config) return { entries: [], source: 'memory', error: 'Supabase runtime credentials are not configured.' };
+
+  const context = getPersistenceContext();
+  if (!context) return { entries: [], source: 'memory', error: 'Authenticated tenant persistence context is unavailable.' };
+
+  const query = new URLSearchParams({
+    select: 'event_metadata,created_at',
+    organization_id: `eq.${context.organizationId}`,
+    type: 'eq.ai_core_learning',
+    order: 'created_at.asc',
+    limit: String(Math.min(Math.max(limit, 1), 500)),
+  });
+
+  try {
+    const response = await fetch(`${config.url}/rest/v1/audit_logs?${query.toString()}`, {
+      headers: getAuthenticatedPersistenceHeaders(config, context.accessToken),
+    });
+    if (!response.ok) return { entries: [], source: 'memory', error: `Supabase learning read returned HTTP ${response.status}.` };
+
+    const rows = await response.json();
+    const entries: FeedbackEntry[] = Array.isArray(rows)
+      ? rows
+          .filter((row: any) => row?.event_metadata?.learningType === 'feedback' && row?.event_metadata?.feedback)
+          .map((row: any) => row.event_metadata.feedback as FeedbackEntry)
+      : [];
+    return { entries, source: 'supabase' };
+  } catch (error: any) {
+    return { entries: [], source: 'memory', error: `Supabase learning read failed: ${error?.message || 'unknown error'}` };
+  }
+}
+
 export async function fetchPersistedOperationalRecords(limit = 50): Promise<{ records: OperationalRecordLike[]; source: 'supabase' | 'memory'; error?: string }> {
   const config = getSupabaseConfig();
   if (!config) return { records: [], source: 'memory', error: 'Supabase runtime credentials are not configured.' };
@@ -152,10 +239,7 @@ export async function fetchPersistedOperationalRecords(limit = 50): Promise<{ re
 
   try {
     const response = await fetch(`${config.url}/rest/v1/audit_logs?${query.toString()}`, {
-      headers: {
-        apikey: config.key,
-        Authorization: `Bearer ${context.accessToken}`,
-      },
+      headers: getAuthenticatedPersistenceHeaders(config, context.accessToken),
     });
 
     if (!response.ok) {
