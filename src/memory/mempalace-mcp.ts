@@ -101,8 +101,7 @@ function provenanceId(tenantId: string, memoryId: string): string {
   return `mempalace:${createHash('sha256').update(`${tenantId}:${memoryId}`).digest('hex').slice(0, 32)}`;
 }
 
-// MemPalace's MCP content-addressed ID recipe: SHA-256 of wing|room|content,
-// hex encoded and truncated to 24 chars.
+// Legacy deterministic candidate used only as a cheap verification probe.
 function deterministicDrawerId(wing: string, room: string, content: string): string {
   const digest = createHash('sha256').update(`${wing}|${room}|${content}`).digest('hex').slice(0, 24);
   return `drawer_${wing}_${room}_${digest}`;
@@ -135,14 +134,14 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) {
         memoryId = candidateId;
       } else {
-        const searched = await this.tool<{ results?: Array<{ drawer_id?: string; text?: string; wing?: string; room?: string }> }>('mempalace_search', {
-          query: input.content,
-          limit: 5,
+        const listed = await this.tool<{ drawers?: Array<{ drawer_id?: string; content?: string; text?: string; wing?: string; room?: string }> }>('mempalace_list_drawers', {
           wing,
           room,
+          limit: 100,
+          offset: 0,
         });
-        const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && item.text === input.content);
-        if (match) memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId;
+        const match = (listed.drawers ?? []).find((item) => item.wing === wing && item.room === room && (item.content === input.content || item.text === input.content));
+        if (match && typeof match.drawer_id === 'string') memoryId = match.drawer_id;
       }
     }
 
