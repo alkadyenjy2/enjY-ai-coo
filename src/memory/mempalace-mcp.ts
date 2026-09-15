@@ -118,7 +118,11 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
     if (!input.tenantId || !input.agentId || !input.content.trim() || !input.source.trim()) throw new Error('INVALID_MEMORY_WRITE');
     const wing = scopedWing(input.tenantId);
     const room = `memory:${input.memoryType || 'general'}`;
-    const result = await this.tool<{ success?: boolean; drawer_id?: string }>('mempalace_add_drawer', {
+    const result = await this.tool<{
+      success?: boolean;
+      drawer_id?: string;
+      added?: Array<{ drawer_id?: string; content?: string; wing?: string; room?: string }>;
+    }>('mempalace_add_drawer', {
       wing,
       room,
       content: input.content,
@@ -126,38 +130,47 @@ export class MemPalaceMemoryGateway implements MemoryGateway {
       added_by: input.agentId,
     });
 
-    let memoryId = typeof result.drawer_id === 'string' ? result.drawer_id : undefined;
+    // MemPalace 3.9.x returns add results under `added[]`; older/local builds may return drawer_id directly.
+    let memoryId = typeof result.drawer_id === 'string'
+      ? result.drawer_id
+      : result.added?.find((item) => typeof item.drawer_id === 'string')?.drawer_id;
+
     if (!memoryId) {
       const candidateId = deterministicDrawerId(wing, room, input.content);
-      const verified = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string }>('mempalace_get_drawer', { drawer_id: candidateId });
-      if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) {
-        memoryId = candidateId;
-      } else {
+      try {
+        const verified = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string }>('mempalace_get_drawer', { drawer_id: candidateId });
+        if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) {
+          memoryId = candidateId;
+        }
+      } catch {
+        // Continue with search/list recovery when the deterministic probe is unsupported or not resolvable.
+      }
+      if (!memoryId) {
         try {
-          const searched = await this.tool<{ results?: Array<{ drawer_id?: string; text?: string; wing?: string; room?: string }> }>('mempalace_search', {
+          const searched = await this.tool<{ results?: Array<{ drawer_id?: string; text?: string; content?: string; wing?: string; room?: string }> }>('mempalace_search', {
             query: input.content,
             limit: 5,
             wing,
             room,
           });
-          const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && item.text === input.content);
+          const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && (item.text === input.content || item.content === input.content));
           if (match) memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId;
         } catch {
           // Some older/local MemPalace deployments expose search differently; use listing as a final recovery path.
         }
-        if (!memoryId) {
-          try {
-            const listed = await this.tool<{ drawers?: Array<{ drawer_id?: string; content?: string; text?: string; wing?: string; room?: string }> }>('mempalace_list_drawers', {
-              wing,
-              room,
-              limit: 100,
-              offset: 0,
-            });
-            const match = (listed.drawers ?? []).find((item) => item.wing === wing && item.room === room && (item.content === input.content || item.text === input.content));
-            if (match && typeof match.drawer_id === 'string') memoryId = match.drawer_id;
-          } catch {
-            // Keep the original hard failure when neither recovery surface can resolve the persisted drawer.
-          }
+      }
+      if (!memoryId) {
+        try {
+          const listed = await this.tool<{ drawers?: Array<{ drawer_id?: string; content?: string; text?: string; content_preview?: string; wing?: string; room?: string }> }>('mempalace_list_drawers', {
+            wing,
+            room,
+            limit: 100,
+            offset: 0,
+          });
+          const match = (listed.drawers ?? []).find((item) => item.wing === wing && item.room === room && (item.content === input.content || item.text === input.content || item.content_preview === input.content || input.content.startsWith(item.content_preview ?? '\u0000')));
+          if (match && typeof match.drawer_id === 'string') memoryId = match.drawer_id;
+        } catch {
+          // Keep the original hard failure when no recovery surface can resolve the persisted drawer.
         }
       }
     }
