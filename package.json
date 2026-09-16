@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
+    "test:free-first-router": "node --import tsx --test --test-concurrency=1 tests/free-first-router.test.ts",
     "test:memory-gateway": "node --import tsx --test --test-concurrency=1 tests/memory-gateway.test.ts",
     "test:mempalace-adapter": "node --import tsx --test --test-concurrency=1 tests/mempalace-memory-gateway.test.ts",
     "test:mempalace-e2e": "node --import tsx --test --test-concurrency=1 tests/mempalace-memory-gateway.e2e.test.ts",
@@ -51,10 +52,10 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
-    "@types/express": "^4.17.21"
+    "@types/express": "^4.17.21",
+    "vitest": "^3.2.4"
   }
 }

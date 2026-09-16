@@ -27,13 +27,16 @@ jobs:
         run: npm install
 
       - name: Install MemPalace
-        run: python -m pip install mempalace
+        run: python -m pip install 'mempalace==3.9.0'
 
       - name: Lint / typecheck
         run: npm run lint
 
       - name: Build
         run: npm run build
+
+      - name: Free-first OmniRoute router test
+        run: npm run test:free-first-router
 
       - name: Operational log mapping test
         run: npm run test:operational-logs
