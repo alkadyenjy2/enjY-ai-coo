@@ -132,8 +132,9 @@ function installTelegramAuthFetchBridge(): void {
 
     const serverSecret = getServerSecretKey();
     if (serverSecret) {
-      headers.set("Authorization", `Bearer ${serverSecret}`);
+      headers.delete("authorization");
       headers.set("x-jarvis-internal", "telegram");
+      headers.set("x-jarvis-internal-key", serverSecret);
       console.log("[TELEGRAM_DIAG] AGENT_AUTH_READY", { chatId: context.chatId, organizationId, mode: "server" });
     } else {
       const accessToken = await getTelegramAccessToken();
@@ -257,14 +258,4 @@ export function createTelegramRouter(): Router {
   });
 
   return router;
-}
-
-export async function setTelegramWebhook(webhookUrl: string): Promise<unknown> {
-  const secret = getWebhookSecret();
-  return telegramCall("setWebhook", {
-    url: webhookUrl,
-    ...(secret ? { secret_token: secret } : {}),
-    allowed_updates: ["message"],
-    drop_pending_updates: false,
-  });
 }
