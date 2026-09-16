@@ -11,6 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "test:free-first-router": "node --import tsx --test --test-concurrency=1 tests/free-first-router.test.ts",
+    "test:live-free-route": "node --import tsx --test --test-concurrency=1 tests/live-free-route.test.ts",
     "test:jarvis-route": "node --import tsx --test --test-concurrency=1 tests/jarvis-route-summary.test.ts",
     "test:memory-gateway": "node --import tsx --test --test-concurrency=1 tests/memory-gateway.test.ts",
     "test:mempalace-adapter": "node --import tsx --test --test-concurrency=1 tests/mempalace-memory-gateway.test.ts",
@@ -55,8 +56,6 @@
     "@types/express": "^4.17.21",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3",
     "vitest": "^3.2.4"
   }
 }
