@@ -71,7 +71,7 @@ function parseTextPayload(text: string): Record<string, unknown> | null {
 function unwrapToolResult(result: ToolCallResult): Record<string, unknown> {
   if (result.isError) throw new Error('MEMPALACE_TOOL_ERROR');
   const structured = asRecord(result.structuredContent);
-  if (structured) return structured;
+  if (structured && Object.keys(structured).length > 0) return structured;
   const direct = asRecord(result.result);
   if (direct) {
     const nestedContent = Array.isArray(direct.content) ? direct.content : [];
