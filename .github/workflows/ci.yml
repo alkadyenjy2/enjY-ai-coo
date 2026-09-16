@@ -38,6 +38,9 @@ jobs:
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 
+      - name: Jarvis route summary test
+        run: npm run test:jarvis-route
+
       - name: Operational log mapping test
         run: npm run test:operational-logs
 
