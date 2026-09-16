@@ -4,3 +4,5 @@ const require = createRequire(import.meta.url);
 const { app } = require("../dist/server.cjs") as typeof import("../server");
 
 export default app;
+
+// Trigger fresh production deployment after environment configuration update.
