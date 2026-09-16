@@ -26,10 +26,6 @@
       "dest": "/api/healthz.ts"
     },
     {
-      "src": "/api/telegram/env-diagnostic",
-      "dest": "/api/telegram/env-diagnostic.ts"
-    },
-    {
       "src": "/api/(.*)",
       "dest": "/api/index.ts"
     },
