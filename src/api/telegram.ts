@@ -129,7 +129,29 @@ function installTelegramAuthFetchBridge(): void {
       }
     }
 
-    return originalFetch(input, { ...init, headers, body });
+    const response = await originalFetch(input, { ...init, headers, body });
+
+    // /api/agent/command returns its user-facing text as `content`.
+    // The Telegram handler historically looked for `response`/`message`, which
+    // caused it to fall back to the entire JSON execution record. Normalize the
+    // response here so the Telegram transport receives only the actual answer.
+    if (response.ok) {
+      try {
+        const data = await response.clone().json() as Record<string, unknown>;
+        if (typeof data.content === "string" && typeof data.response !== "string") {
+          data.response = data.content;
+          return new Response(JSON.stringify(data), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+          });
+        }
+      } catch {
+        // Preserve the original response if it is not JSON.
+      }
+    }
+
+    return response;
   };
 }
 
