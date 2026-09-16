@@ -3,25 +3,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MemPalaceMemoryGateway, MemPalaceMcpTransport } from '../src/memory/mempalace-mcp.ts';
 
-const tenantWing = 'ai-core:80a707af7dc77ee1228f9127';
-const deterministicDrawerId = (wing: string, room: string, content: string) => {
-  const key = `${wing}|${room}|${content}`;
-  return `drawer_${wing}_${room}_${createHash('sha256').update(key).digest('hex').slice(0, 24)}`;
-};
-
-class FakeTransport implements MemPalaceMcpTransport {
-  calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
-  private drawer = { drawer_id: deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory'), content: 'AI CORE memory', wing: tenantWing, room: 'memory:decision', metadata: { added_by: 'agent-1', source_file: 'ai-core://memory/prov' } };
-  async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-    this.calls.push({ method, params }); if (method !== 'tools/call') return { serverInfo: { name: 'mempalace' } } as T;
-    const name = params.name;
-    if (name === 'mempalace_add_drawer') return { content: [{ type: 'text', text: JSON.stringify({ success: true, drawer_id: this.drawer.drawer_id }) }] } as T;
-    if (name === 'mempalace_search') return { content: [{ type: 'text', text: JSON.stringify({ results: [{ drawer_id: this.drawer.drawer_id, text: 'AI CORE memory', wing: tenantWing, room: 'memory:decision', source_file: 'ai-core://memory/prov', similarity: 0.91 }] }) }] } as T;
-    if (name === 'mempalace_get_drawer') { const drawerId = (params.arguments as Record<string, unknown>).drawer_id; return { content: [{ type: 'text', text: JSON.stringify(drawerId === this.drawer.drawer_id ? this.drawer : {}) }] } as T; }
-    if (name === 'mempalace_delete_drawer') return { content: [{ type: 'text', text: JSON.stringify({ success: true }) }] } as T;
-    throw new Error(`unexpected tool ${String(name)}`);
-  }
-}
+const tenantWing = 'ai_core_80a707af7dc77ee1228f9127';
+const deterministicDrawerId = (wing: string, room: string, content: string) => { const key = `${wing}|${room}|${content}`; return `drawer_${wing}_${room}_${createHash('sha256').update(key).digest('hex').slice(0, 24)}`; };
+class FakeTransport implements MemPalaceMcpTransport { calls: Array<{ method: string; params?: Record<string, unknown> }> = []; private drawer = { drawer_id: deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory'), content: 'AI CORE memory', wing: tenantWing, room: 'memory:decision', metadata: { added_by: 'agent-1', source_file: 'ai-core://memory/prov' } }; async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> { this.calls.push({ method, params }); if (method !== 'tools/call') return { serverInfo: { name: 'mempalace' } } as T; const name = params.name; if (name === 'mempalace_add_drawer') return { content: [{ type: 'text', text: JSON.stringify({ success: true, drawer_id: this.drawer.drawer_id }) }] } as T; if (name === 'mempalace_search') return { content: [{ type: 'text', text: JSON.stringify({ results: [{ drawer_id: this.drawer.drawer_id, text: 'AI CORE memory', wing: tenantWing, room: 'memory:decision', source_file: 'ai-core://memory/prov', similarity: 0.91 }] }) }] } as T; if (name === 'mempalace_get_drawer') { const drawerId = (params.arguments as Record<string, unknown>).drawer_id; return { content: [{ type: 'text', text: JSON.stringify(drawerId === this.drawer.drawer_id ? this.drawer : {}) }] } as T; } if (name === 'mempalace_delete_drawer') return { content: [{ type: 'text', text: JSON.stringify({ success: true }) }] } as T; throw new Error(`unexpected tool ${String(name)}`); } }
 class FallbackWriteTransport extends FakeTransport { override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> { if (method === 'tools/call' && params.name === 'mempalace_add_drawer') { this.calls.push({ method, params }); return { content: [{ type: 'text', text: 'Stored successfully.' }] } as T; } return super.call<T>(method, params); } }
 class StructuredContentWriteTransport extends FakeTransport { override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> { if (method === 'tools/call' && params.name === 'mempalace_add_drawer') { this.calls.push({ method, params }); return { structuredContent: { success: true }, content: [{ type: 'text', text: JSON.stringify({ success: true, drawer_id: deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory') }) }] } as T; } return super.call<T>(method, params); } }
 class NestedResultWriteTransport extends FakeTransport { override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> { if (method === 'tools/call' && params.name === 'mempalace_add_drawer') { this.calls.push({ method, params }); return { result: { success: true, drawer_id: deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory') } } as T; } return super.call<T>(method, params); } }
