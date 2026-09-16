@@ -43,10 +43,11 @@ function getServerSecretKey(): string | null {
   return secret || null;
 }
 
-async function authenticateTrustedTelegramRequest(req: Request, accessToken: string): Promise<AuthContext | null> {
+async function authenticateTrustedTelegramRequest(req: Request): Promise<AuthContext | null> {
   if (req.header("x-jarvis-internal") !== "telegram") return null;
   const serverSecret = getServerSecretKey();
-  if (!serverSecret || accessToken !== serverSecret) return null;
+  const suppliedSecret = req.header("x-jarvis-internal-key")?.trim() || "";
+  if (!serverSecret || !suppliedSecret || suppliedSecret !== serverSecret) return null;
 
   const config = getRuntimeConfig();
   const organizationId = String(req.body?.organization_id || req.query.organization_id || "").trim();
@@ -69,7 +70,7 @@ async function authenticateTrustedTelegramRequest(req: Request, accessToken: str
   const { data: userData, error: userError } = await admin.auth.admin.getUserById(String(membership.user_id));
   if (userError || !userData.user) return null;
 
-  return { user: userData.user, accessToken, supabase: admin };
+  return { user: userData.user, accessToken: serverSecret, supabase: admin };
 }
 
 function isTemporalRequest(req: Request): boolean {
@@ -131,11 +132,11 @@ function installTemporalResponseBinding(req: Request, res: Response, organizatio
 }
 
 export async function authenticateRequest(req: Request): Promise<AuthContext | null> {
+  const trustedTelegramAuth = await authenticateTrustedTelegramRequest(req);
+  if (trustedTelegramAuth) return trustedTelegramAuth;
+
   const accessToken = extractBearerToken(req);
   if (!accessToken) return null;
-
-  const trustedTelegramAuth = await authenticateTrustedTelegramRequest(req, accessToken);
-  if (trustedTelegramAuth) return trustedTelegramAuth;
 
   const config = getRuntimeConfig();
   if (!config) {
@@ -218,90 +219,3 @@ export async function requireOrganizationAccess(req: Request, res: Response, nex
     res.status(403).json({ success: false, error: "You are not a member of this organization." });
     return;
   }
-
-  const access: OrganizationAccess = {
-    organizationId: String(membership.organization_id),
-    role: String(membership.role || "member"),
-  };
-  res.locals.organizationId = access.organizationId;
-  res.locals.organizationRole = access.role;
-
-  if (isTemporalRequest(req)) {
-    const workflowIdParam = String(req.params?.workflowId || "").trim();
-    if (workflowIdParam) {
-      const workflowId = unwrapTemporalWorkflowId(workflowIdParam, access.organizationId);
-      if (!workflowId) {
-        const allowLegacy = process.env.NODE_ENV !== "production" && process.env.ALLOW_LEGACY_TEMPORAL_WORKFLOW_IDS === "true";
-        if (!allowLegacy) {
-          res.status(403).json({ success: false, error: "Temporal workflow ownership proof is invalid or missing." });
-          return;
-        }
-      } else {
-        req.params.workflowId = workflowId;
-      }
-    }
-
-    if (process.env.NODE_ENV === "production" && !getTemporalOwnershipSecret()) {
-      res.status(503).json({ success: false, error: "Temporal workflow ownership signing is not configured." });
-      return;
-    }
-
-    installTemporalResponseBinding(req, res, access.organizationId);
-  }
-
-  return runPersistenceContext(
-    {
-      organizationId: access.organizationId,
-      userId: auth.user.id,
-      accessToken: auth.accessToken,
-    },
-    () => next(),
-  );
-}
-
-export function getAuthContext(res: Response): AuthContext | null {
-  return (res.locals.auth as AuthContext | undefined) || null;
-}
-
-export function getOrganizationAccess(res: Response): OrganizationAccess | null {
-  const organizationId = res.locals.organizationId;
-  if (!organizationId) return null;
-  return {
-    organizationId: String(organizationId),
-    role: String(res.locals.organizationRole || "member"),
-  };
-}
-
-export async function getAuthorizedOrganizations(auth: AuthContext): Promise<Array<{ id: string; role: string; name: string | null; slug: string | null }>> {
-  const { data: memberships, error } = await auth.supabase
-    .from("organization_members")
-    .select("organization_id, role")
-    .eq("user_id", auth.user.id)
-    .order("created_at", { ascending: true });
-
-  if (error) throw error;
-  if (!memberships?.length) return [];
-
-  const adminKey = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  const config = getRuntimeConfig();
-  const organizationClient = adminKey && config
-    ? createClient(config.url, adminKey, { auth: { autoRefreshToken: false, persistSession: false } })
-    : auth.supabase;
-
-  const organizations = await Promise.all(memberships.map(async (membership) => {
-    const { data: organization } = await organizationClient
-      .from("organizations")
-      .select("id, name, slug")
-      .eq("id", membership.organization_id)
-      .maybeSingle();
-
-    return {
-      id: String(membership.organization_id),
-      role: String(membership.role || "member"),
-      name: organization?.name ? String(organization.name) : null,
-      slug: organization?.slug ? String(organization.slug) : null,
-    };
-  }));
-
-  return organizations;
-}
