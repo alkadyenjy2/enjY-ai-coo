@@ -40,6 +40,11 @@ function getTelegramRefreshToken(): string | null {
   return refreshToken || null;
 }
 
+function getServerSecretKey(): string | null {
+  const secret = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  return secret || null;
+}
+
 function getAllowedChatIds(): Set<number> | null {
   const raw = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS?.trim();
   if (!raw) return null;
@@ -111,13 +116,7 @@ function installTelegramAuthFetchBridge(): void {
     const organizationId = getTelegramOrganizationId();
     if (!context || !organizationId) return originalFetch(input, init);
 
-    const accessToken = await getTelegramAccessToken();
-    if (!accessToken) return originalFetch(input, init);
-
-    console.log("[TELEGRAM_DIAG] AGENT_AUTH_READY", { chatId: context.chatId, organizationId });
-
     const headers = new Headers(init?.headers);
-    headers.set("Authorization", `Bearer ${accessToken}`);
     headers.set("content-type", "application/json");
 
     let body = init?.body;
@@ -129,6 +128,18 @@ function installTelegramAuthFetchBridge(): void {
       } catch {
         return originalFetch(input, init);
       }
+    }
+
+    const serverSecret = getServerSecretKey();
+    if (serverSecret) {
+      headers.set("Authorization", `Bearer ${serverSecret}`);
+      headers.set("x-jarvis-internal", "telegram");
+      console.log("[TELEGRAM_DIAG] AGENT_AUTH_READY", { chatId: context.chatId, organizationId, mode: "server" });
+    } else {
+      const accessToken = await getTelegramAccessToken();
+      if (!accessToken) return originalFetch(input, init);
+      headers.set("Authorization", `Bearer ${accessToken}`);
+      console.log("[TELEGRAM_DIAG] AGENT_AUTH_READY", { chatId: context.chatId, organizationId, mode: "refresh" });
     }
 
     console.log("[TELEGRAM_DIAG] AGENT_REQUEST", { chatId: context.chatId });
@@ -233,7 +244,7 @@ export function createTelegramRouter(): Router {
   router.get("/status", (_req: Request, res: ExpressResponse) => {
     const configured = Boolean(getTelegramToken());
     const webhookSecretConfigured = Boolean(getWebhookSecret());
-    const commandAuthConfigured = Boolean(getTelegramRefreshToken() && getTelegramOrganizationId());
+    const commandAuthConfigured = Boolean((getServerSecretKey() || getTelegramRefreshToken()) && getTelegramOrganizationId());
     const allowedChatIdsConfigured = Boolean(getAllowedChatIds());
     res.json({
       ok: true,
