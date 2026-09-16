@@ -1,223 +1,80 @@
 import { createHash } from 'node:crypto';
 import { MemoryGateway, MemoryProvenance, MemoryRecallInput, MemoryRecord, MemoryResult, MemoryWriteInput, MemoryReceipt, ForgetInput, ForgetReceipt } from './memory-gateway.js';
 
-type JsonRpcResponse = {
-  jsonrpc: '2.0';
-  id?: number;
-  result?: unknown;
-  error?: { code: number; message: string; data?: unknown };
-};
-
-export interface MemPalaceMcpTransport {
-  call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>;
-}
-
+type JsonRpcResponse = { jsonrpc: '2.0'; id?: number; result?: unknown; error?: { code: number; message: string; data?: unknown } };
+export interface MemPalaceMcpTransport { call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T>; }
 export class MemPalaceMcpHttpTransport implements MemPalaceMcpTransport {
-  private nextId = 1;
-  private initialized = false;
-
+  private nextId = 1; private initialized = false;
   constructor(private readonly endpoint: string, private readonly token?: string) {}
-
   async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     if (!this.initialized && method !== 'initialize') {
-      const init = await this.call<JsonRpcResponse>('initialize', {
-        protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'enjY-ai-coo', version: '1.0' },
-      });
+      const init = await this.call<JsonRpcResponse>('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'enjY-ai-coo', version: '1.0' } });
       if (init.error) throw new Error(`MEMPALACE_MCP_${init.error.code}: ${init.error.message}`);
-      this.initialized = true;
-      await this.notify('notifications/initialized');
+      this.initialized = true; await this.notify('notifications/initialized');
     }
-    const id = this.nextId++;
-    const response = await this.request({ jsonrpc: '2.0', id, method, params });
+    const id = this.nextId++; const response = await this.request({ jsonrpc: '2.0', id, method, params });
     if (response.error) throw new Error(`MEMPALACE_MCP_${response.error.code}: ${response.error.message}`);
     return response.result as T;
   }
-
-  private async notify(method: string, params: Record<string, unknown> = {}): Promise<void> {
-    await this.request({ jsonrpc: '2.0', method, params });
-  }
-
+  private async notify(method: string, params: Record<string, unknown> = {}): Promise<void> { await this.request({ jsonrpc: '2.0', method, params }); }
   private async request(body: Record<string, unknown>): Promise<JsonRpcResponse> {
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    if (this.token) headers.authorization = `Bearer ${this.token}`;
+    const headers: Record<string, string> = { 'content-type': 'application/json' }; if (this.token) headers.authorization = `Bearer ${this.token}`;
     const response = await fetch(this.endpoint, { method: 'POST', headers, body: JSON.stringify(body) });
-    if (!response.ok) throw new Error(`MEMPALACE_HTTP_${response.status}`);
-    if (response.status === 202) return { jsonrpc: '2.0' };
-    return (await response.json()) as JsonRpcResponse;
+    if (!response.ok) throw new Error(`MEMPALACE_HTTP_${response.status}`); if (response.status === 202) return { jsonrpc: '2.0' }; return (await response.json()) as JsonRpcResponse;
   }
 }
 
-type ToolCallResult = {
-  content?: Array<{ type?: string; text?: string }>;
-  structuredContent?: unknown;
-  result?: unknown;
-  isError?: boolean;
-};
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-}
-
-function parseTextPayload(text: string): Record<string, unknown> | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  try {
-    return asRecord(JSON.parse(trimmed));
-  } catch {
-    return null;
-  }
-}
-
+type ToolCallResult = { content?: Array<{ type?: string; text?: string }>; structuredContent?: unknown; result?: unknown; isError?: boolean };
+function asRecord(value: unknown): Record<string, unknown> | null { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null; }
+function parseTextPayload(text: string): Record<string, unknown> | null { const trimmed = text.trim(); if (!trimmed) return null; try { return asRecord(JSON.parse(trimmed)); } catch { return null; } }
 function unwrapToolResult(result: ToolCallResult): Record<string, unknown> {
   if (result.isError) throw new Error('MEMPALACE_TOOL_ERROR');
   const structured = asRecord(result.structuredContent);
-  if (structured && Object.keys(structured).length > 0) return structured;
   const direct = asRecord(result.result);
-  if (direct) {
-    const nestedContent = Array.isArray(direct.content) ? direct.content : [];
-    const nestedText = nestedContent
-      .filter((item): item is { type?: string; text?: string } => Boolean(item && typeof item === 'object'))
-      .filter((item) => item.type === 'text' && typeof item.text === 'string')
-      .map((item) => item.text as string)
-      .join('');
-    const nestedParsed = parseTextPayload(nestedText);
-    if (nestedParsed) return nestedParsed;
-    return direct;
-  }
-  const text = (result.content ?? [])
-    .filter((item) => item.type === 'text' && item.text)
-    .map((item) => item.text as string)
-    .join('');
+  const nestedContent = direct && Array.isArray(direct.content) ? direct.content : [];
+  const nestedText = nestedContent.filter((item): item is { type?: string; text?: string } => Boolean(item && typeof item === 'object')).filter((item) => item.type === 'text' && typeof item.text === 'string').map((item) => item.text as string).join('');
+  const nestedParsed = parseTextPayload(nestedText);
+  const text = (result.content ?? []).filter((item) => item.type === 'text' && item.text).map((item) => item.text as string).join('');
   const parsed = parseTextPayload(text);
-  if (parsed) return parsed;
+  const merged: Record<string, unknown> = {};
+  if (structured) Object.assign(merged, structured);
+  if (direct) Object.assign(merged, direct);
+  if (nestedParsed) Object.assign(merged, nestedParsed);
+  if (parsed) Object.assign(merged, parsed);
+  if (Object.keys(merged).length > 0) return merged;
   return text ? { text } : {};
 }
-
-function scopedWing(tenantId: string): string {
-  return `ai-core:${createHash('sha256').update(tenantId).digest('hex').slice(0, 24)}`;
-}
-
-function provenanceId(tenantId: string, memoryId: string): string {
-  return `mempalace:${createHash('sha256').update(`${tenantId}:${memoryId}`).digest('hex').slice(0, 32)}`;
-}
-
-function deterministicDrawerId(wing: string, room: string, content: string): string {
-  const digest = createHash('sha256').update(`${wing}|${room}|${content}`).digest('hex').slice(0, 24);
-  return `drawer_${wing}_${room}_${digest}`;
-}
+function scopedWing(tenantId: string): string { return `ai-core:${createHash('sha256').update(tenantId).digest('hex').slice(0, 24)}`; }
+function provenanceId(tenantId: string, memoryId: string): string { return `mempalace:${createHash('sha256').update(`${tenantId}:${memoryId}`).digest('hex').slice(0, 32)}`; }
+function deterministicDrawerId(wing: string, room: string, content: string): string { const digest = createHash('sha256').update(`${wing}|${room}|${content}`).digest('hex').slice(0, 24); return `drawer_${wing}_${room}_${digest}`; }
 
 export class MemPalaceMemoryGateway implements MemoryGateway {
   constructor(private readonly transport: MemPalaceMcpTransport) {}
-
-  private async tool<T extends Record<string, unknown>>(name: string, arguments_: Record<string, unknown>): Promise<T> {
-    const raw = await this.transport.call<ToolCallResult>('tools/call', { name, arguments: arguments_ });
-    return unwrapToolResult(raw) as T;
-  }
-
+  private async tool<T extends Record<string, unknown>>(name: string, arguments_: Record<string, unknown>): Promise<T> { const raw = await this.transport.call<ToolCallResult>('tools/call', { name, arguments: arguments_ }); return unwrapToolResult(raw) as T; }
   async write(input: MemoryWriteInput): Promise<MemoryReceipt> {
     if (!input.tenantId || !input.agentId || !input.content.trim() || !input.source.trim()) throw new Error('INVALID_MEMORY_WRITE');
-    const wing = scopedWing(input.tenantId);
-    const room = `memory:${input.memoryType || 'general'}`;
-    const result = await this.tool<{
-      success?: boolean;
-      drawer_id?: string;
-      added?: Array<{ drawer_id?: string; content?: string; wing?: string; room?: string }>;
-    }>('mempalace_add_drawer', {
-      wing,
-      room,
-      content: input.content,
-      source_file: `ai-core://memory/${createHash('sha256').update(`${input.tenantId}:${input.agentId}:${input.source}`).digest('hex').slice(0, 32)}`,
-      added_by: input.agentId,
-    });
-
-    // MemPalace 3.9.x returns add results under `added[]`; older/local builds may return drawer_id directly.
-    let memoryId = typeof result.drawer_id === 'string'
-      ? result.drawer_id
-      : result.added?.find((item) => typeof item.drawer_id === 'string')?.drawer_id;
-
+    const wing = scopedWing(input.tenantId); const room = `memory:${input.memoryType || 'general'}`;
+    const result = await this.tool<{ success?: boolean; drawer_id?: string; added?: Array<{ drawer_id?: string; content?: string; wing?: string; room?: string }> }>('mempalace_add_drawer', { wing, room, content: input.content, source_file: `ai-core://memory/${createHash('sha256').update(`${input.tenantId}:${input.agentId}:${input.source}`).digest('hex').slice(0, 32)}`, added_by: input.agentId });
+    let memoryId = typeof result.drawer_id === 'string' ? result.drawer_id : result.added?.find((item) => typeof item.drawer_id === 'string')?.drawer_id;
     if (!memoryId) {
       const candidateId = deterministicDrawerId(wing, room, input.content);
-      try {
-        const verified = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string }>('mempalace_get_drawer', { drawer_id: candidateId });
-        if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) {
-          memoryId = candidateId;
-        }
-      } catch {
-        // Continue with search/list recovery when the deterministic probe is unsupported or not resolvable.
-      }
-      if (!memoryId) {
-        try {
-          const searched = await this.tool<{ results?: Array<{ drawer_id?: string; text?: string; content?: string; wing?: string; room?: string }> }>('mempalace_search', {
-            query: input.content,
-            limit: 5,
-            wing,
-            room,
-          });
-          const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && (item.text === input.content || item.content === input.content));
-          if (match) memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId;
-        } catch {
-          // Some older/local MemPalace deployments expose search differently; use listing as a final recovery path.
-        }
-      }
-      if (!memoryId) {
-        try {
-          const listed = await this.tool<{ drawers?: Array<{ drawer_id?: string; content?: string; text?: string; content_preview?: string; wing?: string; room?: string }> }>('mempalace_list_drawers', {
-            wing,
-            room,
-            limit: 100,
-            offset: 0,
-          });
-          const match = (listed.drawers ?? []).find((item) => item.wing === wing && item.room === room && (item.content === input.content || item.text === input.content || item.content_preview === input.content || input.content.startsWith(item.content_preview ?? '\u0000')));
-          if (match && typeof match.drawer_id === 'string') memoryId = match.drawer_id;
-        } catch {
-          // Keep the original hard failure when no recovery surface can resolve the persisted drawer.
-        }
-      }
+      try { const verified = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string }>('mempalace_get_drawer', { drawer_id: candidateId }); if (verified.drawer_id === candidateId && verified.wing === wing && verified.room === room && verified.content === input.content) memoryId = candidateId; } catch {}
+      if (!memoryId) { try { const searched = await this.tool<{ results?: Array<{ drawer_id?: string; text?: string; content?: string; wing?: string; room?: string }> }>('mempalace_search', { query: input.content, limit: 5, wing, room }); const match = (searched.results ?? []).find((item) => item.wing === wing && item.room === room && (item.text === input.content || item.content === input.content)); if (match) memoryId = typeof match.drawer_id === 'string' ? match.drawer_id : candidateId; } catch {} }
+      if (!memoryId) { try { const listed = await this.tool<{ drawers?: Array<{ drawer_id?: string; content?: string; text?: string; content_preview?: string; wing?: string; room?: string }> }>('mempalace_list_drawers', { wing, room, limit: 100, offset: 0 }); const match = (listed.drawers ?? []).find((item) => item.wing === wing && item.room === room && (item.content === input.content || item.text === input.content || item.content_preview === input.content || input.content.startsWith(item.content_preview ?? '\u0000'))); if (match && typeof match.drawer_id === 'string') memoryId = match.drawer_id; } catch {} }
     }
-
     if (!memoryId) throw new Error('MEMPALACE_WRITE_NO_DRAWER_ID');
     return { memoryId, status: 'STORED', createdAt: new Date().toISOString(), provenanceId: provenanceId(input.tenantId, memoryId) };
   }
-
   async recall(input: MemoryRecallInput): Promise<MemoryResult[]> {
     if (!input.query.trim()) return [];
-    const result = await this.tool<{ results?: Array<{ text?: string; wing?: string; room?: string; source_file?: string; similarity?: number; drawer_id?: string }> }>('mempalace_search', {
-      query: input.query,
-      limit: Math.min(Math.max(input.limit ?? 10, 1), 50),
-      wing: scopedWing(input.tenantId),
-      ...(input.scope ? { room: input.scope } : {}),
-    });
-    return (result.results ?? []).map((item) => {
-      const memoryId = item.drawer_id ?? (item.wing && item.room && item.text ? deterministicDrawerId(item.wing, item.room, item.text) : `${item.wing ?? ''}:${item.room ?? ''}:${item.source_file ?? ''}`);
-      return { memoryId, content: item.text ?? '', relevance: item.similarity ?? 0, source: item.source_file ?? 'mempalace', provenanceId: provenanceId(input.tenantId, memoryId), createdAt: new Date().toISOString(), scope: item.room };
-    });
+    const result = await this.tool<{ results?: Array<{ text?: string; wing?: string; room?: string; source_file?: string; similarity?: number; drawer_id?: string }> }>('mempalace_search', { query: input.query, limit: Math.min(Math.max(input.limit ?? 10, 1), 50), wing: scopedWing(input.tenantId), ...(input.scope ? { room: input.scope } : {}) });
+    return (result.results ?? []).map((item) => { const memoryId = item.drawer_id ?? (item.wing && item.room && item.text ? deterministicDrawerId(item.wing, item.room, item.text) : `${item.wing ?? ''}:${item.room ?? ''}:${item.source_file ?? ''}`); return { memoryId, content: item.text ?? '', relevance: item.similarity ?? 0, source: item.source_file ?? 'mempalace', provenanceId: provenanceId(input.tenantId, memoryId), createdAt: new Date().toISOString(), scope: item.room }; });
   }
-
   async read(memoryId: string, tenantId: string): Promise<MemoryRecord | null> {
     const result = await this.tool<{ drawer_id?: string; content?: string; wing?: string; room?: string; metadata?: Record<string, unknown> }>('mempalace_get_drawer', { drawer_id: memoryId });
-    if (!result.drawer_id || result.wing !== scopedWing(tenantId)) return null;
-    const metadata = result.metadata ?? {};
-    return {
-      memoryId, content: result.content ?? '', relevance: 1,
-      source: typeof metadata.source_file === 'string' ? metadata.source_file : 'mempalace',
-      provenanceId: provenanceId(tenantId, memoryId),
-      createdAt: typeof metadata.filed_at === 'string' ? metadata.filed_at : new Date().toISOString(),
-      scope: result.room, tenantId,
-      agentId: typeof metadata.added_by === 'string' ? metadata.added_by : 'mempalace',
-      memoryType: result.room?.replace(/^memory:/, '') ?? 'general', importance: undefined, sensitivity: undefined, tags: [], status: 'STORED', sourceRef: undefined,
-    };
+    if (!result.drawer_id || result.wing !== scopedWing(tenantId)) return null; const metadata = result.metadata ?? {};
+    return { memoryId, content: result.content ?? '', relevance: 1, source: typeof metadata.source_file === 'string' ? metadata.source_file : 'mempalace', provenanceId: provenanceId(tenantId, memoryId), createdAt: typeof metadata.filed_at === 'string' ? metadata.filed_at : new Date().toISOString(), scope: result.room, tenantId, agentId: typeof metadata.added_by === 'string' ? metadata.added_by : 'mempalace', memoryType: result.room?.replace(/^memory:/, '') ?? 'general', importance: undefined, sensitivity: undefined, tags: [], status: 'STORED', sourceRef: undefined };
   }
-
-  async forget(input: ForgetInput): Promise<ForgetReceipt> {
-    const existing = await this.read(input.memoryId, input.tenantId);
-    if (!existing) throw new Error('MEMORY_NOT_FOUND');
-    await this.tool('mempalace_delete_drawer', { drawer_id: input.memoryId });
-    return { memoryId: input.memoryId, status: 'FORGOTTEN', reason: input.reason, requestedBy: input.requestedBy, timestamp: new Date().toISOString(), provenanceId: existing.provenanceId };
-  }
-
-  async provenance(memoryId: string, tenantId: string): Promise<MemoryProvenance | null> {
-    const existing = await this.read(memoryId, tenantId);
-    if (!existing) return null;
-    return { memoryId, provenanceId: existing.provenanceId, source: existing.source, sourceRef: existing.sourceRef, createdAt: existing.createdAt, author: existing.agentId, tenantId, agentId: existing.agentId, transformations: [] };
-  }
+  async forget(input: ForgetInput): Promise<ForgetReceipt> { const existing = await this.read(input.memoryId, input.tenantId); if (!existing) throw new Error('MEMORY_NOT_FOUND'); await this.tool('mempalace_delete_drawer', { drawer_id: input.memoryId }); return { memoryId: input.memoryId, status: 'FORGOTTEN', reason: input.reason, requestedBy: input.requestedBy, timestamp: new Date().toISOString(), provenanceId: existing.provenanceId }; }
+  async provenance(memoryId: string, tenantId: string): Promise<MemoryProvenance | null> { const existing = await this.read(memoryId, tenantId); if (!existing) return null; return { memoryId, provenanceId: existing.provenanceId, source: existing.source, sourceRef: existing.sourceRef, createdAt: existing.createdAt, author: existing.agentId, tenantId, agentId: existing.agentId, transformations: [] }; }
 }
