@@ -114,6 +114,8 @@ function installTelegramAuthFetchBridge(): void {
     const accessToken = await getTelegramAccessToken();
     if (!accessToken) return originalFetch(input, init);
 
+    console.log("[TELEGRAM_DIAG] AGENT_AUTH_READY", { chatId: context.chatId, organizationId });
+
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${accessToken}`);
     headers.set("content-type", "application/json");
@@ -129,12 +131,10 @@ function installTelegramAuthFetchBridge(): void {
       }
     }
 
+    console.log("[TELEGRAM_DIAG] AGENT_REQUEST", { chatId: context.chatId });
     const response = await originalFetch(input, { ...init, headers, body });
+    console.log("[TELEGRAM_DIAG] AGENT_RESPONSE", { chatId: context.chatId, status: response.status, ok: response.ok });
 
-    // /api/agent/command returns its user-facing text as `content`.
-    // The Telegram handler historically looked for `response`/`message`, which
-    // caused it to fall back to the entire JSON execution record. Normalize the
-    // response here so the Telegram transport receives only the actual answer.
     if (response.ok) {
       try {
         const data = await response.clone().json() as Record<string, unknown>;
@@ -180,6 +180,7 @@ export async function sendTelegramMessage(chatId: number, text: string): Promise
     text: text.slice(0, 4096),
     disable_web_page_preview: true,
   });
+  console.log("[TELEGRAM_DIAG] TELEGRAM_SENT", { chatId, length: text.length });
 }
 
 export function createTelegramRouter(): Router {
@@ -188,6 +189,7 @@ export function createTelegramRouter(): Router {
   router.post("/webhook", express.json({ limit: "256kb" }), async (req: Request, res: ExpressResponse) => {
     const expectedSecret = getWebhookSecret();
     if (expectedSecret && req.header("x-telegram-bot-api-secret-token") !== expectedSecret) {
+      console.warn("[TELEGRAM_DIAG] INVALID_WEBHOOK_SECRET");
       return res.status(401).json({ ok: false, error: "invalid webhook secret" });
     }
 
@@ -196,8 +198,11 @@ export function createTelegramRouter(): Router {
     const text = update.message?.text?.trim();
     if (!chatId || !text) return res.status(200).json({ ok: true, ignored: true });
 
+    console.log("[TELEGRAM_DIAG] WEBHOOK_RECEIVED", { chatId, text, updateId: update.update_id });
+
     const allowedChatIds = getAllowedChatIds();
     if (allowedChatIds && !allowedChatIds.has(chatId)) {
+      console.warn("[TELEGRAM_DIAG] CHAT_NOT_ALLOWED", { chatId });
       return res.status(403).json({ ok: false, error: "telegram chat is not authorized" });
     }
 
@@ -208,15 +213,18 @@ export function createTelegramRouter(): Router {
     if (!handler) return res.status(503).json({ ok: false, error: "JARVIS Telegram handler not configured" });
 
     try {
-      // Keep the AsyncLocalStorage auth context alive for the complete JARVIS execution.
-      // The previous fire-and-forget call could be terminated by Vercel after the 200 response.
-      await telegramAuthContext.run({ chatId }, () => handler({ chatId, text, update }));
+      await telegramAuthContext.run({ chatId }, async () => {
+        console.log("[TELEGRAM_DIAG] HANDLER_START", { chatId });
+        await handler({ chatId, text, update });
+        console.log("[TELEGRAM_DIAG] HANDLER_DONE", { chatId });
+      });
       return res.status(200).json({ ok: true });
     } catch (error: unknown) {
+      console.error("[TELEGRAM_DIAG] HANDLER_ERROR", { chatId, error: error instanceof Error ? error.message : String(error) });
       try {
         await sendTelegramMessage(chatId, `JARVIS execution failed: ${error instanceof Error ? error.message : "unknown error"}`);
-      } catch {
-        // Transport failure is intentionally not re-thrown after the execution error is handled.
+      } catch (sendError: unknown) {
+        console.error("[TELEGRAM_DIAG] ERROR_MESSAGE_SEND_FAILED", { chatId, error: sendError instanceof Error ? sendError.message : String(sendError) });
       }
       return res.status(200).json({ ok: true });
     }
