@@ -10,9 +10,6 @@ const endpoint = 'http://127.0.0.1:8765/mcp';
 async function waitForHealth(timeoutMs = 60_000): Promise<void> { const deadline = Date.now() + timeoutMs; while (Date.now() < deadline) { try { const response = await fetch('http://127.0.0.1:8765/healthz'); if (response.ok) return; } catch {} await sleep(500); } throw new Error('MEMPALACE_SERVER_START_TIMEOUT'); }
 function startServer(palacePath: string): ChildProcess { const child = spawn('mempalace-mcp', ['--transport', 'http', '--host', '127.0.0.1', '--port', '8765', '--palace', palacePath], { env: { ...process.env, MEMPALACE_MCP_IDLE_HOURS: '0' }, stdio: ['ignore', 'pipe', 'pipe'] }); let stderr = ''; child.stderr?.on('data', (chunk) => { stderr += String(chunk); }); child.on('exit', (code, signal) => { if (code !== 0 && signal !== 'SIGTERM') process.stderr.write(`MemPalace exited unexpectedly: code=${code} signal=${signal}\\n${stderr}`); }); return child; }
 test('MemPalace adapter real MCP smoke test', { timeout: 120_000 }, async (t) => {
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (input, init) => { const response = await originalFetch(input, init); if (String(input).includes('/mcp')) { try { console.error('[MEMPALACE_RAW_HTTP]', await response.clone().text()); } catch {} } return response; };
-  t.after(() => { globalThis.fetch = originalFetch; });
   const palacePath = await mkdtemp(join(tmpdir(), 'enjY-mempalace-')); const server = startServer(palacePath);
   t.after(async () => { server.kill('SIGTERM'); await Promise.race([new Promise<void>((resolve) => server.once('exit', () => resolve())), sleep(5_000).then(() => undefined)]); await rm(palacePath, { recursive: true, force: true }); });
   await waitForHealth();
