@@ -34,6 +34,44 @@ function extractBearerToken(req: Request): string | null {
   return match?.[1]?.trim() || null;
 }
 
+function getServerSecretKey(): string | null {
+  const secret = (
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    ""
+  ).trim();
+  return secret || null;
+}
+
+async function authenticateTrustedTelegramRequest(req: Request, accessToken: string): Promise<AuthContext | null> {
+  if (req.header("x-jarvis-internal") !== "telegram") return null;
+  const serverSecret = getServerSecretKey();
+  if (!serverSecret || accessToken !== serverSecret) return null;
+
+  const config = getRuntimeConfig();
+  const organizationId = String(req.body?.organization_id || req.query.organization_id || "").trim();
+  if (!config || !organizationId || !/^[0-9a-f-]{36}$/i.test(organizationId)) return null;
+
+  const admin = createClient(config.url, serverSecret, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+
+  const { data: membership, error: membershipError } = await admin
+    .from("organization_members")
+    .select("user_id, role")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (membershipError || !membership?.user_id) return null;
+
+  const { data: userData, error: userError } = await admin.auth.admin.getUserById(String(membership.user_id));
+  if (userError || !userData.user) return null;
+
+  return { user: userData.user, accessToken, supabase: admin };
+}
+
 function isTemporalRequest(req: Request): boolean {
   return req.path.startsWith("/temporal") || req.originalUrl.includes("/api/temporal");
 }
@@ -95,6 +133,9 @@ function installTemporalResponseBinding(req: Request, res: Response, organizatio
 export async function authenticateRequest(req: Request): Promise<AuthContext | null> {
   const accessToken = extractBearerToken(req);
   if (!accessToken) return null;
+
+  const trustedTelegramAuth = await authenticateTrustedTelegramRequest(req, accessToken);
+  if (trustedTelegramAuth) return trustedTelegramAuth;
 
   const config = getRuntimeConfig();
   if (!config) {
