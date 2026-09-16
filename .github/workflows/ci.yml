@@ -35,6 +35,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Free-first OmniRoute router test
+        run: npm run test:free-first-router
+
       - name: Operational log mapping test
         run: npm run test:operational-logs
 
