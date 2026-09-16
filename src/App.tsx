@@ -16,7 +16,7 @@ import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, A
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<NavView>('clinic');
+  const [currentView, setCurrentView] = useState<NavView>('chat');
   const [userProfile, setUserProfile] = useState<UserProfile>(initialUserProfile);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>(initialMemoryItems);
   const [connectors, setConnectors] = useState<Connector[]>(initialConnectors);
@@ -101,7 +101,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
       <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenOnboarding={() => setIsOnboardingOpen(true)} onOpenCommandCenter={() => setCurrentView('chat')} />
-      <div className="mx-auto w-full max-w-7xl border-x border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-amber-200">DEMO DATA — NOT CONNECTED. Seeded records and simulated workflow states are for portfolio presentation only; live providers require connection.</div>
+      <div className="mx-auto w-full max-w-7xl border-x border-b border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-emerald-200">FREE-FIRST AI ROUTING • VERIFY BEFORE DONE • PAID ROUTES REQUIRE EXPLICIT APPROVAL</div>
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         <Sidebar currentView={currentView} onSelectView={setCurrentView} memoryCount={memoryItems.length} connectorsCount={connectors.length} workflowsCount={workflows.length} lessonsCount={lessons.length} />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
@@ -119,14 +119,14 @@ export default function App() {
       </div>
       <footer className="bg-zinc-950 border-t border-zinc-800 px-4 py-2.5 text-xs font-mono text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-7xl w-full mx-auto">
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-emerald-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>PORTFOLIO DEMO</span>
+          <span className="flex items-center gap-1.5 text-emerald-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>JARVIS</span>
           <span className="text-zinc-700">|</span>
-          <span className="text-zinc-400">LOCAL VERIFICATION</span>
+          <span className="text-zinc-400">FREE-FIRST ROUTING</span>
         </div>
         <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-zinc-500">
-          <span>STATUS: <strong className="text-amber-300 font-normal">DEMO / CONNECTION REQUIRED</strong></span>
+          <span>POLICY: <strong className="text-emerald-300 font-normal">NO PAID ROUTE BY DEFAULT</strong></span>
           <span className="text-zinc-800">•</span>
-          <span>LIVE PROVIDERS: <strong className="text-amber-300 font-normal">NOT CLAIMED</strong></span>
+          <span>SUCCESS: <strong className="text-emerald-300 font-normal">VERIFY FIRST</strong></span>
         </div>
       </footer>
       <OnboardingQuizModal isOpen={isOnboardingOpen} onClose={() => setIsOnboardingOpen(false)} onComplete={handleOnboardingComplete} />
