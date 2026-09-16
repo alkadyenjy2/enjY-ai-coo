@@ -219,3 +219,90 @@ export async function requireOrganizationAccess(req: Request, res: Response, nex
     res.status(403).json({ success: false, error: "You are not a member of this organization." });
     return;
   }
+
+  const access: OrganizationAccess = {
+    organizationId: String(membership.organization_id),
+    role: String(membership.role || "member"),
+  };
+  res.locals.organizationId = access.organizationId;
+  res.locals.organizationRole = access.role;
+
+  if (isTemporalRequest(req)) {
+    const workflowIdParam = String(req.params?.workflowId || "").trim();
+    if (workflowIdParam) {
+      const workflowId = unwrapTemporalWorkflowId(workflowIdParam, access.organizationId);
+      if (!workflowId) {
+        const allowLegacy = process.env.NODE_ENV !== "production" && process.env.ALLOW_LEGACY_TEMPORAL_WORKFLOW_IDS === "true";
+        if (!allowLegacy) {
+          res.status(403).json({ success: false, error: "Temporal workflow ownership proof is invalid or missing." });
+          return;
+        }
+      } else {
+        req.params.workflowId = workflowId;
+      }
+    }
+
+    if (process.env.NODE_ENV === "production" && !getTemporalOwnershipSecret()) {
+      res.status(503).json({ success: false, error: "Temporal workflow ownership signing is not configured." });
+      return;
+    }
+
+    installTemporalResponseBinding(req, res, access.organizationId);
+  }
+
+  return runPersistenceContext(
+    {
+      organizationId: access.organizationId,
+      userId: auth.user.id,
+      accessToken: auth.accessToken,
+    },
+    () => next(),
+  );
+}
+
+export function getAuthContext(res: Response): AuthContext | null {
+  return (res.locals.auth as AuthContext | undefined) || null;
+}
+
+export function getOrganizationAccess(res: Response): OrganizationAccess | null {
+  const organizationId = res.locals.organizationId;
+  if (!organizationId) return null;
+  return {
+    organizationId: String(organizationId),
+    role: String(res.locals.organizationRole || "member"),
+  };
+}
+
+export async function getAuthorizedOrganizations(auth: AuthContext): Promise<Array<{ id: string; role: string; name: string | null; slug: string | null }>> {
+  const { data: memberships, error } = await auth.supabase
+    .from("organization_members")
+    .select("organization_id, role")
+    .eq("user_id", auth.user.id)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  if (!memberships?.length) return [];
+
+  const adminKey = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+  const config = getRuntimeConfig();
+  const organizationClient = adminKey && config
+    ? createClient(config.url, adminKey, { auth: { autoRefreshToken: false, persistSession: false } })
+    : auth.supabase;
+
+  const organizations = await Promise.all(memberships.map(async (membership) => {
+    const { data: organization } = await organizationClient
+      .from("organizations")
+      .select("id, name, slug")
+      .eq("id", membership.organization_id)
+      .maybeSingle();
+
+    return {
+      id: String(membership.organization_id),
+      role: String(membership.role || "member"),
+      name: organization?.name ? String(organization.name) : null,
+      slug: organization?.slug ? String(organization.slug) : null,
+    };
+  }));
+
+  return organizations;
+}
