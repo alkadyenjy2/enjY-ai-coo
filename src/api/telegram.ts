@@ -179,22 +179,25 @@ export function createTelegramRouter(): Router {
       return res.status(403).json({ ok: false, error: "telegram chat is not authorized" });
     }
 
-    // Telegram owns the webhook acknowledgement. JARVIS execution is delegated asynchronously
-    // by the host callback so this transport stays independent from the agent implementation.
     const handler = (req.app as typeof req.app & {
       locals: { jarvisTelegramHandler?: (input: { chatId: number; text: string; update: TelegramUpdate }) => Promise<void> };
     }).locals.jarvisTelegramHandler;
 
     if (!handler) return res.status(503).json({ ok: false, error: "JARVIS Telegram handler not configured" });
 
-    res.status(200).json({ ok: true });
-    void telegramAuthContext.run({ chatId }, () => handler({ chatId, text, update })).catch(async (error: unknown) => {
+    try {
+      // Keep the AsyncLocalStorage auth context alive for the complete JARVIS execution.
+      // The previous fire-and-forget call could be terminated by Vercel after the 200 response.
+      await telegramAuthContext.run({ chatId }, () => handler({ chatId, text, update }));
+      return res.status(200).json({ ok: true });
+    } catch (error: unknown) {
       try {
         await sendTelegramMessage(chatId, `JARVIS execution failed: ${error instanceof Error ? error.message : "unknown error"}`);
       } catch {
-        // Transport failure is intentionally not re-thrown after Telegram acknowledgement.
+        // Transport failure is intentionally not re-thrown after the execution error is handled.
       }
-    });
+      return res.status(200).json({ ok: true });
+    }
   });
 
   router.get("/status", (_req: Request, res: ExpressResponse) => {
