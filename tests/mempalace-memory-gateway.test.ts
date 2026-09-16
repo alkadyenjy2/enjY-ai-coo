@@ -42,6 +42,19 @@ class FallbackWriteTransport extends FakeTransport {
   }
 }
 
+class StructuredContentWriteTransport extends FakeTransport {
+  override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (method === 'tools/call' && params.name === 'mempalace_add_drawer') {
+      this.calls.push({ method, params });
+      return {
+        structuredContent: {},
+        content: [{ type: 'text', text: JSON.stringify({ success: true, drawer_id: deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory') }) }],
+      } as T;
+    }
+    return super.call<T>(method, params);
+  }
+}
+
 class SearchWithoutDrawerIdTransport extends FakeTransport {
   override async call<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     if (method === 'tools/call' && params.name === 'mempalace_search') {
@@ -76,6 +89,14 @@ test('writes into a tenant-scoped MemPalace wing', async () => {
   const args = call.params?.arguments as Record<string, unknown>;
   assert.equal(args.room, 'memory:decision');
   assert.equal(args.wing, tenantWing);
+});
+
+test('write preserves a drawer id when MCP returns it in content alongside empty structuredContent', async () => {
+  const transport = new StructuredContentWriteTransport();
+  const gateway = new MemPalaceMemoryGateway(transport);
+  const receipt = await gateway.write({ tenantId: 'tenant-a', agentId: 'agent-1', memoryType: 'decision', content: 'AI CORE memory', source: 'test' });
+  assert.equal(receipt.status, 'STORED');
+  assert.equal(receipt.memoryId, deterministicDrawerId(tenantWing, 'memory:decision', 'AI CORE memory'));
 });
 
 test('write verifies persistence when the MCP response omits drawer_id', async () => {
