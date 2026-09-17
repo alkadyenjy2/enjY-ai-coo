@@ -112,11 +112,16 @@ export async function recordMemoryActivity(record: any): Promise<{ recordId: str
     intent: record?.intent || 'MEMORY_RECORD',
     tool: 'Temporal Memory Activity',
     selectedTools: [],
-    actionsExecuted: [{ tool: 'Temporal Memory Activity', status: 'success', details: 'Recorded workflow memory checkpoint.' }],
+    actionsExecuted: record?.verificationTool
+      ? [
+          { tool: String(record.verificationTool), status: 'success', details: String(record.evidence || 'Authoritative execution verification recorded.') },
+          { tool: 'Temporal Memory Activity', status: 'success', details: 'Recorded verified workflow memory checkpoint.' }
+        ]
+      : [{ tool: 'Temporal Memory Activity', status: 'failed', details: 'Refused to record VERIFIED checkpoint without authoritative verification.' }],
     results: { testId: record?.testId || null, finalState: record?.finalState || null, history: record?.history || [] },
     state_history: Array.isArray(record?.history) ? record.history : [],
-    evidence: 'Workflow memory checkpoint persisted through the operational persistence adapter.',
-    verificationStatus: 'VERIFIED' as const,
+    evidence: record?.evidence || 'Workflow memory checkpoint persisted through the operational persistence adapter.',
+    verificationStatus: record?.verificationTool ? 'VERIFIED' as const : 'FAILED' as const,
     final_state_reason: 'Workflow memory checkpoint recorded.',
     errors: [],
     approvalStatus: 'AUTO_APPROVED' as const,
