@@ -38,6 +38,12 @@ jobs:
       - name: NO EVIDENCE = NO SUCCESS regression test
         run: node --import tsx --test --test-concurrency=1 tests/no-evidence-no-success.test.ts
 
+      - name: Planner execution bridge test
+        run: node --import tsx --test --test-concurrency=1 src/execution/plan-executor.test.ts
+
+      - name: Task graph evidence identity test
+        run: node --import tsx --test --test-concurrency=1 src/task-graph/task-graph.test.ts
+
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 
