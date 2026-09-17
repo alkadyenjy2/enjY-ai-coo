@@ -21,6 +21,10 @@ import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhoo
 import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
+import { normalizeGoal } from "./src/planner/goal";
+import { createPlan } from "./src/planner/planner";
+import { evaluateTaskPolicy } from "./src/policy/evaluate";
+import { buildPlanExecutionInput, verifyPlanEvidence } from "./src/execution/plan-executor";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -687,6 +691,79 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   try {
+    // Planner -> Policy -> Temporal execution bridge for generic execution commands.
+    // Tool-specific commands keep their existing verified adapters below.
+    const usesDirectToolPath = /(send_email|send email|supabase|قاعدة بيانات|update_supabase|query_supabase|delete|drop_table|transfer_funds|post_external)/i.test(userPromptStr);
+    if (commandClass === "EXECUTION" && !usesDirectToolPath) {
+      const goal = normalizeGoal(userPromptStr, { capabilities: ["execute"] });
+      const plan = createPlan(goal, [{ name: "execute", risk: "MEDIUM", requiresApproval: false }]);
+      const policy = evaluateTaskPolicy(plan.nodes[0], [{ name: "execute", allowed: true, maxRisk: "MEDIUM" }]);
+      if (policy !== "ALLOW") {
+        const blockedRecord: OperationalExecutionRecord = {
+          id: "exec-" + Date.now(),
+          timestamp: new Date().toISOString(),
+          command: userPromptStr,
+          project: projectNameStr,
+          intent: commandClass,
+          tool: "Policy Gate",
+          selectedTools: ["Planner", "Policy Gate"],
+          actionsExecuted: [{ tool: "Policy Gate", status: "blocked", details: "Execution plan rejected with policy decision " + policy + "." }],
+          results: { planId: plan.id, policy },
+          state_history: ["RECEIVED", "ROUTED", "BLOCKED"],
+          evidence: "[Policy Gate]: plan=" + plan.id + " decision=" + policy,
+          verificationStatus: "FAILED",
+          final_state_reason: "Execution plan was rejected before side effects.",
+          errors: ["POLICY_" + policy],
+          approvalStatus: "REJECTED"
+        };
+        await rememberOperationalRecord(blockedRecord);
+        return res.status(403).json({ success: false, error: "Execution plan rejected by policy: " + policy, executionRecord: blockedRecord });
+      }
+      const workflowInput = buildPlanExecutionInput(plan, userPromptStr);
+      const started = await temporalManager.startWorkflow(workflowInput);
+      const finalState = await temporalManager.getWorkflowResult(started.workflowId);
+      const verified = verifyPlanEvidence({
+        planId: plan.id,
+        stateHistory: finalState.stateHistory,
+        verificationStatus: finalState.verificationStatus,
+        evidence: finalState.evidenceProof || "",
+        verificationTool: finalState.verificationTool
+      });
+      const bridgeRecord: OperationalExecutionRecord = {
+        id: "exec-" + Date.now(),
+        timestamp: new Date().toISOString(),
+        command: userPromptStr,
+        project: projectNameStr,
+        intent: commandClass,
+        tool: "Temporal Execution Bridge",
+        selectedTools: ["Planner", "Policy Gate", "Temporal Execution Bridge", finalState.verificationTool || "Execution Verification Tool"],
+        actionsExecuted: [
+          { tool: "Planner", status: "success", details: "Created plan " + plan.id + " with " + plan.nodes.length + " task(s)." },
+          { tool: "Policy Gate", status: "success", details: "Policy decision: " + policy + "." },
+          { tool: "Temporal Execution Bridge", status: verified ? "success" : "failed", details: "workflowId=" + started.workflowId + "; state=" + finalState.currentStatus },
+          { tool: finalState.verificationTool || "Execution Verification Tool", status: verified ? "success" : "failed", details: finalState.evidenceProof || "No authoritative verification evidence." }
+        ],
+        results: { planId: plan.id, workflowId: started.workflowId, finalState },
+        state_history: finalState.stateHistory,
+        evidence: finalState.evidenceProof || "",
+        verificationStatus: verified ? "VERIFIED" : "FAILED",
+        final_state_reason: verified ? "Plan executed through Temporal and authoritatively verified." : "Temporal execution did not produce authoritative verification evidence.",
+        errors: finalState.errorDetails ? [finalState.errorDetails] : [],
+        approvalStatus: finalState.approvalStatus === "REJECTED" ? "REJECTED" : finalState.approvalStatus === "WAITING" ? "REQUIRES_HUMAN_APPROVAL" : "AUTO_APPROVED"
+      };
+      await rememberOperationalRecord(bridgeRecord);
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: bridgeRecord, content: verified ? "Execution completed and verified." : "Execution failed verification." });
+      if (!verified) {
+        return res.status(409).json({ success: false, error: "Temporal execution completed without authoritative verification evidence.", executionRecord: bridgeRecord });
+      }
+      return res.json({
+        success: true,
+        content: "### ⚙️ JARVIS Execution\n- **Plan:** `" + plan.id + "`\n- **Workflow:** `" + started.workflowId + "`\n- **State:** `" + finalState.currentStatus + "`\n- **Verification:** `VERIFIED`\n- **Evidence:** " + finalState.evidenceProof,
+        executionRecord: bridgeRecord,
+        actionsTaken: bridgeRecord.actionsExecuted
+      });
+    }
+
     const ai = getGeminiClient();
     
     // System instruction detailing the Master Prompt Core AI Agent rules
