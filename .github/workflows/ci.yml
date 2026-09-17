@@ -35,6 +35,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: NO EVIDENCE = NO SUCCESS regression test
+        run: node --import tsx --test --test-concurrency=1 tests/no-evidence-no-success.test.ts
+
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 
