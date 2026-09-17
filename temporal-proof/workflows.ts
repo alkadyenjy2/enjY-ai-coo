@@ -106,6 +106,7 @@ export interface CoreState {
   approvalStatus: 'AUTO_APPROVED' | 'WAITING' | 'APPROVED' | 'REJECTED';
   verificationStatus: 'NOT_REQUIRED' | 'VERIFIED' | 'FAILED' | 'UNVERIFIED';
   evidenceProof?: string;
+  verificationTool?: string;
   loopIterationsExecuted: number;
   errorDetails?: string;
 }
@@ -241,6 +242,7 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
     if (evidenceRes.verified) {
       state.verificationStatus = 'VERIFIED';
       state.evidenceProof = evidenceRes.proofRecord;
+      state.verificationTool = evidenceRes.verificationTool;
       transitionTo('VERIFIED');
     } else {
       state.verificationStatus = 'UNVERIFIED';
@@ -259,6 +261,8 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
     testId: input.testId,
     command: input.command,
     planId: input.planId,
+    evidence: state.evidenceProof,
+    verificationTool: state.verificationTool,
     finalState: state.currentStatus,
     history: state.stateHistory
   });
