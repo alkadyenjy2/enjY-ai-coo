@@ -81,17 +81,23 @@ export async function executeDeterministicActivity(input: ActionInput): Promise<
   };
 }
 
-export async function verifyEvidenceActivity(evidencePayload: { evidence?: string; valid: boolean }): Promise<{ verified: boolean; proofRecord: string }> {
+export async function verifyEvidenceActivity(input: { planId?: string; executionResult?: string }): Promise<{ verified: boolean; proofRecord: string; verificationTool: string }> {
   globalContext.activityAttempts['verifyEvidence'] = (globalContext.activityAttempts['verifyEvidence'] || 0) + 1;
-  
-  if (!evidencePayload.valid || !evidencePayload.evidence) {
-    return { verified: false, proofRecord: 'INVALID_OR_MISSING_EVIDENCE' };
+
+  if (!input.planId || !input.executionResult?.trim()) {
+    return {
+      verified: false,
+      proofRecord: 'INVALID_OR_MISSING_EXECUTION_EVIDENCE',
+      verificationTool: 'Execution Verification Tool'
+    };
   }
-  
+
   globalContext.sideEffectCount++;
+  const evidence = `[Execution Verification Tool]: plan=${input.planId} execution=${input.executionResult}`;
   return {
     verified: true,
-    proofRecord: `PROOF_VERIFIED_HASH_${Buffer.from(evidencePayload.evidence).toString('hex').slice(0, 8)}`
+    proofRecord: evidence,
+    verificationTool: 'Execution Verification Tool'
   };
 }
 
