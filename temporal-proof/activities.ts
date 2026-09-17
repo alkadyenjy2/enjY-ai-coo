@@ -84,7 +84,7 @@ export async function executeDeterministicActivity(input: ActionInput): Promise<
 export async function verifyEvidenceActivity(input: { planId?: string; executionResult?: string }): Promise<{ verified: boolean; proofRecord: string; verificationTool: string }> {
   globalContext.activityAttempts['verifyEvidence'] = (globalContext.activityAttempts['verifyEvidence'] || 0) + 1;
 
-  if (!input.planId || !input.executionResult?.trim()) {
+  if (!input.executionResult?.trim()) {
     return {
       verified: false,
       proofRecord: 'INVALID_OR_MISSING_EXECUTION_EVIDENCE',
@@ -93,7 +93,9 @@ export async function verifyEvidenceActivity(input: { planId?: string; execution
   }
 
   globalContext.sideEffectCount++;
-  const evidence = `[Execution Verification Tool]: plan=${input.planId} execution=${input.executionResult}`;
+  const evidence = input.planId
+    ? `[Execution Verification Tool]: plan=${input.planId} execution=${input.executionResult}`
+    : `[Execution Verification Tool]: execution=${input.executionResult}`;
   return {
     verified: true,
     proofRecord: evidence,
