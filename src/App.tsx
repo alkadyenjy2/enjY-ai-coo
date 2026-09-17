@@ -37,7 +37,7 @@ export default function App() {
     let cancelled = false;
     const loadOperationalHistory = async () => {
       try {
-        const response = await fetch('/api/agent/history?limit=50');
+        const response = await apiFetch('/api/agent/history?limit=50');
         if (!response.ok) throw new Error(`Operational history request failed with HTTP ${response.status}.`);
         const data = await response.json();
         if (!cancelled) setLogs(mapOperationalRecordsToExecutionLogs(Array.isArray(data.records) ? data.records : []));
