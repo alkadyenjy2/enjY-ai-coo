@@ -797,10 +797,9 @@ Rules for Response:
     `.trim();
 
     if (!ai) {
-      const fallbackContent = `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock real-time Gemini 3.6 Flash reasoning.`;
+      const fallbackContent = `**[Core Agent BLOCKED]** الأمر لم يُنفَّذ لأن Gemini runtime غير متاح. لا يوجد تنفيذ حي ولا evidence يثبت نجاحًا خارجيًا.`;
       const fallbackActions = [
-        { tool: 'Memory System', status: 'success', details: 'Retrieved 3 memory items' },
-        { tool: 'Connector Hub', status: 'success', details: 'Verified configured connector state without external side effects' }
+        { tool: 'Runtime Guard', status: 'blocked', details: 'Gemini runtime credential unavailable; no external side effect attempted.' }
       ];
       const fallbackRecord: OperationalExecutionRecord = {
         id: `exec-${Date.now()}`,
@@ -808,30 +807,31 @@ Rules for Response:
         command: userPromptStr,
         project: projectNameStr,
         intent: commandClass,
-        tool: 'Offline Fallback Engine',
-        selectedTools: fallbackActions.map((action) => action.tool),
+        tool: 'Runtime Guard',
+        selectedTools: ['Runtime Guard'],
         actionsExecuted: fallbackActions,
-        results: { responseSnippet: fallbackContent.slice(0, 150), mode: 'offline_fallback' },
-        state_history: ['RECEIVED', 'ROUTED', 'DISPATCHED', 'EXECUTED', 'COMPLETED'],
-        evidence: '[Offline Fallback Engine]: No Gemini credential was available; no external side effect was attempted.',
-        verificationStatus: 'NOT_REQUIRED',
-        final_state_reason: 'Offline fallback response generated without external side effects.',
+        results: { responseSnippet: fallbackContent.slice(0, 150), mode: 'blocked_runtime' },
+        state_history: ['RECEIVED', 'ROUTED', 'BLOCKED'],
+        evidence: '[Runtime Guard]: No live AI execution was attempted.',
+        verificationStatus: 'FAILED',
+        final_state_reason: 'Execution blocked because the live Gemini runtime is unavailable.',
         errors: [],
         approvalStatus: 'AUTO_APPROVED'
       };
       await rememberOperationalRecord(fallbackRecord);
       recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: fallbackRecord, content: fallbackContent });
 
-      return res.json({
+      return res.status(503).json({
         content: fallbackContent,
         executionRecord: fallbackRecord,
+        error: 'GEMINI_RUNTIME_UNAVAILABLE',
         thoughtProcess: {
           understand: `User requested: "${prompt}".`,
-          inspect: 'Verified offline fallback state.',
-          decide: 'Construct structured operational report.',
-          execute: 'Simulate workflow step completion without external side effects.',
-          verify: 'Verification Status: NOT_REQUIRED; live AI execution was not claimed.',
-          report: 'Delivered fallback report and recorded the execution event.'
+          inspect: 'Checked live Gemini runtime availability.',
+          decide: 'Blocked execution because no live model was available.',
+          execute: 'No external side effects attempted.',
+          verify: 'No success claim permitted without live execution evidence.',
+          report: 'Returned a blocked execution state.'
         },
         actionsTaken: fallbackActions
       });
