@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { Plan } from "./types";
 import { assertValidTaskGraph, validateTaskGraph } from "./validate";
+import { verifyTask } from "./evidence";
 
 const base: Plan = {
   id: "p1", goalId: "g1", version: 1, status: "PENDING", createdAt: "2026-01-01T00:00:00.000Z",
@@ -23,4 +24,11 @@ test("rejects succeeded tasks without verification", () => {
   const nodes = base.nodes.map((n) => ({ ...n }));
   nodes[0].state = "SUCCEEDED";
   assert.throws(() => assertValidTaskGraph({ ...base, nodes }), /missing verification status/);
+});
+
+
+test("preserves plan identity when verifying task evidence", () => {
+  const verified = verifyTask({ ...base.nodes[0], state: "SUCCEEDED", evidence: "real-result" }, "plan-123");
+  assert.equal(verified.planId, "plan-123");
+  assert.equal(verified.status, "VERIFIED");
 });

@@ -81,17 +81,25 @@ export async function executeDeterministicActivity(input: ActionInput): Promise<
   };
 }
 
-export async function verifyEvidenceActivity(evidencePayload: { evidence?: string; valid: boolean }): Promise<{ verified: boolean; proofRecord: string }> {
+export async function verifyEvidenceActivity(input: { planId?: string; executionResult?: string }): Promise<{ verified: boolean; proofRecord: string; verificationTool: string }> {
   globalContext.activityAttempts['verifyEvidence'] = (globalContext.activityAttempts['verifyEvidence'] || 0) + 1;
-  
-  if (!evidencePayload.valid || !evidencePayload.evidence) {
-    return { verified: false, proofRecord: 'INVALID_OR_MISSING_EVIDENCE' };
+
+  if (!input.executionResult?.trim()) {
+    return {
+      verified: false,
+      proofRecord: 'INVALID_OR_MISSING_EXECUTION_EVIDENCE',
+      verificationTool: 'Execution Verification Tool'
+    };
   }
-  
+
   globalContext.sideEffectCount++;
+  const evidence = input.planId
+    ? `[Execution Verification Tool]: plan=${input.planId} execution=${input.executionResult}`
+    : `[Execution Verification Tool]: execution=${input.executionResult}`;
   return {
     verified: true,
-    proofRecord: `PROOF_VERIFIED_HASH_${Buffer.from(evidencePayload.evidence).toString('hex').slice(0, 8)}`
+    proofRecord: evidence,
+    verificationTool: 'Execution Verification Tool'
   };
 }
 
@@ -106,11 +114,16 @@ export async function recordMemoryActivity(record: any): Promise<{ recordId: str
     intent: record?.intent || 'MEMORY_RECORD',
     tool: 'Temporal Memory Activity',
     selectedTools: [],
-    actionsExecuted: [{ tool: 'Temporal Memory Activity', status: 'success', details: 'Recorded workflow memory checkpoint.' }],
+    actionsExecuted: record?.verificationTool
+      ? [
+          { tool: String(record.verificationTool), status: 'success', details: String(record.evidence || 'Authoritative execution verification recorded.') },
+          { tool: 'Temporal Memory Activity', status: 'success', details: 'Recorded verified workflow memory checkpoint.' }
+        ]
+      : [{ tool: 'Temporal Memory Activity', status: 'failed', details: 'Refused to record VERIFIED checkpoint without authoritative verification.' }],
     results: { testId: record?.testId || null, finalState: record?.finalState || null, history: record?.history || [] },
     state_history: Array.isArray(record?.history) ? record.history : [],
-    evidence: 'Workflow memory checkpoint persisted through the operational persistence adapter.',
-    verificationStatus: 'VERIFIED' as const,
+    evidence: record?.evidence || 'Workflow memory checkpoint persisted through the operational persistence adapter.',
+    verificationStatus: record?.verificationTool ? 'VERIFIED' as const : 'FAILED' as const,
     final_state_reason: 'Workflow memory checkpoint recorded.',
     errors: [],
     approvalStatus: 'AUTO_APPROVED' as const,

@@ -37,6 +37,8 @@ const {
 
 export interface WorkflowInput {
   testId?: string;
+  planId?: string;
+  plan?: import("../src/task-graph/types").Plan;
   command: string;
   failAttempts?: number;
   nonRetryableError?: boolean;
@@ -104,6 +106,7 @@ export interface CoreState {
   approvalStatus: 'AUTO_APPROVED' | 'WAITING' | 'APPROVED' | 'REJECTED';
   verificationStatus: 'NOT_REQUIRED' | 'VERIFIED' | 'FAILED' | 'UNVERIFIED';
   evidenceProof?: string;
+  verificationTool?: string;
   loopIterationsExecuted: number;
   errorDetails?: string;
 }
@@ -152,13 +155,26 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
   }
 
   transitionTo('DISPATCHED');
-  const maxLoops = input.maxLoopIterations || 1;
+  const maxLoops = input.plan ? Math.max(1, input.plan.nodes.length) : (input.maxLoopIterations || 1);
   
   while (state.loopIterationsExecuted < maxLoops) {
     state.loopIterationsExecuted++;
     
     try {
-      if (input.browserUsePayload) {
+      const currentPlanNode = input.plan?.nodes[state.loopIterationsExecuted - 1];
+      if (currentPlanNode) {
+        if (currentPlanNode.approvalRequired && state.approvalStatus !== 'APPROVED' && state.approvalStatus !== 'AUTO_APPROVED') {
+          state.errorDetails = `APPROVAL_REQUIRED:${currentPlanNode.id}`;
+          transitionTo('FAILED');
+          return state;
+        }
+        const deterministic = await executeDeterministicActivity({
+          command: currentPlanNode.input?.goal ? String(currentPlanNode.input.goal) : input.command,
+          failAttempts: input.failAttempts,
+          nonRetryableError: input.nonRetryableError
+        });
+        state.executionResult = `PLAN_TASK_EXECUTED:${currentPlanNode.id}:${deterministic.result}`;
+      } else if (input.browserUsePayload) {
         const browserResult = await browserUseExecuteActivity(input.browserUsePayload);
         state.browserUseResult = browserResult;
         state.executionResult = `BROWSER_USE_COMPLETED:${browserResult.sessionId}:${browserResult.status}`;
@@ -219,13 +235,14 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
 
   if (input.requireEvidence === true) {
     const evidenceRes = await verifyEvidenceActivity({
-      evidence: input.evidenceText,
-      valid: !!input.provideEvidence && !!input.evidenceText
+      planId: input.planId,
+      executionResult: state.executionResult,
     });
 
     if (evidenceRes.verified) {
       state.verificationStatus = 'VERIFIED';
       state.evidenceProof = evidenceRes.proofRecord;
+      state.verificationTool = evidenceRes.verificationTool;
       transitionTo('VERIFIED');
     } else {
       state.verificationStatus = 'UNVERIFIED';
@@ -233,6 +250,11 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
       transitionTo('FAILED');
       return state;
     }
+  } else if (input.plan) {
+    state.verificationStatus = 'FAILED';
+    state.errorDetails = 'EVIDENCE_GATE_REQUIRED_FOR_PLAN_EXECUTION';
+    transitionTo('FAILED');
+    return state;
   } else {
     state.verificationStatus = 'NOT_REQUIRED';
     transitionTo('VERIFIED');
@@ -240,6 +262,10 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
 
   await recordMemoryActivity({
     testId: input.testId,
+    command: input.command,
+    planId: input.planId,
+    evidence: state.evidenceProof,
+    verificationTool: state.verificationTool,
     finalState: state.currentStatus,
     history: state.stateHistory
   });

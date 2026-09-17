@@ -14,6 +14,7 @@ import { ClinicDemoView } from './components/clinic/ClinicDemoView';
 import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
+import { isAuthoritativelyVerified } from './utils/execution-verification';
 import { apiFetch } from './auth/client';
 
 export default function App() {
@@ -55,10 +56,24 @@ export default function App() {
     setMessages(prev => [...prev, userMsg]);
     setIsAgentLoading(true);
     try {
+      const authResponse = await apiFetch('/api/auth/me');
+      const authData = await authResponse.json().catch(() => ({}));
+      if (!authResponse.ok) {
+        throw new Error(typeof authData?.error === 'string' ? authData.error : `Authentication context failed with HTTP ${authResponse.status}.`);
+      }
+      const organizations = Array.isArray(authData?.organizations) ? authData.organizations : [];
+      if (organizations.length === 0 || typeof organizations[0]?.id !== 'string') {
+        throw new Error('No authorized organization is available for this account.');
+      }
+      if (organizations.length > 1) {
+        throw new Error('Multiple authorized organizations are available; an explicit organization must be selected before execution.');
+      }
+      const organization_id = organizations[0].id;
+
       const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
+        body: JSON.stringify({ prompt: text, organization_id, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -68,14 +83,17 @@ export default function App() {
       const executionRecord = data.executionRecord;
       const stateHistory = Array.isArray(executionRecord?.state_history) ? executionRecord.state_history : [];
       const hasExecutedState = stateHistory.includes('EXECUTED');
-      const hasEvidence = typeof executionRecord?.evidence === 'string' && executionRecord.evidence.trim().length > 0;
-      const verificationStatus = executionRecord?.verificationStatus;
-      const hasValidVerification = verificationStatus === 'VERIFIED' || verificationStatus === 'NOT_REQUIRED';
       const hasErrors = Array.isArray(executionRecord?.errors) && executionRecord.errors.length > 0;
-      const executionVerified = hasExecutedState && hasEvidence && hasValidVerification && !hasErrors;
+      const executionVerified = isAuthoritativelyVerified({
+        state_history: stateHistory,
+        evidence: typeof executionRecord?.evidence === 'string' ? executionRecord.evidence : '',
+        verificationStatus: executionRecord?.verificationStatus,
+        errors: Array.isArray(executionRecord?.errors) ? executionRecord.errors : [],
+        actionsExecuted: Array.isArray(executionRecord?.actionsExecuted) ? executionRecord.actionsExecuted : [],
+      });
 
-      if (!executionVerified) {
-        throw new Error('JARVIS command completed without sufficient execution evidence. Verification is pending.');
+      if (!hasExecutedState || hasErrors || !executionVerified) {
+        throw new Error('JARVIS command completed without authoritative execution evidence. Verification is required.');
       }
 
       const agentMsg: ChatMessage = {
@@ -90,7 +108,8 @@ export default function App() {
       if (executionRecord) setLogs(prev => [...mapOperationalRecordsToExecutionLogs([executionRecord]), ...prev.filter(log => log.id !== executionRecord.id)]);
     } catch (err) {
       console.error('Agent execution error:', err);
-      setMessages(prev => [...prev, { id: `msg-${Date.now() + 1}`, sender: 'agent', content: 'Diagnosed failure in agent pipeline. Executing error protocol (Diagnose -> Verify -> Fix -> Test -> Record Lesson).', timestamp: new Date().toISOString() }]);
+      const message = err instanceof Error ? err.message : String(err);
+      setMessages(prev => [...prev, { id: `msg-${Date.now() + 1}`, sender: 'agent', content: `JARVIS could not complete this request: ${message}`, timestamp: new Date().toISOString() }]);
     } finally {
       setIsAgentLoading(false);
     }
@@ -114,7 +133,36 @@ export default function App() {
   const handleDeleteMemory = (id: string) => setMemoryItems(prev => prev.filter(m => m.id !== id));
   const handleToggleConnectorStatus = (id: string) => setConnectors(prev => prev.map(c => c.id === id ? { ...c, status: c.status === 'connected' ? 'disconnected' : 'connected', lastVerified: new Date().toISOString() } : c));
   const handleAddConnector = (newConn: Connector) => setConnectors(prev => [newConn, ...prev]);
-  const handleRunWorkflow = (id: string) => setWorkflows(prev => prev.map(w => w.id === id ? { ...w, runCount: w.runCount + 1, lastRun: new Date().toISOString(), lastStatus: 'success' } : w));
+  const handleRunWorkflow = async (id: string) => {
+    const workflow = workflows.find(w => w.id === id);
+    if (!workflow) return;
+    try {
+      const authResponse = await apiFetch('/api/auth/me');
+      const authData = await authResponse.json().catch(() => ({}));
+      const organizations = Array.isArray(authData?.organizations) ? authData.organizations : [];
+      const organization_id = organizations.length === 1 ? organizations[0]?.id : undefined;
+      if (!organization_id) throw new Error('An explicit authorized organization is required.');
+      const response = await apiFetch('/api/temporal/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: `Run workflow: ${workflow.name}`,
+          organization_id,
+          requireEvidence: true,
+          planId: workflow.id,
+          testId: `UI_WORKFLOW_${workflow.id}`
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.finalState?.currentStatus !== 'COMPLETED' || data?.finalState?.verificationStatus !== 'VERIFIED') {
+        throw new Error(data?.error || 'Workflow execution did not reach VERIFIED.');
+      }
+      setWorkflows(prev => prev.map(w => w.id === id ? { ...w, runCount: w.runCount + 1, lastRun: new Date().toISOString(), lastStatus: 'success' } : w));
+    } catch (error) {
+      console.error('Workflow execution failed:', error);
+      setWorkflows(prev => prev.map(w => w.id === id ? { ...w, lastRun: new Date().toISOString(), lastStatus: 'failed' } : w));
+    }
+  };
   const handleToggleWorkflowActive = (id: string) => setWorkflows(prev => prev.map(w => w.id === id ? { ...w, active: !w.active } : w));
   const handleAddProject = (newProj: Project) => { setProjects(prev => [newProj, ...prev]); setActiveProject(newProj); };
   const handleAddLesson = (newLes: LessonLearned) => setLessons(prev => [newLes, ...prev]);
