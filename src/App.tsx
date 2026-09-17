@@ -14,6 +14,7 @@ import { ClinicDemoView } from './components/clinic/ClinicDemoView';
 import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
+import { isAuthoritativelyVerified } from './utils/execution-verification';
 import { apiFetch } from './auth/client';
 
 export default function App() {
@@ -68,14 +69,17 @@ export default function App() {
       const executionRecord = data.executionRecord;
       const stateHistory = Array.isArray(executionRecord?.state_history) ? executionRecord.state_history : [];
       const hasExecutedState = stateHistory.includes('EXECUTED');
-      const hasEvidence = typeof executionRecord?.evidence === 'string' && executionRecord.evidence.trim().length > 0;
-      const verificationStatus = executionRecord?.verificationStatus;
-      const hasValidVerification = verificationStatus === 'VERIFIED' || verificationStatus === 'NOT_REQUIRED';
       const hasErrors = Array.isArray(executionRecord?.errors) && executionRecord.errors.length > 0;
-      const executionVerified = hasExecutedState && hasEvidence && hasValidVerification && !hasErrors;
+      const executionVerified = isAuthoritativelyVerified({
+        state_history: stateHistory,
+        evidence: typeof executionRecord?.evidence === 'string' ? executionRecord.evidence : '',
+        verificationStatus: executionRecord?.verificationStatus,
+        errors: Array.isArray(executionRecord?.errors) ? executionRecord.errors : [],
+        actionsExecuted: Array.isArray(executionRecord?.actionsExecuted) ? executionRecord.actionsExecuted : [],
+      });
 
-      if (!executionVerified) {
-        throw new Error('JARVIS command completed without sufficient execution evidence. Verification is pending.');
+      if (!hasExecutedState || hasErrors || !executionVerified) {
+        throw new Error('JARVIS command completed without authoritative execution evidence. Verification is required.');
       }
 
       const agentMsg: ChatMessage = {
