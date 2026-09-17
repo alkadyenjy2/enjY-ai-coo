@@ -14,6 +14,7 @@ import { ClinicDemoView } from './components/clinic/ClinicDemoView';
 import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
+import { apiFetch } from './auth/client';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
@@ -54,15 +55,39 @@ export default function App() {
     setMessages(prev => [...prev, userMsg]);
     setIsAgentLoading(true);
     try {
-      const response = await fetch('/api/agent/command', {
+      const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: text, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
       });
-      const data = await response.json();
-      const agentMsg: ChatMessage = { id: `msg-${Date.now() + 1}`, sender: 'agent', content: data.content || 'Task executed successfully.', timestamp: new Date().toISOString(), thoughtProcess: data.thoughtProcess, actionsTaken: data.actionsTaken };
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(typeof data?.error === 'string' ? data.error : `Agent command failed with HTTP ${response.status}.`);
+      }
+
+      const executionRecord = data.executionRecord;
+      const stateHistory = Array.isArray(executionRecord?.state_history) ? executionRecord.state_history : [];
+      const hasExecutedState = stateHistory.includes('EXECUTED');
+      const hasEvidence = typeof executionRecord?.evidence === 'string' && executionRecord.evidence.trim().length > 0;
+      const verificationStatus = executionRecord?.verificationStatus;
+      const hasValidVerification = verificationStatus === 'VERIFIED' || verificationStatus === 'NOT_REQUIRED';
+      const hasErrors = Array.isArray(executionRecord?.errors) && executionRecord.errors.length > 0;
+      const executionVerified = hasExecutedState && hasEvidence && hasValidVerification && !hasErrors;
+
+      if (!executionVerified) {
+        throw new Error('JARVIS command completed without sufficient execution evidence. Verification is pending.');
+      }
+
+      const agentMsg: ChatMessage = {
+        id: `msg-${Date.now() + 1}`,
+        sender: 'agent',
+        content: data.content || 'Command completed with recorded execution evidence.',
+        timestamp: new Date().toISOString(),
+        thoughtProcess: data.thoughtProcess,
+        actionsTaken: data.actionsTaken
+      };
       setMessages(prev => [...prev, agentMsg]);
-      if (data.executionRecord) setLogs(prev => [...mapOperationalRecordsToExecutionLogs([data.executionRecord]), ...prev.filter(log => log.id !== data.executionRecord.id)]);
+      if (executionRecord) setLogs(prev => [...mapOperationalRecordsToExecutionLogs([executionRecord]), ...prev.filter(log => log.id !== executionRecord.id)]);
     } catch (err) {
       console.error('Agent execution error:', err);
       setMessages(prev => [...prev, { id: `msg-${Date.now() + 1}`, sender: 'agent', content: 'Diagnosed failure in agent pipeline. Executing error protocol (Diagnose -> Verify -> Fix -> Test -> Record Lesson).', timestamp: new Date().toISOString() }]);
