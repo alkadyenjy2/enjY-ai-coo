@@ -133,7 +133,36 @@ export default function App() {
   const handleDeleteMemory = (id: string) => setMemoryItems(prev => prev.filter(m => m.id !== id));
   const handleToggleConnectorStatus = (id: string) => setConnectors(prev => prev.map(c => c.id === id ? { ...c, status: c.status === 'connected' ? 'disconnected' : 'connected', lastVerified: new Date().toISOString() } : c));
   const handleAddConnector = (newConn: Connector) => setConnectors(prev => [newConn, ...prev]);
-  const handleRunWorkflow = (id: string) => setWorkflows(prev => prev.map(w => w.id === id ? { ...w, runCount: w.runCount + 1, lastRun: new Date().toISOString(), lastStatus: 'success' } : w));
+  const handleRunWorkflow = async (id: string) => {
+    const workflow = workflows.find(w => w.id === id);
+    if (!workflow) return;
+    try {
+      const authResponse = await apiFetch('/api/auth/me');
+      const authData = await authResponse.json().catch(() => ({}));
+      const organizations = Array.isArray(authData?.organizations) ? authData.organizations : [];
+      const organization_id = organizations.length === 1 ? organizations[0]?.id : undefined;
+      if (!organization_id) throw new Error('An explicit authorized organization is required.');
+      const response = await apiFetch('/api/temporal/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command: `Run workflow: ${workflow.name}`,
+          organization_id,
+          requireEvidence: true,
+          planId: workflow.id,
+          testId: `UI_WORKFLOW_${workflow.id}`
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.finalState?.currentStatus !== 'COMPLETED' || data?.finalState?.verificationStatus !== 'VERIFIED') {
+        throw new Error(data?.error || 'Workflow execution did not reach VERIFIED.');
+      }
+      setWorkflows(prev => prev.map(w => w.id === id ? { ...w, runCount: w.runCount + 1, lastRun: new Date().toISOString(), lastStatus: 'success' } : w));
+    } catch (error) {
+      console.error('Workflow execution failed:', error);
+      setWorkflows(prev => prev.map(w => w.id === id ? { ...w, lastRun: new Date().toISOString(), lastStatus: 'failed' } : w));
+    }
+  };
   const handleToggleWorkflowActive = (id: string) => setWorkflows(prev => prev.map(w => w.id === id ? { ...w, active: !w.active } : w));
   const handleAddProject = (newProj: Project) => { setProjects(prev => [newProj, ...prev]); setActiveProject(newProj); };
   const handleAddLesson = (newLes: LessonLearned) => setLessons(prev => [newLes, ...prev]);
