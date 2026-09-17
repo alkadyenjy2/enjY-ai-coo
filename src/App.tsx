@@ -56,10 +56,24 @@ export default function App() {
     setMessages(prev => [...prev, userMsg]);
     setIsAgentLoading(true);
     try {
+      const authResponse = await apiFetch('/api/auth/me');
+      const authData = await authResponse.json().catch(() => ({}));
+      if (!authResponse.ok) {
+        throw new Error(typeof authData?.error === 'string' ? authData.error : `Authentication context failed with HTTP ${authResponse.status}.`);
+      }
+      const organizations = Array.isArray(authData?.organizations) ? authData.organizations : [];
+      if (organizations.length === 0 || typeof organizations[0]?.id !== 'string') {
+        throw new Error('No authorized organization is available for this account.');
+      }
+      if (organizations.length > 1) {
+        throw new Error('Multiple authorized organizations are available; an explicit organization must be selected before execution.');
+      }
+      const organization_id = organizations[0].id;
+
       const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
+        body: JSON.stringify({ prompt: text, organization_id, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -94,7 +108,8 @@ export default function App() {
       if (executionRecord) setLogs(prev => [...mapOperationalRecordsToExecutionLogs([executionRecord]), ...prev.filter(log => log.id !== executionRecord.id)]);
     } catch (err) {
       console.error('Agent execution error:', err);
-      setMessages(prev => [...prev, { id: `msg-${Date.now() + 1}`, sender: 'agent', content: 'Diagnosed failure in agent pipeline. Executing error protocol (Diagnose -> Verify -> Fix -> Test -> Record Lesson).', timestamp: new Date().toISOString() }]);
+      const message = err instanceof Error ? err.message : String(err);
+      setMessages(prev => [...prev, { id: `msg-${Date.now() + 1}`, sender: 'agent', content: `JARVIS could not complete this request: ${message}`, timestamp: new Date().toISOString() }]);
     } finally {
       setIsAgentLoading(false);
     }
