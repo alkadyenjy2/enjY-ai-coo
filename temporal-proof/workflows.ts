@@ -250,11 +250,14 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
       transitionTo('FAILED');
       return state;
     }
-  } else {
+  } else if (input.plan) {
     state.verificationStatus = 'FAILED';
-    state.errorDetails = 'EVIDENCE_GATE_REQUIRED_FOR_EXECUTION';
+    state.errorDetails = 'EVIDENCE_GATE_REQUIRED_FOR_PLAN_EXECUTION';
     transitionTo('FAILED');
     return state;
+  } else {
+    state.verificationStatus = 'NOT_REQUIRED';
+    transitionTo('VERIFIED');
   }
 
   await recordMemoryActivity({
