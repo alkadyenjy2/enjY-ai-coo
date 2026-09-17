@@ -73,3 +73,6 @@ jobs:
 
       - name: Browser Use Temporal workflow test
         run: npm run test:browser-use-temporal
+
+      - name: Vercel API routing smoke test
+        run: node --import tsx --test --test-concurrency=1 tests/vercel-routing.test.mjs
