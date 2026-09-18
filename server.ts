@@ -571,7 +571,6 @@ function isToolAllowed(intent: string, toolName: string): boolean {
 }
 
 // Durable execution entrypoint used by Inngest. The public command route only enqueues work.
-export async function executeAgentCommand(req: express.Request & { inngestRunId?: string }, res: express.Response) {
 // Public Command Center entrypoint. It accepts the command only after the durable event is accepted.
 // Final execution/verification is performed by the Inngest function.
 app.post("/api/agent/command", async (req, res) => {
@@ -608,6 +607,7 @@ app.post("/api/agent/command", async (req, res) => {
   }
 });
 
+export async function executeAgentCommand(req: express.Request & { inngestRunId?: string }, res: express.Response) {
 
   const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash", gmailApprovalConfirmed = false } = req.body;
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
@@ -897,7 +897,7 @@ Rules for Response:
     ];
 
     let responseText = response.text || "";
-    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = commandClass === "PLANNING" || commandClass === "RESEARCH_PLANNING" ? "NOT_REQUIRED" : "VERIFIED";
+    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = commandClass === "PLANNING" || commandClass === "RESEARCH_PLANNING" ? "NOT_REQUIRED" : "FAILED";
     let approvalStatus: "AUTO_APPROVED" | "REQUIRES_HUMAN_APPROVAL" | "REJECTED" = "AUTO_APPROVED";
     const executionErrors: string[] = [];
 
@@ -1083,6 +1083,18 @@ Rules for Response:
       }
     }
 
+    // Evidence Gate: non-planning commands may only become VERIFIED after concrete execution evidence.
+// Gemini output, reasoning text, or a generic "success" status is never verification evidence.
+    if (commandClass !== "PLANNING" && commandClass !== "RESEARCH_PLANNING") {
+      const hasConcreteEvidence = actionsTakenList.some((action) => {
+        if (action.status !== "success") return false;
+        const details = action.details || "";
+        if (/UNCONFIGURED|BROKEN|fallback|without external side effects/i.test(details)) return false;
+        return /verification|verified|follow-up read|post-send|REAL_LIVE|read from table|probe/i.test(details);
+      });
+      if (!hasConcreteEvidence) verificationStatus = "FAILED";
+    }
+
     // Save Execution Record into Operational Memory
     const primaryToolUsed = actionsTakenList.find(a => a.tool.includes("Supabase") || a.tool.includes("Connector") || a.tool.includes("Gemini"))?.tool || actionsTakenList[0]?.tool || "none";
     const primaryEvidence = actionsTakenList.map(a => `[${a.tool}]: ${a.details}`).join(" | ");
@@ -1097,7 +1109,7 @@ Rules for Response:
       selectedTools: actionsTakenList.map(a => a.tool),
       actionsExecuted: actionsTakenList,
       results: { responseSnippet: responseText.slice(0, 150) },
-      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : "COMPLETED"],
+      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus],
       evidence: primaryEvidence,
       verificationStatus,
       final_state_reason: verificationStatus === "VERIFIED" 
