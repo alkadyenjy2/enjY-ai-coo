@@ -9,7 +9,7 @@ export const runAgentCommand = inngest.createFunction(
     id: "jarvis-agent-command",
     name: "JARVIS Agent Command",
     triggers: { event: "jarvis/agent.command" },
-    retries: 0,
+    retries: 3,
     idempotency: "event.data.executionId",
   },
   async ({ event, step, runId }) => {
