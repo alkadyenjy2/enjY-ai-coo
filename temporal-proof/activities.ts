@@ -144,20 +144,6 @@ export async function executeDeterministicActivity(input: ActionInput): Promise<
   };
 }
 
-export async function verifyEvidenceActivity(evidencePayload: { evidence?: string; valid: boolean }): Promise<{ verified: boolean; proofRecord: string }> {
-  globalContext.activityAttempts['verifyEvidence'] = (globalContext.activityAttempts['verifyEvidence'] || 0) + 1;
-  
-  if (!evidencePayload.valid || !evidencePayload.evidence) {
-    return { verified: false, proofRecord: 'INVALID_OR_MISSING_EVIDENCE' };
-  }
-  
-  globalContext.sideEffectCount++;
-  return {
-    verified: true,
-    proofRecord: `PROOF_VERIFIED_HASH_${Buffer.from(evidencePayload.evidence).toString('hex').slice(0, 8)}`
-  };
-}
-
 export async function recordMemoryActivity(record: any): Promise<{ recordId: string; status: string }> {
   globalContext.activityAttempts['recordMemory'] = (globalContext.activityAttempts['recordMemory'] || 0) + 1;
 
