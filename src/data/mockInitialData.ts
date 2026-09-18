@@ -110,6 +110,17 @@ export const initialConnectors: Connector[] = [
     lastVerified: '2026-08-08T19:30:00Z'
   },
   {
+    id: 'conn-openai',
+    name: 'OpenAI GPT-6 Astra Engine',
+    category: 'ai',
+    description: 'Server-side OpenAI Responses API reasoning engine for command execution, function calling, and structured outputs.',
+    iconName: 'Sparkles',
+    status: 'connected',
+    authType: 'api_key',
+    capabilities: ['responses_api', 'function_calling', 'structured_outputs'],
+    lastVerified: '2026-09-19T00:00:00Z'
+  },
+  {
     id: 'conn-gemini',
     name: 'Google Gemini 3.6 Flash Engine',
     category: 'ai',
