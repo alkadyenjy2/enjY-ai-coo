@@ -1,4 +1,7 @@
 import express from "express";
+import { createHash } from "node:crypto";
+import { serve } from "inngest/express";
+import { inngest, functions as inngestFunctions } from "./src/inngest";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
@@ -53,6 +56,9 @@ app.use(express.json({
     (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
   },
 }));
+
+// Inngest durable execution endpoint. Functions are executed by the configured Inngest runtime.
+app.use("/api/inngest", serve({ client: inngest, functions: inngestFunctions }));
 
 // Telegram transport is mounted before the SPA fallback so webhook requests reach JARVIS.
 app.use("/api/telegram", createTelegramRouter());
@@ -564,8 +570,45 @@ function isToolAllowed(intent: string, toolName: string): boolean {
   return allowed.includes(toolName);
 }
 
-// API Route: Agent Command Execution (Chat / Command Center)
+// Durable execution entrypoint used by Inngest. The public command route only enqueues work.
+export async function executeAgentCommand(req: express.Request & { inngestRunId?: string }, res: express.Response) {
+// Public Command Center entrypoint. It accepts the command only after the durable event is accepted.
+// Final execution/verification is performed by the Inngest function.
 app.post("/api/agent/command", async (req, res) => {
+  try {
+    const requestBody = req.body ?? {};
+    const prompt = typeof requestBody.prompt === "string" ? requestBody.prompt : String(requestBody.prompt || "");
+    const userIdentity = requestBody?.userProfile?.id || requestBody?.userProfile?.email || requestBody?.userProfile?.source || "anonymous";
+    const tenSecondBucket = Math.floor(Date.now() / 10000);
+    const executionId = `cmd-${createHash("sha256").update(JSON.stringify({ prompt: prompt.trim(), userIdentity, tenSecondBucket })).digest("hex").slice(0, 32)}`;
+
+    const { ids } = await inngest.send({
+      id: executionId,
+      name: "jarvis/agent.command",
+      data: {
+        executionId,
+        request: requestBody,
+      },
+    });
+
+    return res.status(202).json({
+      accepted: true,
+      state: "QUEUED",
+      executionId,
+      eventId: ids?.[0] || null,
+      message: "Command accepted for durable execution. Final success is reported only after execution evidence is verified.",
+    });
+  } catch (error: any) {
+    console.error("Failed to enqueue JARVIS command:", error?.message || error);
+    return res.status(503).json({
+      accepted: false,
+      state: "BLOCKED",
+      error: "Durable execution engine unavailable.",
+    });
+  }
+});
+
+
   const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash", gmailApprovalConfirmed = false } = req.body;
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
   const projectNameStr = typeof activeProject?.name === "string" ? activeProject.name : "Core Operations HQ";
@@ -1099,7 +1142,7 @@ Rules for Response:
     ];
 
     let fallbackReport = "";
-    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "VERIFIED";
+    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "NOT_REQUIRED";
 
     if (commandClass === "PLANNING") {
       verificationStatus = "NOT_REQUIRED";
