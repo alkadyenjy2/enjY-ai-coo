@@ -18,7 +18,7 @@ export const initialUserProfile: UserProfile = {
   autonomyLevel: "full_autonomy",
   decisionStyle: "execute_first",
   executionSpeed: "fast",
-  preferredTools: ["n8n", "GitHub", "Supabase", "Gemini 3.6 Flash", "Telegram", "Vercel"],
+  preferredTools: ["n8n", "GitHub", "Supabase", "OpenAI GPT-6 Astra", "Telegram", "Vercel"],
   dislikedTools: ["manual CSV imports", "unnecessary wizard steps"],
   dislikedUIPatterns: ["nested modal inside modal", "hidden action buttons"],
   repeatedApprovals: ["Auto-fix lint errors", "Deploy preview on PR", "Save lessons learned on bug fix"],
@@ -373,10 +373,10 @@ export const initialLessonsLearned: LessonLearned[] = [
 
 export const initialAIModels: AIModelOption[] = [
   {
-    id: 'gemini-3.6-flash',
-    name: 'Google Gemini 3.6 Flash (Default)',
-    provider: 'Gemini',
-    recommendedFor: 'Fast reasoning, general operations, chat command center, workflow orchestration',
+    id: 'gpt-6-astra',
+    name: 'OpenAI GPT-6 Astra (Default)',
+    provider: 'OpenAI',
+    recommendedFor: 'Primary reasoning, command center, tool calling, workflow orchestration',
     isLocal: false,
     active: true,
     speed: 'Ultra Fast'
@@ -401,7 +401,7 @@ export const initialAIModels: AIModelOption[] = [
   },
   {
     id: 'openai-gpt4o',
-    name: 'OpenAI GPT-4o',
+    name: 'OpenAI GPT-4o (Legacy)',
     provider: 'OpenAI',
     recommendedFor: 'Secondary cloud model comparison and fallback validation',
     isLocal: false,
