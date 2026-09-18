@@ -49,17 +49,80 @@ export function calculateQualificationScore(lead: LeadRecord): number {
   return Math.max(0, Math.min(100, ratingSignal + reviewSignal + websiteSignal + contactSignal));
 }
 
-export async function classifyDirectiveActivity(command: string): Promise<{ intent: string; confidence: number }> {
+export type CanonicalIntentMode = 'PLAN' | 'EXECUTE' | 'REPORT' | 'QUERY';
+
+export interface CanonicalDirective {
+  intent: string;
+  confidence: number;
+  mode: CanonicalIntentMode;
+  requiresApproval: boolean;
+  requiresEvidence: boolean;
+}
+
+export async function classifyDirectiveActivity(command: string): Promise<CanonicalDirective> {
   globalContext.activityAttempts['classifyDirective'] = (globalContext.activityAttempts['classifyDirective'] || 0) + 1;
+
+  const normalized = command.toLowerCase().trim();
+  const destructive = /\b(delete|drop|destroy|remove|purge)\b|حذف|امسح|احذف/.test(normalized);
+  const query = /\b(query|select|lookup|read|list|show)\b|استعلام|اقرأ|اعرض|قائمة/.test(normalized);
+  const report = /\b(report|summary|status|briefing)\b|تقرير|ملخص|حالة/.test(normalized);
+  const planning = /\b(plan|planning|roadmap|strategy)\b|خطة|استراتيجية|خارطة طريق/.test(normalized);
+  const explicitExecute = /\b(execute|run|send|update|create|publish|deploy)\b|نفذ|شغل|ارسل|حدّث|أنشئ|انشر|انشر/.test(normalized);
+
+  if (destructive) {
+    return { intent: 'DESTRUCTIVE_ACTION', confidence: 0.99, mode: 'EXECUTE', requiresApproval: true, requiresEvidence: true };
+  }
+  if (planning) {
+    return { intent: 'PLANNING', confidence: 0.99, mode: 'PLAN', requiresApproval: false, requiresEvidence: false };
+  }
+  if (report) {
+    return { intent: 'REPORTING', confidence: 0.96, mode: 'REPORT', requiresApproval: false, requiresEvidence: true };
+  }
+  if (query) {
+    return { intent: 'DATABASE_QUERY', confidence: 0.96, mode: 'QUERY', requiresApproval: false, requiresEvidence: true };
+  }
+  if (explicitExecute) {
+    return { intent: 'GENERAL_EXECUTION', confidence: 0.93, mode: 'EXECUTE', requiresApproval: false, requiresEvidence: true };
+  }
+  return { intent: 'GENERAL_EXECUTION', confidence: 0.80, mode: 'EXECUTE', requiresApproval: false, requiresEvidence: true };
+}
+
+export interface EvidenceVerificationInput {
+  executionResult?: string;
+  evidence?: string;
+  source?: 'activity-result' | 'independent-verification';
+}
+
+export async function verifyEvidenceActivity(
+  evidencePayload: EvidenceVerificationInput
+): Promise<{ verified: boolean; proofRecord: string; source?: string }> {
+  globalContext.activityAttempts['verifyEvidence'] = (globalContext.activityAttempts['verifyEvidence'] || 0) + 1;
+
+  const executionResult = evidencePayload.executionResult?.trim();
+  const evidence = evidencePayload.evidence?.trim();
+  const source = evidencePayload.source;
+
+  // User-supplied evidence text is never accepted as proof by itself.
+  if (!executionResult || !source || (source !== 'activity-result' && source !== 'independent-verification')) {
+    return { verified: false, proofRecord: 'INVALID_OR_MISSING_EXECUTION_EVIDENCE', source };
+  }
+
+  if (/\b(FAILED|ERROR|UNAVAILABLE|CANCELLED|TIMED_OUT)\b/i.test(executionResult)) {
+    return { verified: false, proofRecord: 'EXECUTION_RESULT_NOT_SUCCESSFUL', source };
+  }
+
+  // If a caller supplies evidence, it must match the actual execution result exactly.
+  if (evidence && evidence !== executionResult) {
+    return { verified: false, proofRecord: 'EVIDENCE_DOES_NOT_MATCH_EXECUTION_RESULT', source };
+  }
+
   globalContext.sideEffectCount++;
-  
-  if (command.toLowerCase().includes('delete') || command.toLowerCase().includes('drop')) {
-    return { intent: 'DESTRUCTIVE_ACTION', confidence: 0.98 };
-  }
-  if (command.toLowerCase().includes('query') || command.toLowerCase().includes('select')) {
-    return { intent: 'DATABASE_QUERY', confidence: 0.95 };
-  }
-  return { intent: 'GENERAL_EXECUTION', confidence: 0.90 };
+  const canonical = JSON.stringify({ executionResult, source });
+  return {
+    verified: true,
+    proofRecord: `PROOF_VERIFIED_ACTIVITY_RESULT_${Buffer.from(canonical).toString('hex').slice(0, 16)}`,
+    source
+  };
 }
 
 export async function executeDeterministicActivity(input: ActionInput): Promise<{ result: string; attempt: number }> {
