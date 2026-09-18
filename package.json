@@ -26,7 +26,9 @@
     "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs",
     "gmail:oauth": "node --import tsx scripts/gmail-oauth.ts",
     "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts",
-    "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts"
+    "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts",
+    "build:worker": "esbuild temporal-worker.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/temporal-worker.cjs",
+    "start:worker": "node dist/temporal-worker.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
