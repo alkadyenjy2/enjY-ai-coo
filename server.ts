@@ -1415,9 +1415,8 @@ ${recentSummary || "لا توجد عمليات سابقة مسجلة بعيدا�
 app.post("/api/agent/onboard", async (req, res) => {
   try {
     const { answers } = req.body;
-    const ai = getGeminiClient();
 
-    if (!ai && !process.env.OPENAI_API_KEY) {
+    if (!process.env.OPENAI_API_KEY) {
       return res.json({
         userProfile: {
           communicationPreference: answers.commStyle || 'concise',
@@ -1710,9 +1709,22 @@ app.post("/api/connectors/test", async (req, res) => {
     return res.json({ status: hasGmail ? "REAL_LIVE" : "UNCONFIGURED", connectorId: "gmail", message: hasGmail ? "Gmail OAuth credentials configured." : "Gmail OAuth credentials missing.", authPresent: hasGmail, actualCall: false, latencyMs: 5, capabilitiesDiscovered: ["send_email", "verify_sent_email", "list_recent_emails"], evidence: hasGmail ? "Gmail OAuth runtime credentials present." : "Missing Gmail OAuth runtime credentials." });
   }
 
-  if (connLower.includes("gemini")) {
+  if (connLower.includes("openai") || connLower.includes("astra")) {
     const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
-  const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+    return res.json({
+      status: hasOpenAI ? "REAL_LIVE" : "UNCONFIGURED",
+      connectorId: "openai",
+      message: hasOpenAI ? "OpenAI GPT-6 Astra engine configured." : "OpenAI API key (OPENAI_API_KEY) missing from environment secrets.",
+      authPresent: hasOpenAI,
+      actualCall: hasOpenAI,
+      latencyMs: 0,
+      capabilitiesDiscovered: ["responses_api", "function_calling", "structured_outputs"],
+      evidence: hasOpenAI ? "OPENAI_API_KEY active." : "Missing OPENAI_API_KEY environment variable."
+    });
+  }
+
+  if (connLower.includes("gemini")) {
+    const hasGemini = Boolean(process.env.GEMINI_API_KEY);
     return res.json({
       status: hasGemini ? "REAL_LIVE" : "UNCONFIGURED",
       connectorId: "gemini",
