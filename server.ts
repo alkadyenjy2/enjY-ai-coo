@@ -220,6 +220,7 @@ app.get("/api/health", (req, res) => {
 
 // API Route: Readiness Check
 const readinessHandler = (_req: express.Request, res: express.Response) => {
+  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
   const hasGemini = Boolean(process.env.GEMINI_API_KEY);
   const hasSupabase = Boolean(
     (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
@@ -234,7 +235,7 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     supabase: hasSupabase,
     temporal: hasExternalTemporal || !requireLiveDependencies,
   };
-  const ready = checks.process && (!requireLiveDependencies || (checks.gemini && checks.supabase && checks.temporal));
+  const ready = checks.process && (!requireLiveDependencies || (checks.openai && checks.supabase && checks.temporal));
   return res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "degraded",
     requireLiveDependencies,
@@ -242,7 +243,7 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     timestamp: new Date().toISOString(),
   });
 };
-app.get(["/api/ready", "/api/readiness"], readinessHandler);
+app.get(["/api/ready", "/api/readiness", "/api/healthz"], readinessHandler);
 
 // API Routes: Authentication and organization context
 app.get("/api/auth/me", requireAuth, async (req, res) => {
