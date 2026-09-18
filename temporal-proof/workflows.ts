@@ -90,6 +90,7 @@ export interface CoreState {
   currentStatus: 'RECEIVED' | 'ROUTED' | 'DISPATCHED' | 'WAITING_FOR_APPROVAL' | 'EXECUTED' | 'VERIFIED' | 'COMPLETED' | 'REJECTED' | 'FAILED';
   stateHistory: string[];
   intent?: string;
+  intentMode?: 'PLAN' | 'EXECUTE' | 'REPORT' | 'QUERY';
   executionResult?: string;
   browserUseResult?: any;
   postizResult?: any;
@@ -104,6 +105,7 @@ export interface CoreState {
   approvalStatus: 'AUTO_APPROVED' | 'WAITING' | 'APPROVED' | 'REJECTED';
   verificationStatus: 'NOT_REQUIRED' | 'VERIFIED' | 'FAILED' | 'UNVERIFIED';
   evidenceProof?: string;
+  evidenceSource?: string;
   loopIterationsExecuted: number;
   errorDetails?: string;
 }
@@ -136,8 +138,18 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
   transitionTo('ROUTED');
   const classification = await classifyDirectiveActivity(input.command);
   state.intent = classification.intent;
+  state.intentMode = classification.mode;
 
-  if (input.requireHumanApproval) {
+  // The Temporal execution workflow is not a planning engine. Planning directives are
+  // routed out instead of being silently executed as GENERAL_EXECUTION.
+  if (classification.mode === 'PLAN') {
+    state.errorDetails = 'PLANNING_DIRECTIVE_REQUIRES_PLANNER';
+    transitionTo('REJECTED');
+    return state;
+  }
+
+  const requiresHumanApproval = input.requireHumanApproval || classification.requiresApproval;
+  if (requiresHumanApproval) {
     state.approvalStatus = 'WAITING';
     transitionTo('WAITING_FOR_APPROVAL');
     await condition(() => humanApprovedDecision !== null, '60 seconds');
@@ -217,25 +229,25 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
 
   transitionTo('EXECUTED');
 
-  if (input.requireEvidence === true) {
-    const evidenceRes = await verifyEvidenceActivity({
-      evidence: input.evidenceText,
-      valid: !!input.provideEvidence && !!input.evidenceText
-    });
+  // Architecture freeze rule: every execution must pass the evidence gate. The
+  // proof is derived from the actual activity result, never from a caller-controlled
+  // success flag or arbitrary evidence string.
+  const evidenceRes = await verifyEvidenceActivity({
+    executionResult: state.executionResult,
+    evidence: input.provideEvidence ? input.evidenceText : undefined,
+    source: 'activity-result'
+  });
 
-    if (evidenceRes.verified) {
-      state.verificationStatus = 'VERIFIED';
-      state.evidenceProof = evidenceRes.proofRecord;
-      transitionTo('VERIFIED');
-    } else {
-      state.verificationStatus = 'UNVERIFIED';
-      state.errorDetails = 'EVIDENCE_GATE_CHECK_FAILED';
-      transitionTo('FAILED');
-      return state;
-    }
-  } else {
-    state.verificationStatus = 'NOT_REQUIRED';
+  if (evidenceRes.verified) {
+    state.verificationStatus = 'VERIFIED';
+    state.evidenceProof = evidenceRes.proofRecord;
+    state.evidenceSource = evidenceRes.source;
     transitionTo('VERIFIED');
+  } else {
+    state.verificationStatus = 'UNVERIFIED';
+    state.errorDetails = 'EVIDENCE_GATE_CHECK_FAILED';
+    transitionTo('FAILED');
+    return state;
   }
 
   await recordMemoryActivity({
