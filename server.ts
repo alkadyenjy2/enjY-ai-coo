@@ -1329,7 +1329,7 @@ ${recentSummary || "لا توجد عمليات سابقة مسجلة بعيدا�
       actionsTaken: actionsTakenList
     });
   }
-});
+}
 
 // API Route: Onboarding Discovery Quiz AI Synthesis
 app.post("/api/agent/onboard", async (req, res) => {
