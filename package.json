@@ -49,7 +49,7 @@
     "recharts": "^3.10.1",
     "vite": "^6.2.3",
     "@supabase/supabase-js": "^2.112.4",
-    "inngest": "^4.0.0"
+    "inngest": "^4.20.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
