@@ -15,6 +15,7 @@ import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkf
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 import { apiFetch } from './auth/client';
+import { AuthGate } from './components/AuthGate';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
@@ -32,12 +33,14 @@ export default function App() {
   const [commandTemplates, setCommandTemplates] = useState<CommandTemplate[]>(initialCommandTemplates);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const loadOperationalHistory = async () => {
       try {
-        const response = await fetch('/api/agent/history?limit=50');
+        if (!organizationId) return;
+        const response = await apiFetch(`/api/agent/history?limit=50&organization_id=${encodeURIComponent(organizationId)}`);
         if (!response.ok) throw new Error(`Operational history request failed with HTTP ${response.status}.`);
         const data = await response.json();
         if (!cancelled) setLogs(mapOperationalRecordsToExecutionLogs(Array.isArray(data.records) ? data.records : []));
@@ -48,7 +51,7 @@ export default function App() {
     };
     void loadOperationalHistory();
     return () => { cancelled = true; };
-  }, []);
+  }, [organizationId]);
 
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = { id: `msg-${Date.now()}`, sender: 'user', content: text, timestamp: new Date().toISOString() };
@@ -58,7 +61,7 @@ export default function App() {
       const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
+        body: JSON.stringify({ prompt: text, organization_id: organizationId, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -124,6 +127,7 @@ export default function App() {
   const handleTogglePinCommandTemplate = (templateId: string) => setCommandTemplates(prev => prev.map(t => t.id === templateId ? { ...t, isPinned: !t.isPinned } : t));
 
   return (
+    <AuthGate onAuthenticated={(id) => setOrganizationId(id)}>
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
       <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenOnboarding={() => setIsOnboardingOpen(true)} onOpenCommandCenter={() => setCurrentView('chat')} />
       <div className="mx-auto w-full max-w-7xl border-x border-b border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-emerald-200">FREE-FIRST AI ROUTING • VERIFY BEFORE DONE • PAID ROUTES REQUIRE EXPLICIT APPROVAL</div>
@@ -156,5 +160,6 @@ export default function App() {
       </footer>
       <OnboardingQuizModal isOpen={isOnboardingOpen} onClose={() => setIsOnboardingOpen(false)} onComplete={handleOnboardingComplete} />
     </div>
+    </AuthGate>
   );
 }
