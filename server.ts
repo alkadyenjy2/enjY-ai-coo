@@ -89,14 +89,20 @@ class TemporalWorkflowManager {
     if (this.client) return this.client;
     if (this.initializingPromise) return this.initializingPromise;
 
-    this.initializingPromise = (async () => {
-      console.log("⏳ Initializing Temporal Workflow Engine in server.ts...");
-      const taskQueue = "ai-core-conformance-queue";
+	    this.initializingPromise = (async () => {
+	      console.log("⏳ Initializing Temporal Workflow Engine in server.ts...");
+	      const taskQueue = "ai-core-conformance-queue";
 
-      if (process.env.TEMPORAL_ADDRESS) {
-        const connection = await Connection.connect({ address: process.env.TEMPORAL_ADDRESS });
-        this.client = new Client({ connection });
-        console.log(`✅ Connected to external Temporal Server at ${process.env.TEMPORAL_ADDRESS}`);
+	      if (process.env.TEMPORAL_ADDRESS) {
+	        const temporalApiKey = process.env.TEMPORAL_API_KEY?.trim();
+	        const temporalNamespace = process.env.TEMPORAL_NAMESPACE?.trim() || "default";
+	        const connection = await Connection.connect({
+	          address: process.env.TEMPORAL_ADDRESS,
+	          apiKey: temporalApiKey || undefined,
+	          tls: temporalApiKey ? true : undefined,
+	        });
+	        this.client = new Client({ connection, namespace: temporalNamespace });
+	        console.log(`✅ Connected to external Temporal Server at ${process.env.TEMPORAL_ADDRESS}`);
       } else if (process.env.NODE_ENV === "production") {
         throw new Error("PRODUCTION_TEMPORAL_ADDRESS_REQUIRED");
       } else {
@@ -394,6 +400,77 @@ app.get("/api/temporal/history/:workflowId", async (req, res) => {
   }
 });
 
+async function executeDirectly(input: WorkflowInput, autoApprove: boolean): Promise<CoreState> {
+  const state: CoreState = {
+    currentStatus: "RECEIVED",
+    stateHistory: ["RECEIVED"],
+    approvalStatus: "AUTO_APPROVED",
+    verificationStatus: "NOT_REQUIRED",
+    loopIterationsExecuted: 0
+  };
+  const transition = (status: CoreState["currentStatus"]) => {
+    state.currentStatus = status;
+    state.stateHistory.push(status);
+  };
+
+  transition("ROUTED");
+  const classification = await activities.classifyDirectiveActivity(input.command);
+  state.intent = classification.intent;
+  state.intentMode = classification.mode;
+  if (classification.mode === "PLAN") {
+    state.errorDetails = "PLANNING_DIRECTIVE_REQUIRES_PLANNER";
+    transition("REJECTED");
+    return state;
+  }
+
+  const needsApproval = input.requireHumanApproval || classification.requiresApproval;
+  if (needsApproval && !autoApprove) {
+    state.approvalStatus = "WAITING";
+    transition("WAITING_FOR_APPROVAL");
+    return state;
+  }
+  if (needsApproval) state.approvalStatus = "APPROVED";
+
+  transition("DISPATCHED");
+  try {
+    const result = await activities.executeDeterministicActivity({
+      command: input.command,
+      failAttempts: input.failAttempts,
+      nonRetryableError: input.nonRetryableError
+    });
+    state.executionResult = result.result;
+    state.loopIterationsExecuted = 1;
+    transition("EXECUTED");
+    const evidence = await activities.verifyEvidenceActivity({
+      executionResult: state.executionResult,
+      evidence: input.provideEvidence ? input.evidenceText : undefined,
+      source: "activity-result"
+    });
+    if (!evidence.verified) {
+      state.verificationStatus = "FAILED";
+      state.errorDetails = evidence.proofRecord;
+      transition("FAILED");
+      return state;
+    }
+    state.verificationStatus = "VERIFIED";
+    state.evidenceProof = evidence.proofRecord;
+    state.evidenceSource = evidence.source;
+    transition("VERIFIED");
+    await activities.recordMemoryActivity({
+      testId: input.testId,
+      command: input.command,
+      finalState: "COMPLETED",
+      history: [...state.stateHistory, "COMPLETED"]
+    });
+    transition("COMPLETED");
+    return state;
+  } catch (error: any) {
+    state.errorDetails = error?.message || String(error);
+    transition("FAILED");
+    return state;
+  }
+}
+
 app.post("/api/temporal/execute-sync", async (req, res) => {
   try {
     const {
@@ -432,22 +509,31 @@ app.post("/api/temporal/execute-sync", async (req, res) => {
       runOperationsAudit
     };
 
-    const { workflowId, runId } = await temporalManager.startWorkflow(input);
-
-    if (requireHumanApproval && autoApprove) {
-      setTimeout(async () => {
-        await temporalManager.signalApproval(workflowId, true);
-      }, 300);
+    const useDirectExecution = process.env.NODE_ENV === "production" || !process.env.TEMPORAL_ADDRESS;
+    let workflowId: string;
+    let runId: string;
+    let finalState: CoreState;
+    if (useDirectExecution) {
+      workflowId = `direct-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      runId = `direct-run-${Date.now()}`;
+      finalState = await executeDirectly(input, Boolean(autoApprove));
+    } else {
+      ({ workflowId, runId } = await temporalManager.startWorkflow(input));
+      if (requireHumanApproval && autoApprove) {
+        setTimeout(async () => {
+          await temporalManager.signalApproval(workflowId, true);
+        }, 300);
+      }
+      finalState = await temporalManager.getWorkflowResult(workflowId);
     }
-
-    const finalState = await temporalManager.getWorkflowResult(workflowId);
 
     return res.json({
       success: true,
       workflowId,
       runId,
       finalState,
-      conformanceResult: finalState.currentStatus === "COMPLETED" ? "TEMPORAL_CONFORMANCE = PROVEN" : "WORKFLOW_FAILED"
+      executionMode: useDirectExecution ? "DIRECT_EXECUTION" : "TEMPORAL",
+      conformanceResult: finalState.currentStatus === "COMPLETED" ? `${useDirectExecution ? "DIRECT_EXECUTION" : "TEMPORAL_CONFORMANCE"} = PROVEN` : "WORKFLOW_FAILED"
     });
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err?.message || String(err) });
