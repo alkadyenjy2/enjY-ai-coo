@@ -40,8 +40,7 @@ test('Browser Use workflow executes through the adapter and Temporal activity', 
         command: 'Open example.com and extract the page title',
         browserUsePayload: { task: 'Open example.com and extract the page title' },
         requireEvidence: true,
-        provideEvidence: true,
-        evidenceText: 'https://example.com:title=Example'
+        provideEvidence: false
       }]
     }));
 
