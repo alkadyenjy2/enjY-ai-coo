@@ -207,11 +207,14 @@ const getGeminiClient = () => {
 
 // API Route: Health Check
 app.get("/api/health", (req, res) => {
+  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
+  const hasGemini = Boolean(process.env.GEMINI_API_KEY);
   res.json({
     status: "ok",
     system: "Core AI Operations Agent",
     version: "2.5.0",
-    hasApiKey: Boolean(process.env.OPENAI_API_KEY),
+    hasApiKey: hasOpenAI || hasGemini,
+    modelProviders: { openai: hasOpenAI, gemini: hasGemini },
     temporalEngineActive: Boolean(process.env.TEMPORAL_ADDRESS),
     executionHistoryCount: operationalMemoryRecords.length,
     timestamp: new Date().toISOString()
@@ -227,15 +230,18 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   );
   const hasExternalTemporal = Boolean(process.env.TEMPORAL_ADDRESS);
+  const hasModelProvider = hasOpenAI || hasGemini;
+  const directExecutionActive = process.env.NODE_ENV === "production";
   const requireLiveDependencies = process.env.NODE_ENV === "production" || process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
   const checks = {
     process: true,
     openai: hasOpenAI,
     gemini: hasGemini,
     supabase: hasSupabase,
-    temporal: hasExternalTemporal || !requireLiveDependencies,
+    temporal: hasExternalTemporal || directExecutionActive || !requireLiveDependencies,
+    execution: directExecutionActive || hasExternalTemporal,
   };
-  const ready = checks.process && (!requireLiveDependencies || (checks.openai && checks.supabase && checks.temporal));
+  const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.execution));
   return res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "degraded",
     requireLiveDependencies,
