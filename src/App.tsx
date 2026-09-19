@@ -95,18 +95,6 @@ export default function App() {
 
   const handleRunQuickCommand = (cmd: string) => { setCurrentView('chat'); handleSendMessage(cmd); };
 
-  const handleOnboardingComplete = (updatedProfile: UserProfile, newProject: Project) => {
-    setUserProfile(updatedProfile);
-    setProjects(prev => [newProject, ...prev]);
-    setActiveProject(newProject);
-    const newMem: MemoryItem = {
-      id: `mem-${Date.now()}`, layer: 'user', title: `Discovery Profile for ${newProject.name}`,
-      content: `Comm: ${updatedProfile.communicationPreference}, Tech: ${updatedProfile.technicalLevel}, Autonomy: ${updatedProfile.autonomyLevel}`,
-      tags: ['onboarding', 'profile', newProject.name], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), confidence: 100, verified: true,
-    };
-    setMemoryItems(prev => [newMem, ...prev]);
-  };
-
   const handleAddMemory = (item: Omit<MemoryItem, 'id' | 'createdAt' | 'updatedAt'>) => setMemoryItems(prev => [{ ...item, id: `mem-${Date.now()}`, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }, ...prev]);
   const handleDeleteMemory = (id: string) => setMemoryItems(prev => prev.filter(m => m.id !== id));
   const handleToggleConnectorStatus = (id: string) => setConnectors(prev => prev.map(c => c.id === id ? { ...c, status: c.status === 'connected' ? 'disconnected' : 'connected', lastVerified: new Date().toISOString() } : c));
@@ -122,7 +110,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#050816] text-zinc-100 flex flex-col font-sans selection:bg-cyan-400 selection:text-slate-950">
-      <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenOnboarding={() => setIsOnboardingOpen(true)} onOpenCommandCenter={() => setCurrentView('chat')} />
+      <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenCommandCenter={() => setCurrentView('chat')} />
       <div className="mx-auto w-full max-w-7xl border-x border-b border-cyan-400/15 bg-gradient-to-r from-violet-500/10 via-cyan-400/5 to-transparent px-4 py-2 text-center text-[11px] font-medium tracking-wide text-cyan-100">AI OPERATIONS CORE • EVIDENCE REQUIRED • APPROVAL BEFORE SIDE EFFECTS</div>
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         <Sidebar currentView={currentView} onSelectView={setCurrentView} memoryCount={memoryItems.length} connectorsCount={connectors.length} workflowsCount={workflows.length} lessonsCount={lessons.length} />
