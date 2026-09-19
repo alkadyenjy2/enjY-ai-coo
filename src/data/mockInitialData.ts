@@ -18,7 +18,7 @@ export const initialUserProfile: UserProfile = {
   autonomyLevel: "full_autonomy",
   decisionStyle: "execute_first",
   executionSpeed: "fast",
-  preferredTools: ["n8n", "GitHub", "Supabase", "Gemini 3.6 Flash", "Telegram", "Vercel"],
+  preferredTools: ["n8n", "GitHub", "Supabase", "OpenAI GPT-6 Astra", "Telegram", "Vercel"],
   dislikedTools: ["manual CSV imports", "unnecessary wizard steps"],
   dislikedUIPatterns: ["nested modal inside modal", "hidden action buttons"],
   repeatedApprovals: ["Auto-fix lint errors", "Deploy preview on PR", "Save lessons learned on bug fix"],
@@ -108,6 +108,17 @@ export const initialConnectors: Connector[] = [
     authType: 'oauth',
     capabilities: ['read_repos', 'write_code', 'create_prs', 'manage_actions'],
     lastVerified: '2026-08-08T19:30:00Z'
+  },
+  {
+    id: 'conn-openai',
+    name: 'OpenAI GPT-6 Astra Engine',
+    category: 'ai',
+    description: 'Server-side OpenAI Responses API reasoning engine for command execution, function calling, and structured outputs.',
+    iconName: 'Sparkles',
+    status: 'connected',
+    authType: 'api_key',
+    capabilities: ['responses_api', 'function_calling', 'structured_outputs'],
+    lastVerified: '2026-09-19T00:00:00Z'
   },
   {
     id: 'conn-gemini',
@@ -373,10 +384,10 @@ export const initialLessonsLearned: LessonLearned[] = [
 
 export const initialAIModels: AIModelOption[] = [
   {
-    id: 'gemini-3.6-flash',
-    name: 'Google Gemini 3.6 Flash (Default)',
-    provider: 'Gemini',
-    recommendedFor: 'Fast reasoning, general operations, chat command center, workflow orchestration',
+    id: 'gpt-6-astra',
+    name: 'OpenAI GPT-6 Astra (Default)',
+    provider: 'OpenAI',
+    recommendedFor: 'Primary reasoning, command center, tool calling, workflow orchestration',
     isLocal: false,
     active: true,
     speed: 'Ultra Fast'
@@ -401,7 +412,7 @@ export const initialAIModels: AIModelOption[] = [
   },
   {
     id: 'openai-gpt4o',
-    name: 'OpenAI GPT-4o',
+    name: 'OpenAI GPT-4o (Legacy)',
     provider: 'OpenAI',
     recommendedFor: 'Secondary cloud model comparison and fallback validation',
     isLocal: false,

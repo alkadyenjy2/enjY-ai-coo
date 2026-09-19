@@ -21,6 +21,7 @@ import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhoo
 import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
+import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -38,7 +39,7 @@ app.locals.jarvisTelegramHandler = async ({ chatId, text }: { chatId: number; te
   const response = await fetch(`${baseUrl}/api/agent/command`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ prompt: text, userProfile: { source: "telegram", telegramChatId: chatId }, activeProject: "AI CORE COO", memoryContext: "", model: "gemini-3.6-flash" }),
+    body: JSON.stringify({ prompt: text, userProfile: { source: "telegram", telegramChatId: chatId }, activeProject: "AI CORE COO", memoryContext: "", model: "gpt-6-astra" }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || `JARVIS returned ${response.status}`);
@@ -210,7 +211,7 @@ app.get("/api/health", (req, res) => {
     status: "ok",
     system: "Core AI Operations Agent",
     version: "2.5.0",
-    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+    hasApiKey: Boolean(process.env.OPENAI_API_KEY),
     temporalEngineActive: Boolean(process.env.TEMPORAL_ADDRESS),
     executionHistoryCount: operationalMemoryRecords.length,
     timestamp: new Date().toISOString()
@@ -219,6 +220,7 @@ app.get("/api/health", (req, res) => {
 
 // API Route: Readiness Check
 const readinessHandler = (_req: express.Request, res: express.Response) => {
+  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
   const hasGemini = Boolean(process.env.GEMINI_API_KEY);
   const hasSupabase = Boolean(
     (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
@@ -228,11 +230,12 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
   const requireLiveDependencies = process.env.NODE_ENV === "production" || process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
   const checks = {
     process: true,
+    openai: hasOpenAI,
     gemini: hasGemini,
     supabase: hasSupabase,
     temporal: hasExternalTemporal || !requireLiveDependencies,
   };
-  const ready = checks.process && (!requireLiveDependencies || (checks.gemini && checks.supabase && checks.temporal));
+  const ready = checks.process && (!requireLiveDependencies || (checks.openai && checks.supabase && checks.temporal));
   return res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "degraded",
     requireLiveDependencies,
@@ -240,7 +243,7 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     timestamp: new Date().toISOString(),
   });
 };
-app.get(["/api/ready", "/api/readiness"], readinessHandler);
+app.get(["/api/ready", "/api/readiness", "/api/healthz"], readinessHandler);
 
 // API Routes: Authentication and organization context
 app.get("/api/auth/me", requireAuth, async (req, res) => {
@@ -652,7 +655,7 @@ function isToolAllowed(intent: string, toolName: string): boolean {
 
 // API Route: Agent Command Execution (Chat / Command Center)
 app.post("/api/agent/command", async (req, res) => {
-  const { prompt, userProfile, activeProject, memoryContext, model = "gemini-3.6-flash", gmailApprovalConfirmed = false } = req.body;
+  const { prompt, userProfile, activeProject, memoryContext, model = "gpt-6-astra", gmailApprovalConfirmed = false } = req.body;
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
   const projectNameStr = typeof activeProject?.name === "string" ? activeProject.name : "Core Operations HQ";
   const commandClass = classifyCommand(userPromptStr);
@@ -773,7 +776,8 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   try {
-    const ai = getGeminiClient();
+    const isOpenAIRequested = model === "gpt-6-astra";
+    const ai = isOpenAIRequested ? null : getGeminiClient();
     
     // System instruction detailing the Master Prompt Core AI Agent rules
     const systemInstruction = `
@@ -805,8 +809,8 @@ Rules for Response:
 5. Never return generic Master COO Briefing unless command is SYSTEM_HEALTH or REPORTING.
     `.trim();
 
-    if (!ai) {
-      const fallbackContent = `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock real-time Gemini 3.6 Flash reasoning.`;
+    if (!ai && !isOpenAIRequested) {
+      const fallbackContent = `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock the configured Gemini fallback engine.`;
       const fallbackActions = [
         { tool: 'Memory System', status: 'success', details: 'Retrieved 3 memory items' },
         { tool: 'Connector Hub', status: 'success', details: 'Verified configured connector state without external side effects' }
@@ -923,23 +927,42 @@ Rules for Response:
 
     const tools = allowedFuncDecls.length > 0 ? [{ functionDeclarations: allowedFuncDecls }] : undefined;
 
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents: prompt,
-      config: {
-        systemInstruction,
-        temperature: 0.7,
-        tools
-      }
-    });
+    const isOpenAIModel = selectedModel === "gpt-6-astra";
+    const response = isOpenAIModel
+      ? null
+      : await ai!.models.generateContent({
+          model: selectedModel,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            temperature: 0.7,
+            tools
+          }
+        });
+    const modelResponse = isOpenAIModel
+      ? await callOpenAIResponses({
+          model: selectedModel,
+          instructions: systemInstruction,
+          input: [prompt],
+          tools: toOpenAITools(allowedFuncDecls)
+        })
+      : {
+          id: "",
+          text: response?.text || "",
+          functionCalls: (response?.functionCalls || []).map((call: any) => ({
+            name: call.name,
+            args: call.args || {},
+            callId: ""
+          }))
+        };
 
     const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [
       { tool: 'Command Router', status: 'success', details: `Classified directive as '${commandClass}'` },
-      { tool: 'Gemini Engine', status: 'success', details: `Executed via ${selectedModel}` },
+      { tool: isOpenAIModel ? 'OpenAI Astra Engine' : 'Gemini Engine', status: 'success', details: `Executed via ${selectedModel}` },
       { tool: 'Memory Sync', status: 'success', details: 'Scanned 6 active memory items' }
     ];
 
-    let responseText = response.text || "";
+    let responseText = modelResponse.text;
     let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = commandClass === "PLANNING" || commandClass === "RESEARCH_PLANNING" ? "NOT_REQUIRED" : "VERIFIED";
     let approvalStatus: "AUTO_APPROVED" | "REQUIRES_HUMAN_APPROVAL" | "REJECTED" = "AUTO_APPROVED";
     const executionErrors: string[] = [];
@@ -954,8 +977,8 @@ Rules for Response:
       });
     }
 
-    if (response.functionCalls && response.functionCalls.length > 0) {
-      const call = response.functionCalls[0];
+    if (modelResponse.functionCalls.length > 0) {
+      const call = modelResponse.functionCalls[0];
       
       if (!isToolAllowed(commandClass, call.name)) {
         actionsTakenList.push({
@@ -1014,28 +1037,43 @@ Rules for Response:
 
           let followUpText = "";
           try {
-            const modelTurn = response.candidates?.[0]?.content;
-            if (modelTurn) {
-              const followUp = await ai.models.generateContent({
+            if (isOpenAIModel) {
+              const followUp = await callOpenAIResponses({
                 model: selectedModel,
-                contents: [
-                  { role: "user", parts: [{ text: prompt }] },
-                  modelTurn,
-                  {
-                    role: "user",
-                    parts: [{
-                      functionResponse: {
-                        name: call.name,
-                        response: { result: dbData }
-                      }
-                    }]
-                  }
-                ],
-                config: {
-                  systemInstruction: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`
-                }
+                instructions: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`,
+                previousResponseId: modelResponse.id,
+                input: [{
+                  type: "function_call_output",
+                  call_id: call.callId,
+                  output: JSON.stringify({ result: dbData })
+                }],
+                tools: toOpenAITools(allowedFuncDecls)
               });
-              followUpText = followUp.text || "";
+              followUpText = followUp.text;
+            } else {
+              const modelTurn = response?.candidates?.[0]?.content;
+              if (modelTurn) {
+                const followUp = await ai!.models.generateContent({
+                  model: selectedModel,
+                  contents: [
+                    { role: "user", parts: [{ text: prompt }] },
+                    modelTurn,
+                    {
+                      role: "user",
+                      parts: [{
+                        functionResponse: {
+                          name: call.name,
+                          response: { result: dbData }
+                        }
+                      }]
+                    }
+                  ],
+                  config: {
+                    systemInstruction: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`
+                  }
+                });
+                followUpText = followUp.text || "";
+              }
             }
           } catch (followUpErr: any) {
             console.log("FollowUp call note:", followUpErr?.message || followUpErr);
@@ -1127,7 +1165,7 @@ Rules for Response:
     }
 
     // Save Execution Record into Operational Memory
-    const primaryToolUsed = actionsTakenList.find(a => a.tool.includes("Supabase") || a.tool.includes("Connector") || a.tool.includes("Gemini"))?.tool || actionsTakenList[0]?.tool || "none";
+    const primaryToolUsed = actionsTakenList.find(a => a.tool.includes("Supabase") || a.tool.includes("Connector") || a.tool.includes("Gemini") || a.tool.includes("Astra"))?.tool || actionsTakenList[0]?.tool || "none";
     const primaryEvidence = actionsTakenList.map(a => `[${a.tool}]: ${a.details}`).join(" | ");
 
     const execRecord: OperationalExecutionRecord = {
@@ -1378,9 +1416,8 @@ ${recentSummary || "لا توجد عمليات سابقة مسجلة بعيدا�
 app.post("/api/agent/onboard", async (req, res) => {
   try {
     const { answers } = req.body;
-    const ai = getGeminiClient();
 
-    if (!ai) {
+    if (!process.env.OPENAI_API_KEY) {
       return res.json({
         userProfile: {
           communicationPreference: answers.commStyle || 'concise',
@@ -1435,11 +1472,58 @@ Respond with JSON schema:
 }
     `.trim();
 
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json"
+    const response = await callOpenAIResponses({
+      model: "gpt-6-astra",
+      instructions: "Return only JSON matching the requested onboarding schema.",
+      input: [prompt],
+      textFormat: {
+        type: "json_schema",
+        name: "onboarding_profile",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            userProfile: {
+              type: "object",
+              properties: {
+                communicationPreference: { type: "string", enum: ["concise", "detailed", "bullet_points"] },
+                technicalLevel: { type: "string", enum: ["beginner", "intermediate", "advanced", "architect"] },
+                autonomyLevel: { type: "string", enum: ["full_autonomy", "approval_required", "guided_step_by_step"] },
+                decisionStyle: { type: "string", enum: ["execute_first", "discuss_first"] },
+                executionSpeed: { type: "string", enum: ["fast", "balanced", "thorough"] }
+              },
+              required: ["communicationPreference", "technicalLevel", "autonomyLevel", "decisionStyle", "executionSpeed"],
+              additionalProperties: false
+            },
+            projectDefinition: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                objective: { type: "string" },
+                targetUsers: { type: "string" },
+                projectRules: { type: "array", items: { type: "string" } }
+              },
+              required: ["name", "objective", "targetUsers", "projectRules"],
+              additionalProperties: false
+            },
+            generatedMemories: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  layer: { type: "string", enum: ["user", "project", "technical"] },
+                  title: { type: "string" },
+                  content: { type: "string" },
+                  tags: { type: "array", items: { type: "string" } }
+                },
+                required: ["layer", "title", "content", "tags"],
+                additionalProperties: false
+              }
+            }
+          },
+          required: ["userProfile", "projectDefinition", "generatedMemories"],
+          additionalProperties: false
+        }
       }
     });
 
@@ -1624,6 +1708,20 @@ app.post("/api/connectors/test", async (req, res) => {
   if (connLower.includes("gmail")) {
     const hasGmail = Boolean(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET && process.env.GMAIL_REFRESH_TOKEN);
     return res.json({ status: hasGmail ? "REAL_LIVE" : "UNCONFIGURED", connectorId: "gmail", message: hasGmail ? "Gmail OAuth credentials configured." : "Gmail OAuth credentials missing.", authPresent: hasGmail, actualCall: false, latencyMs: 5, capabilitiesDiscovered: ["send_email", "verify_sent_email", "list_recent_emails"], evidence: hasGmail ? "Gmail OAuth runtime credentials present." : "Missing Gmail OAuth runtime credentials." });
+  }
+
+  if (connLower.includes("openai") || connLower.includes("astra")) {
+    const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
+    return res.json({
+      status: hasOpenAI ? "REAL_LIVE" : "UNCONFIGURED",
+      connectorId: "openai",
+      message: hasOpenAI ? "OpenAI GPT-6 Astra engine configured." : "OpenAI API key (OPENAI_API_KEY) missing from environment secrets.",
+      authPresent: hasOpenAI,
+      actualCall: hasOpenAI,
+      latencyMs: 0,
+      capabilitiesDiscovered: ["responses_api", "function_calling", "structured_outputs"],
+      evidence: hasOpenAI ? "OPENAI_API_KEY active." : "Missing OPENAI_API_KEY environment variable."
+    });
   }
 
   if (connLower.includes("gemini")) {
