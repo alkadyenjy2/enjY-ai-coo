@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateQualificationScore, geminiGenerateContentActivity, recordMemoryActivity } from '../temporal-proof/activities.ts';
+import { calculateQualificationScore, executeDeterministicActivity, geminiGenerateContentActivity, recordMemoryActivity } from '../temporal-proof/activities.ts';
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalRequireLive = process.env.REQUIRE_LIVE_DEPENDENCIES;
@@ -43,6 +43,16 @@ test('Gemini activity fails closed when live dependencies are required and crede
   await assert.rejects(
     () => geminiGenerateContentActivity('production guardrail test'),
     /GEMINI_LIVE_DEPENDENCY_UNAVAILABLE/,
+  );
+});
+
+test('deterministic execution simulator fails closed in production', async () => {
+  process.env.NODE_ENV = 'production';
+  delete process.env.REQUIRE_LIVE_DEPENDENCIES;
+
+  await assert.rejects(
+    () => executeDeterministicActivity({ command: 'production simulator guardrail' }),
+    /DETERMINISTIC_EXECUTION_SIMULATOR_UNAVAILABLE_IN_PRODUCTION/,
   );
 });
 
