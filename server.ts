@@ -4,7 +4,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import type { Client } from "@temporalio/client";
 import type { WorkflowInput, CoreState } from "./temporal-proof/workflows";
-import * as activities from "./temporal-proof/activities";
+
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
 import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
@@ -113,7 +113,7 @@ class TemporalWorkflowManager {
           namespace: "default",
           taskQueue,
           workflowsPath,
-          activities
+          activities: await import("./temporal-proof/activities")
         });
 
         this.worker.run().catch((err) => {
@@ -408,6 +408,7 @@ app.get("/api/temporal/history/:workflowId", async (req, res) => {
 });
 
 async function executeDirectly(input: WorkflowInput, autoApprove: boolean): Promise<CoreState> {
+  const activities = await import("./temporal-proof/activities");
   const state: CoreState = {
     currentStatus: "RECEIVED",
     stateHistory: ["RECEIVED"],
