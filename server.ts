@@ -2,16 +2,8 @@ import express from "express";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
-import { Connection, Client } from "@temporalio/client";
-import { TestWorkflowEnvironment } from "@temporalio/testing";
-import { Worker } from "@temporalio/worker";
-import {
-  aiCoreRuntimeWorkflow,
-  humanApprovalSignal,
-  getCoreStateQuery,
-  type WorkflowInput,
-  type CoreState
-} from "./temporal-proof/workflows";
+import type { Client } from "@temporalio/client";
+import type { WorkflowInput, CoreState } from "./temporal-proof/workflows";
 import * as activities from "./temporal-proof/activities";
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
@@ -82,8 +74,8 @@ const operationalMemoryRecords: OperationalExecutionRecord[] = [];
 // Temporal Workflow Engine Manager Singleton
 class TemporalWorkflowManager {
   private client: Client | null = null;
-  private worker: Worker | null = null;
-  private testEnv: TestWorkflowEnvironment | null = null;
+  private worker: import("@temporalio/worker").Worker | null = null;
+  private testEnv: import("@temporalio/testing").TestWorkflowEnvironment | null = null;
   private initializingPromise: Promise<Client> | null = null;
 
   public async getClient(): Promise<Client> {
@@ -91,6 +83,7 @@ class TemporalWorkflowManager {
     if (this.initializingPromise) return this.initializingPromise;
 
 	    this.initializingPromise = (async () => {
+      const { Connection, Client } = await import("@temporalio/client");
 	      console.log("⏳ Initializing Temporal Workflow Engine in server.ts...");
 	      const taskQueue = "ai-core-conformance-queue";
 
@@ -107,6 +100,8 @@ class TemporalWorkflowManager {
       } else if (process.env.NODE_ENV === "production") {
         throw new Error("PRODUCTION_TEMPORAL_ADDRESS_REQUIRED");
       } else {
+        const { TestWorkflowEnvironment } = await import("@temporalio/testing");
+        const { Worker } = await import("@temporalio/worker");
         this.testEnv = await TestWorkflowEnvironment.createLocal();
         this.client = this.testEnv.client;
 
@@ -139,6 +134,7 @@ class TemporalWorkflowManager {
     const workflowId = `wf-core-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const taskQueue = "ai-core-conformance-queue";
 
+    const { aiCoreRuntimeWorkflow } = await import("./temporal-proof/workflows");
     const handle = await client.workflow.start(aiCoreRuntimeWorkflow, {
       taskQueue,
       workflowId,
@@ -152,6 +148,7 @@ class TemporalWorkflowManager {
     const client = await this.getClient();
     const handle = client.workflow.getHandle(workflowId);
     try {
+      const { getCoreStateQuery } = await import("./temporal-proof/workflows");
       return await handle.query(getCoreStateQuery);
     } catch (err) {
       return null;
@@ -162,6 +159,7 @@ class TemporalWorkflowManager {
     const client = await this.getClient();
     const handle = client.workflow.getHandle(workflowId);
     try {
+      const { humanApprovalSignal } = await import("./temporal-proof/workflows");
       await handle.signal(humanApprovalSignal, approved);
       return true;
     } catch (err) {
