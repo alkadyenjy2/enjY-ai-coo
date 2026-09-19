@@ -11,10 +11,11 @@ import { CodingWorkspaceView } from './components/CodingWorkspaceView';
 import { ProjectsInheritanceView } from './components/ProjectsInheritanceView';
 import { LessonsLearnedView } from './components/LessonsLearnedView';
 import { ClinicDemoView } from './components/clinic/ClinicDemoView';
+import { AuthScreen } from './components/AuthScreen';
 import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
-import { apiFetch } from './auth/client';
+import { apiFetch, getSession, supabase } from './auth/client';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
@@ -32,6 +33,44 @@ export default function App() {
   const [commandTemplates, setCommandTemplates] = useState<CommandTemplate[]>(initialCommandTemplates);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadAuthContext = async () => {
+      const session = await getSession();
+      if (!session) {
+        if (!cancelled) {
+          setAuthenticated(false);
+          setOrganizationId(null);
+          setAuthLoading(false);
+        }
+        return;
+      }
+      const response = await apiFetch('/api/auth/me');
+      const data = await response.json().catch(() => ({}));
+      const firstOrganization = Array.isArray(data?.organizations) ? data.organizations[0] : null;
+      if (!cancelled) {
+        setAuthenticated(response.ok === true && data?.authenticated === true);
+        setOrganizationId(firstOrganization?.id || null);
+        setAuthLoading(false);
+      }
+    };
+    void loadAuthContext().catch(() => {
+      if (!cancelled) {
+        setAuthenticated(false);
+        setOrganizationId(null);
+        setAuthLoading(false);
+      }
+    });
+    const subscription = supabase?.auth.onAuthStateChange(() => { void loadAuthContext(); }).data.subscription;
+    return () => {
+      cancelled = true;
+      subscription?.unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,19 +85,20 @@ export default function App() {
         if (!cancelled) setLogs([]);
       }
     };
-    void loadOperationalHistory();
+    if (authenticated) void loadOperationalHistory();
     return () => { cancelled = true; };
-  }, []);
+  }, [authenticated]);
 
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = { id: `msg-${Date.now()}`, sender: 'user', content: text, timestamp: new Date().toISOString() };
     setMessages(prev => [...prev, userMsg]);
     setIsAgentLoading(true);
     try {
+      if (!authenticated || !organizationId) throw new Error('Your account is not linked to an authorized organization.');
       const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: text, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
+        body: JSON.stringify({ organization_id: organizationId, prompt: text, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -122,6 +162,12 @@ export default function App() {
   const handleUpdateCommandTemplate = (template: CommandTemplate) => setCommandTemplates(prev => prev.map(t => t.id === template.id ? template : t));
   const handleDeleteCommandTemplate = (templateId: string) => setCommandTemplates(prev => prev.filter(t => t.id !== templateId));
   const handleTogglePinCommandTemplate = (templateId: string) => setCommandTemplates(prev => prev.map(t => t.id === templateId ? { ...t, isPinned: !t.isPinned } : t));
+
+  if (authLoading) {
+    return <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center font-sans"><p className="text-sm text-zinc-400">Verifying secure session…</p></main>;
+  }
+
+  if (!authenticated) return <AuthScreen />;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
