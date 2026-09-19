@@ -15,7 +15,6 @@ interface NavbarProps {
   activeProject: Project;
   projects: Project[];
   onSelectProject: (project: Project) => void;
-  onOpenOnboarding: () => void;
   onOpenCommandCenter: () => void;
 }
 
@@ -26,7 +25,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeProject,
   projects,
   onSelectProject,
-  onOpenOnboarding,
   onOpenCommandCenter,
 }) => {
   return (
@@ -42,7 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </h1>
             </div>
             <p className="text-[11px] text-zinc-500 font-mono">
-              Reusable Operations OS &bull; Adaptive Memory &bull; n8n Orchestrator
+              AI OPERATIONS CORE • Adaptive Memory • Verified Execution
             </p>
           </div>
         </div>
@@ -98,15 +96,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="hidden sm:inline">Command Center</span>
           </button>
 
-          {/* Quick Action: Onboarding Discovery Quiz */}
-          <button
-            onClick={onOpenOnboarding}
-            className="flex items-center gap-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium px-3 py-1.5 rounded-lg border border-zinc-700 transition-all active:scale-95"
-            title="Start Project Discovery Quiz"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Discovery Quiz</span>
-          </button>
+
         </div>
       </div>
     </header>
