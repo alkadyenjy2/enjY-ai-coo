@@ -263,7 +263,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
         {envSummary ? (
           <div className="mt-4 space-y-3 font-mono">
-            <div className="flex flex-wrap items-center justify-between text-xs bg-zinc-950 p-3 rounded-xl border border-white/10/80 gap-2">
+            <div className="flex flex-wrap items-center justify-between text-xs bg-zinc-950 p-3 rounded-xl border border-white/10 gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-zinc-400">Status Summary:</span>
                 <span className="px-2.5 py-0.5 rounded bg-cyan-400/10 text-cyan-300 border border-cyan-400/20 text-[11px] font-bold">
@@ -282,7 +282,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {envSummary.results.map((item) => (
                 <div
                   key={item.key}
-                  className="bg-zinc-950/70 border border-white/10/60 p-2.5 rounded-xl flex items-center justify-between text-xs"
+                  className="bg-zinc-950/70 border border-white/10 p-2.5 rounded-xl flex items-center justify-between text-xs"
                 >
                   <span className="text-zinc-300 truncate font-mono text-[11px]">{item.key}</span>
                   <span
@@ -499,7 +499,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Main Recharts Area / Line Chart Visualizer */}
-        <div className="bg-zinc-950/90 border border-white/10/90 rounded-xl p-4">
+        <div className="bg-zinc-950/90 border border-white/10 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3 text-xs font-mono">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
@@ -556,7 +556,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             <div className="text-zinc-200 font-sans font-semibold text-xs mb-1.5 line-clamp-2">
                               {data.action}
                             </div>
-                            <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1 border-t border-white/10/60">
+                            <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1 border-t border-white/10">
                               <span>Duration:</span>
                               <strong className="text-cyan-400 font-mono">{data.latency} ms</strong>
                             </div>
@@ -626,7 +626,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                             <div className="text-zinc-200 font-sans font-semibold text-xs mb-1.5">
                               {data.action}
                             </div>
-                            <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1 border-t border-white/10/60">
+                            <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-1 border-t border-white/10">
                               <span>Elapsed Time:</span>
                               <strong className="text-cyan-300 font-mono">{data.latency} ms</strong>
                             </div>
