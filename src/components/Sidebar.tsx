@@ -1,9 +1,7 @@
 import React from 'react';
 import {
-  Stethoscope,
   LayoutDashboard,
   Terminal,
-  HelpCircle,
   Brain,
   Plug,
   Workflow,
@@ -17,10 +15,8 @@ import {
 } from 'lucide-react';
 
 export type NavView =
-  | 'clinic'
   | 'dashboard'
   | 'chat'
-  | 'onboarding'
   | 'memory'
   | 'connectors'
   | 'workflows'
@@ -47,14 +43,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const navItems = [
     {
-      id: 'clinic' as NavView,
-      label: 'Clinic Demo',
-      icon: Stethoscope,
-      badge: 'CASE STUDY',
-      badgeColor: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-      description: 'Lead → Booking Automation'
-    },
-    {
       id: 'dashboard' as NavView,
       label: 'Operations HQ',
       icon: LayoutDashboard,
@@ -67,15 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Terminal,
       badge: 'Live',
       badgeColor: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-      description: 'Telegram & Chat Execution'
-    },
-    {
-      id: 'onboarding' as NavView,
-      label: 'Discovery Quiz',
-      icon: HelpCircle,
-      badge: 'Start',
-      badgeColor: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
-      description: 'Project Onboarding'
+      description: 'Verified command execution'
     },
     {
       id: 'memory' as NavView,
@@ -95,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'workflows' as NavView,
-      label: 'n8n Workflow Studio',
+      label: 'Workflow Studio',
       icon: Workflow,
       badge: workflowsCount,
       badgeColor: 'bg-amber-500/10 text-amber-400 border border-amber-500/20',
@@ -169,26 +149,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* System Status Summary Widget */}
-      <div className="mt-4 p-3 bg-zinc-900/60 border border-zinc-800 rounded-2xl space-y-2 text-xs font-mono">
-        <div className="flex items-center justify-between text-zinc-300 font-semibold text-[11px]">
-          <span className="flex items-center gap-1.5 text-zinc-400">
-            <Activity className="w-3.5 h-3.5 text-emerald-400" />
-            AGENT HEALTH
-          </span>
-          <span className="text-emerald-400 font-bold">100% OK</span>
+      <div className="mt-4 p-3 bg-gradient-to-br from-violet-500/10 to-cyan-400/5 border border-white/10 rounded-2xl space-y-2 text-xs font-mono">
+        <div className="flex items-center gap-1.5 text-zinc-300 font-semibold text-[11px]">
+          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+          RUNTIME STATE
         </div>
-        <div className="grid grid-cols-2 gap-1.5 text-[10px] text-zinc-400">
-          <div className="bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-            <div className="text-zinc-500">Port Binding</div>
-            <div className="text-zinc-200 font-medium font-mono">3000:0.0.0.0</div>
-          </div>
-          <div className="bg-zinc-950 p-2 rounded-lg border border-zinc-800">
-            <div className="text-zinc-500">Gemini Key</div>
-            <div className="text-emerald-400 font-medium font-mono flex items-center gap-1">
-              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" /> Active
-            </div>
-          </div>
-        </div>
+        <p className="text-[10px] leading-relaxed text-zinc-500">Live operational status is loaded from the backend. No demo health values are shown.</p>
       </div>
     </aside>
   );
