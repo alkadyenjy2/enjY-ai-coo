@@ -3,34 +3,31 @@ import { Navbar } from './components/Navbar';
 import { Sidebar, NavView } from './components/Sidebar';
 import { DashboardView } from './components/DashboardView';
 import { CommandCenterView } from './components/CommandCenterView';
-import { OnboardingQuizModal } from './components/OnboardingQuizModal';
 import { MemoryBankView } from './components/MemoryBankView';
 import { ConnectorsView } from './components/ConnectorsView';
 import { WorkflowStudioView } from './components/WorkflowStudioView';
 import { CodingWorkspaceView } from './components/CodingWorkspaceView';
 import { ProjectsInheritanceView } from './components/ProjectsInheritanceView';
 import { LessonsLearnedView } from './components/LessonsLearnedView';
-import { ClinicDemoView } from './components/clinic/ClinicDemoView';
-import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
+import { initialAIModels } from './data/mockInitialData';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 import { apiFetch } from './auth/client';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
-  const [userProfile, setUserProfile] = useState<UserProfile>(initialUserProfile);
-  const [memoryItems, setMemoryItems] = useState<MemoryItem[]>(initialMemoryItems);
-  const [connectors, setConnectors] = useState<Connector[]>(initialConnectors);
-  const [workflows, setWorkflows] = useState<Workflow[]>(initialWorkflows);
-  const [projects, setProjects] = useState<Project[]>(initialProjects);
-  const [activeProject, setActiveProject] = useState<Project>(initialProjects[0]);
-  const [lessons, setLessons] = useState<LessonLearned[]>(initialLessonsLearned);
-  const [models] = useState<AIModelOption[]>(initialAIModels);
-  const [activeModel, setActiveModel] = useState<AIModelOption>(initialAIModels[0]);
+  const [userProfile, setUserProfile] = useState<UserProfile>({ name: 'Operator', communicationPreference: 'concise', technicalLevel: 'advanced', autonomyLevel: 'approval_required', decisionStyle: 'execute_first', executionSpeed: 'fast', dislikedTools: [], preferredTools: [], dislikedUIPatterns: [], repeatedApprovals: [], workingPatterns: [] });
+  const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
+  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProject, setActiveProject] = useState<Project>({ id: 'workspace', name: 'No active project', objective: 'Select or create a project to establish operational context.', targetUsers: 'Workspace owner', status: 'planning', inheritedCoreCapabilities: [], projectWorkflows: [], projectTools: [], projectRules: [], createdAt: new Date(0).toISOString(), kpis: { tasksCompleted: 0, automationsActive: 0, lessonsRecorded: 0 } });
+  const [lessons, setLessons] = useState<LessonLearned[]>([]);
+  const [models] = useState<AIModelOption[]>(initialAIModels.filter((model) => model.id === 'gpt-6-astra'));
+  const [activeModel, setActiveModel] = useState<AIModelOption>(initialAIModels.find((model) => model.id === 'gpt-6-astra') ?? initialAIModels[0]);
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialChatMessages);
-  const [commandTemplates, setCommandTemplates] = useState<CommandTemplate[]>(initialCommandTemplates);
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [commandTemplates, setCommandTemplates] = useState<CommandTemplate[]>([]);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
 
   useEffect(() => {
@@ -124,16 +121,14 @@ export default function App() {
   const handleTogglePinCommandTemplate = (templateId: string) => setCommandTemplates(prev => prev.map(t => t.id === templateId ? { ...t, isPinned: !t.isPinned } : t));
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
+    <div className="min-h-screen bg-[#050816] text-zinc-100 flex flex-col font-sans selection:bg-cyan-400 selection:text-slate-950">
       <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenOnboarding={() => setIsOnboardingOpen(true)} onOpenCommandCenter={() => setCurrentView('chat')} />
-      <div className="mx-auto w-full max-w-7xl border-x border-b border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-emerald-200">FREE-FIRST AI ROUTING • VERIFY BEFORE DONE • PAID ROUTES REQUIRE EXPLICIT APPROVAL</div>
+      <div className="mx-auto w-full max-w-7xl border-x border-b border-cyan-400/15 bg-gradient-to-r from-violet-500/10 via-cyan-400/5 to-transparent px-4 py-2 text-center text-[11px] font-medium tracking-wide text-cyan-100">AI OPERATIONS CORE • EVIDENCE REQUIRED • APPROVAL BEFORE SIDE EFFECTS</div>
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         <Sidebar currentView={currentView} onSelectView={setCurrentView} memoryCount={memoryItems.length} connectorsCount={connectors.length} workflowsCount={workflows.length} lessonsCount={lessons.length} />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
           {currentView === 'dashboard' && <DashboardView projects={projects} activeProject={activeProject} connectors={connectors} workflows={workflows} lessons={lessons} logs={logs} userProfile={userProfile} activeModel={activeModel} onNavigate={setCurrentView} onRunQuickCommand={handleRunQuickCommand} />}
-          {currentView === 'clinic' && <ClinicDemoView />}
           {currentView === 'chat' && <CommandCenterView messages={messages} onSendMessage={handleSendMessage} isLoading={isAgentLoading} userProfile={userProfile} activeProject={activeProject} activeModel={activeModel} memoryItems={memoryItems} commandTemplates={commandTemplates} onSaveTemplate={handleSaveCommandTemplate} onUpdateTemplate={handleUpdateCommandTemplate} onDeleteTemplate={handleDeleteCommandTemplate} onTogglePinTemplate={handleTogglePinCommandTemplate} />}
-          {currentView === 'onboarding' && <div className="p-8 bg-zinc-900 border border-zinc-800 rounded-2xl text-center space-y-4"><h2 className="text-xl font-bold text-white font-sans">First-Run Project Discovery Quiz</h2><p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed font-sans">Calibrate the Core AI Operations Agent memory bank and project layer parameters using the discovery quiz.</p><button onClick={() => setIsOnboardingOpen(true)} className="bg-zinc-100 hover:bg-white text-zinc-950 font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-all">Launch Discovery Quiz Modal</button></div>}
           {currentView === 'memory' && <MemoryBankView memoryItems={memoryItems} onAddMemory={handleAddMemory} onDeleteMemory={handleDeleteMemory} />}
           {currentView === 'connectors' && <ConnectorsView connectors={connectors} onToggleStatus={handleToggleConnectorStatus} onAddConnector={handleAddConnector} />}
           {currentView === 'workflows' && <WorkflowStudioView workflows={workflows} onRunWorkflow={handleRunWorkflow} onAddWorkflow={(wf) => setWorkflows(prev => [wf, ...prev])} onToggleActive={handleToggleWorkflowActive} />}
@@ -142,7 +137,7 @@ export default function App() {
           {currentView === 'lessons' && <LessonsLearnedView lessons={lessons} onAddLesson={handleAddLesson} />}
         </main>
       </div>
-      <footer className="bg-zinc-950 border-t border-zinc-800 px-4 py-2.5 text-xs font-mono text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-7xl w-full mx-auto">
+      <footer className="bg-[#050816] border-t border-white/10 px-4 py-2.5 text-xs font-mono text-zinc-500 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-7xl w-full mx-auto">
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-emerald-400 font-bold"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>JARVIS</span>
           <span className="text-zinc-700">|</span>
@@ -154,7 +149,6 @@ export default function App() {
           <span>SUCCESS: <strong className="text-emerald-300 font-normal">VERIFY FIRST</strong></span>
         </div>
       </footer>
-      <OnboardingQuizModal isOpen={isOnboardingOpen} onClose={() => setIsOnboardingOpen(false)} onComplete={handleOnboardingComplete} />
     </div>
   );
 }
