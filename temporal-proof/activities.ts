@@ -129,6 +129,12 @@ export async function executeDeterministicActivity(input: ActionInput): Promise<
   const count = (globalContext.activityAttempts['executeDeterministic'] || 0) + 1;
   globalContext.activityAttempts['executeDeterministic'] = count;
 
+  // This function is a deterministic test/dev simulator, not a production execution adapter.
+  // Fail closed before producing any execution result when live dependencies are required.
+  if (requireLiveDependencies()) {
+    throw new Error('DETERMINISTIC_EXECUTION_SIMULATOR_UNAVAILABLE_IN_PRODUCTION');
+  }
+
   if (input.nonRetryableError) {
     throw ApplicationFailure.nonRetryable(`FATAL: Unrecoverable policy breach for directive '${input.command}'`, 'POLICY_BREACH');
   }
