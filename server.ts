@@ -518,7 +518,8 @@ app.post("/api/temporal/execute-sync", async (req, res) => {
     };
 
     // Production execution must always use the real Temporal path. A local/direct activity
-    // runner is test/dev infrastructure only and must never become a production fallback.\n    const useDirectExecution = process.env.NODE_ENV !== "production" && !process.env.TEMPORAL_ADDRESS;
+    // runner is test/dev infrastructure only and must never become a production fallback.
+    const useDirectExecution = process.env.NODE_ENV !== "production" && !process.env.TEMPORAL_ADDRESS;
     let workflowId: string;
     let runId: string;
     let finalState: CoreState;
