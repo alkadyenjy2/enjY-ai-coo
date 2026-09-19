@@ -40,6 +40,8 @@ jobs:
 
       - name: Jarvis route summary test
         run: npm run test:jarvis-route
+      - name: Production guardrails test
+        run: npm run test:production-guardrails
 
       - name: Operational log mapping test
         run: npm run test:operational-logs
