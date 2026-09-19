@@ -970,7 +970,7 @@ Rules for Response:
     ];
 
     let responseText = modelResponse.text;
-    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = commandClass === "PLANNING" || commandClass === "RESEARCH_PLANNING" ? "NOT_REQUIRED" : "VERIFIED";
+    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "NOT_REQUIRED";
     let approvalStatus: "AUTO_APPROVED" | "REQUIRES_HUMAN_APPROVAL" | "REJECTED" = "AUTO_APPROVED";
     const executionErrors: string[] = [];
 
@@ -1185,7 +1185,7 @@ Rules for Response:
       selectedTools: actionsTakenList.map(a => a.tool),
       actionsExecuted: actionsTakenList,
       results: { responseSnippet: responseText.slice(0, 150) },
-      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : "COMPLETED"],
+      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : verificationStatus === "NOT_REQUIRED" ? "COMPLETED" : "FAILED"],
       evidence: primaryEvidence,
       verificationStatus,
       final_state_reason: verificationStatus === "VERIFIED" 
@@ -1230,7 +1230,7 @@ Rules for Response:
     ];
 
     let fallbackReport = "";
-    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "VERIFIED";
+    let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "FAILED";
 
     if (commandClass === "PLANNING") {
       verificationStatus = "NOT_REQUIRED";
@@ -1390,7 +1390,7 @@ ${recentSummary || "لا توجد عمليات سابقة مسجلة بعيدا�
       selectedTools: actionsTakenList.map(a => a.tool),
       actionsExecuted: actionsTakenList,
       results: { responseSnippet: fallbackReport.slice(0, 150) },
-      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : "COMPLETED"],
+      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : verificationStatus === "NOT_REQUIRED" ? "COMPLETED" : "FAILED"],
       evidence: primaryEvidence,
       verificationStatus,
       final_state_reason: verificationStatus === "VERIFIED"
