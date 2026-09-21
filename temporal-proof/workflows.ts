@@ -7,6 +7,7 @@ import {
   ApplicationFailure
 } from '@temporalio/workflow';
 import type * as activities from './activities';
+import type { TemporalPersistenceContext } from '../src/adapters/temporal-persistence-context';
 
 const {
   classifyDirectiveActivity,
@@ -36,6 +37,7 @@ const {
 });
 
 export interface WorkflowInput {
+  persistenceContext?: TemporalPersistenceContext;
   testId?: string;
   command: string;
   failAttempts?: number;
@@ -253,7 +255,8 @@ export async function aiCoreRuntimeWorkflow(input: WorkflowInput): Promise<CoreS
   await recordMemoryActivity({
     testId: input.testId,
     finalState: state.currentStatus,
-    history: state.stateHistory
+    history: state.stateHistory,
+    persistenceContext: input.persistenceContext,
   });
 
   transitionTo('COMPLETED');
