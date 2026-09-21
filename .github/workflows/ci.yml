@@ -35,6 +35,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Temporal workflow bundle and worker build
+        run: npm run build:worker
+
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 
@@ -48,6 +51,9 @@ jobs:
 
       - name: Persistence tenant context test
         run: npm run test:persistence-context
+
+      - name: Temporal persistence context test
+        run: npm run test:temporal-persistence-context
 
       - name: Telegram transport test
         run: npm run test:telegram
