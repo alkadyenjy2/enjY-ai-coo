@@ -236,8 +236,8 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     openai: hasOpenAI,
     gemini: hasGemini,
     supabase: hasSupabase,
-    temporal: hasExternalTemporal || directExecutionActive || !requireLiveDependencies,
-    execution: directExecutionActive || hasExternalTemporal,
+    temporal: hasExternalTemporal || !requireLiveDependencies,
+    execution: hasExternalTemporal || !requireLiveDependencies,
   };
   const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.execution));
   return res.status(ready ? 200 : 503).json({
