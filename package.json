@@ -29,7 +29,8 @@
     "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts",
     "build:temporal-workflow": "node scripts/build-temporal-workflow.cjs",
     "build:worker": "npm run build:temporal-workflow && esbuild temporal-proof/worker.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/temporal-worker.cjs",
-    "worker": "node dist/temporal-worker.cjs"
+    "worker": "node dist/temporal-worker.cjs",
+    "test:temporal-persistence-context": "node --import tsx --test --test-concurrency=1 tests/temporal-persistence-context.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
