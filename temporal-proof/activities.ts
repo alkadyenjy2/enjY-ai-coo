@@ -1,4 +1,5 @@
 import { ApplicationFailure } from '@temporalio/workflow';
+import { Context as ActivityContext } from '@temporalio/activity';
 import { postizAdapter, PostizPostInput, PostizPostResult } from '../src/adapters/postiz';
 import { whopAdapter, WhopProductInput, WhopProductResult } from '../src/adapters/whop';
 import { tavilyAdapter, ResearchInput, ResearchResult } from '../src/adapters/tavily';
