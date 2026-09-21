@@ -173,7 +173,13 @@ export async function recordMemoryActivity(record: any): Promise<{ recordId: str
     approvalStatus: 'AUTO_APPROVED' as const,
   };
 
-  const workflowId = TemporalActivityContext.current().info.workflowExecution.workflowId;
+  let workflowId: string | undefined;
+  try {
+    workflowId = TemporalActivityContext.current().info.workflowExecution.workflowId;
+  } catch {
+    // Unit tests and local direct calls are outside a Temporal Activity scope.
+    // Production worker execution always supplies the Activity context.
+  }
   const persistenceContext = verifyTemporalPersistenceContext(record?.persistenceContext, workflowId);
   const result = persistenceContext
     ? await persistOperationalRecord(memoryRecord, persistenceContext)
