@@ -20,6 +20,12 @@ export interface OperationalRecordLike {
   approvalStatus: 'AUTO_APPROVED' | 'REQUIRES_HUMAN_APPROVAL' | 'REJECTED';
 }
 
+export interface DurablePersistenceContext {
+  organizationId: string;
+  userId: string;
+  workflowId: string;
+}
+
 export interface PersistenceResult {
   persisted: boolean;
   source: 'supabase' | 'memory';
@@ -81,12 +87,12 @@ function auditStatus(record: OperationalRecordLike): 'success' | 'warning' | 'fa
   return 'success';
 }
 
-export async function persistOperationalRecord(record: OperationalRecordLike): Promise<PersistenceResult> {
+export async function persistOperationalRecord(record: OperationalRecordLike, durableContext?: DurablePersistenceContext): Promise<PersistenceResult> {
   const config = getSupabaseConfig();
   if (!config) return { persisted: false, source: 'memory', error: 'Supabase runtime credentials are not configured.' };
 
-  const context = getPersistenceContext();
-  if (!context) {
+  const requestContext = getPersistenceContext();
+  if (!requestContext && !durableContext) {
     return {
       persisted: false,
       source: 'memory',
@@ -94,10 +100,24 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
     };
   }
 
+  const organizationId = durableContext?.organizationId || requestContext!.organizationId;
+  const userId = durableContext?.userId || requestContext!.userId;
+  const accessToken = durableContext
+    ? ((process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim())
+    : requestContext!.accessToken;
+
+  if (!accessToken) {
+    return {
+      persisted: false,
+      source: 'memory',
+      error: 'Server-side Supabase secret is unavailable for durable worker persistence.',
+    };
+  }
+
   const metadata = safeMetadata(record);
   const body = {
-    organization_id: context.organizationId,
-    user_id: context.userId,
+    organization_id: organizationId,
+    user_id: userId,
     title: `AI CORE ${record.intent} — ${record.verificationStatus}`,
     description: record.final_state_reason,
     type: 'ai_core_execution',
@@ -115,7 +135,7 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
   try {
     const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
       method: 'POST',
-      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
+      headers: { ...getAuthenticatedPersistenceHeaders(config, accessToken), Prefer: 'return=representation' },
       body: JSON.stringify(body),
     });
 
