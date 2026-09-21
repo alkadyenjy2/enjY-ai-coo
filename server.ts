@@ -8,6 +8,8 @@ import type { WorkflowInput, CoreState } from "./temporal-proof/workflows";
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
 import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
+import { createTemporalPersistenceContext } from "./src/adapters/temporal-persistence-context";
+import { getPersistenceContext } from "./src/adapters/request-context";
 import { getAuthContext, getAuthorizedOrganizations, getOrganizationAccess, requireAuth, requireOrganizationAccess } from "./src/auth/server";
 import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhooks";
 import { clinicRouter } from "./src/clinic/routes";
@@ -135,10 +137,24 @@ class TemporalWorkflowManager {
     const taskQueue = "ai-core-conformance-queue";
 
     const { aiCoreRuntimeWorkflow } = await import("./temporal-proof/workflows");
+    const requestContext = getPersistenceContext();
+    const persistenceContext = requestContext
+      ? createTemporalPersistenceContext(requestContext.organizationId, requestContext.userId, workflowId)
+      : null;
+
+    if (process.env.NODE_ENV === "production" && !persistenceContext) {
+      throw new Error("TEMPORAL_PERSISTENCE_CONTEXT_NOT_CONFIGURED");
+    }
+
+    const workflowInput: WorkflowInput = {
+      ...input,
+      persistenceContext: persistenceContext || undefined,
+    };
+
     const handle = await client.workflow.start(aiCoreRuntimeWorkflow, {
       taskQueue,
       workflowId,
-      args: [input]
+      args: [workflowInput]
     });
 
     return { workflowId, runId: handle.firstExecutionRunId };
@@ -310,7 +326,8 @@ app.post("/api/temporal/start", async (req, res) => {
       roofingPayload,
       feedbackPayload,
       optimizePromptPayload,
-      runOperationsAudit
+      runOperationsAudit,
+      browserUsePayload
     } = req.body;
 
     const input: WorkflowInput = {
@@ -330,7 +347,8 @@ app.post("/api/temporal/start", async (req, res) => {
       roofingPayload,
       feedbackPayload,
       optimizePromptPayload,
-      runOperationsAudit
+      runOperationsAudit,
+      browserUsePayload
     };
 
     const result = await temporalManager.startWorkflow(input);
