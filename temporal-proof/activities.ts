@@ -1,5 +1,5 @@
 import { ApplicationFailure } from '@temporalio/workflow';
-import { Context as ActivityContext } from '@temporalio/activity';
+import { Context as TemporalActivityContext } from '@temporalio/activity';
 import { postizAdapter, PostizPostInput, PostizPostResult } from '../src/adapters/postiz';
 import { whopAdapter, WhopProductInput, WhopProductResult } from '../src/adapters/whop';
 import { tavilyAdapter, ResearchInput, ResearchResult } from '../src/adapters/tavily';
@@ -173,7 +173,7 @@ export async function recordMemoryActivity(record: any): Promise<{ recordId: str
     approvalStatus: 'AUTO_APPROVED' as const,
   };
 
-  const workflowId = ActivityContext.current().info.workflowExecution.workflowId;
+  const workflowId = TemporalActivityContext.current().info.workflowExecution.workflowId;
   const persistenceContext = verifyTemporalPersistenceContext(record?.persistenceContext, workflowId);
   const result = persistenceContext
     ? await persistOperationalRecord(memoryRecord, persistenceContext)
