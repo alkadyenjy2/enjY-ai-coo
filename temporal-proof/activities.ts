@@ -173,7 +173,11 @@ export async function recordMemoryActivity(record: any): Promise<{ recordId: str
     approvalStatus: 'AUTO_APPROVED' as const,
   };
 
-  const result = await persistOperationalRecord(memoryRecord);
+  const workflowId = ActivityContext.current().info.workflowExecution.workflowId;
+  const persistenceContext = verifyTemporalPersistenceContext(record?.persistenceContext, workflowId);
+  const result = persistenceContext
+    ? await persistOperationalRecord(memoryRecord, persistenceContext)
+    : await persistOperationalRecord(memoryRecord);
   if (result.persisted && result.recordId) {
     globalContext.sideEffectCount++;
     return { recordId: result.recordId, status: 'PERSISTED' };
