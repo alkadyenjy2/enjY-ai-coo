@@ -38,9 +38,10 @@ interface SupabaseConfig {
   key: string;
 }
 
-function getSupabaseConfig(): SupabaseConfig | null {
+function getSupabaseConfig(options?: { durable?: boolean }): SupabaseConfig | null {
   const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim();
   const key = (
+    (options?.durable ? (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '') : '') ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
@@ -88,10 +89,9 @@ function auditStatus(record: OperationalRecordLike): 'success' | 'warning' | 'fa
 }
 
 export async function persistOperationalRecord(record: OperationalRecordLike, durableContext?: DurablePersistenceContext): Promise<PersistenceResult> {
-  const config = getSupabaseConfig();
-  if (!config) return { persisted: false, source: 'memory', error: 'Supabase runtime credentials are not configured.' };
-
   const requestContext = getPersistenceContext();
+  const config = getSupabaseConfig({ durable: Boolean(durableContext) });
+  if (!config) return { persisted: false, source: 'memory', error: 'Supabase runtime credentials are not configured.' };
   if (!requestContext && !durableContext) {
     return {
       persisted: false,
