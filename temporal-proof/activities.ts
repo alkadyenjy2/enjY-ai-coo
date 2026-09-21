@@ -10,7 +10,7 @@ import { memoryLearningEngine, FeedbackEntry, PromptOptimizationResult } from '.
 import { operationsManager, UserRoleContext, CostControlReport } from '../src/adapters/operations';
 import { BrowserUseAdapter, BrowserUseExecutionResult, createBrowserUseCloudClient } from '../src/adapters/browserUse';
 import { persistOperationalRecord, persistLearningFeedback, fetchPersistedLearningFeedback } from '../src/adapters/persistence';
-import { verifyTemporalPersistenceContext, type TemporalPersistenceContext } from '../src/adapters/temporal-persistence-context';
+import { verifyTemporalPersistenceContext } from '../src/adapters/temporal-persistence-context';
 import { GoogleGenAI } from '@google/genai';
 
 export interface ActionInput {
