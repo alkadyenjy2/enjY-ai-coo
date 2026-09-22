@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateQualificationScore, executeDeterministicActivity, geminiGenerateContentActivity, recordMemoryActivity } from '../temporal-proof/activities.ts';
+import { calculateQualificationScore, executeDeterministicActivity, geminiGenerateContentActivity, recordMemoryActivity } from '../src/execution/guardrails.ts';
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalRequireLive = process.env.REQUIRE_LIVE_DEPENDENCIES;
