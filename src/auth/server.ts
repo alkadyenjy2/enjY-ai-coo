@@ -72,11 +72,14 @@ async function authenticateTrustedInternalRequest(req: Request): Promise<AuthCon
     auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
   });
 
-  const { data: membership, error: membershipError } = await admin
+  let membershipQuery = admin
     .from("organization_members")
     .select("user_id, role")
-    .eq("organization_id", organizationId)
-    .eq("user_id", String(req.header("x-jarvis-worker-user-id") || ""))
+    .eq("organization_id", organizationId);
+  if (internalType === "worker") {
+    membershipQuery = membershipQuery.eq("user_id", String(req.header("x-jarvis-worker-user-id") || ""));
+  }
+  const { data: membership, error: membershipError } = await membershipQuery
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
