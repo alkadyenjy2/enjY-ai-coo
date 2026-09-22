@@ -77,6 +77,7 @@ async function authenticateTrustedInternalRequest(req: Request): Promise<AuthCon
     .from("organization_members")
     .select("user_id, role")
     .eq("organization_id", organizationId)
+    .eq("user_id", String(req.header("x-jarvis-worker-user-id") || ""))
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
