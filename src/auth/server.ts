@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import type { NextFunction, Request, Response } from "express";
 import { runPersistenceContext } from "../adapters/request-context";
+import { getDurableWorkerSecret } from "../execution/durable-jobs";
 
 export interface AuthContext {
   user: User;
@@ -54,17 +55,15 @@ async function authenticateTrustedInternalRequest(req: Request): Promise<AuthCon
   } else {
     const timestamp = Number(req.header("x-jarvis-worker-timestamp") || 0);
     const signature = req.header("x-jarvis-worker-signature")?.trim() || "";
-    if (!serverSecret || !signature || !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 300000) return null;
+    if (!signature || !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 300000) return null;
+    const workerSecret = await getDurableWorkerSecret().catch(() => "");
+    if (!workerSecret) return null;
     const crypto = await import("node:crypto");
     const body = JSON.stringify(req.body || {});
     const payload = `${timestamp}.${body}`;
-    const expected = crypto.createHmac("sha256", serverSecret).update(payload).digest("hex");
+    const expected = crypto.createHmac("sha256", workerSecret).update(payload).digest("hex");
     if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   }
-  const serverSecret = getServerSecretKey();
-  const suppliedSecret = req.header("x-jarvis-internal-key")?.trim() || "";
-  if (!serverSecret || !suppliedSecret || suppliedSecret !== serverSecret) return null;
-
   const config = getRuntimeConfig();
   const organizationId = String(req.body?.organization_id || req.query.organization_id || "").trim();
   if (!config || !organizationId || !/^[0-9a-f-]{36}$/i.test(organizationId)) return null;
