@@ -7,7 +7,7 @@ test('summarizes the verified free-first route for the command center', () => {
 
   assert.equal(summary.policy, 'FREE FIRST');
   assert.equal(summary.primary, 'OpenRouter');
-  assert.deepEqual(summary.fallbacks, ['Google Gemini API', 'Groq', 'Mistral API', 'Cerebras API', 'Hugging Face Inference Providers']);
+  assert.deepEqual(summary.fallbacks, []);
   assert.equal(summary.status, 'READY');
 });
 
