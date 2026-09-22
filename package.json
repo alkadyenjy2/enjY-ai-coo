@@ -26,7 +26,11 @@
     "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs",
     "gmail:oauth": "node --import tsx scripts/gmail-oauth.ts",
     "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts",
-    "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts"
+    "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts",
+    "test:free-first-executor": "node --import tsx --test --test-concurrency=1 tests/free-first-executor.test.ts",
+    "test:evidence-gate": "node --import tsx --test --test-concurrency=1 tests/evidence-gate.test.ts",
+    "test:style-score": "node --import tsx --test --test-concurrency=1 tests/style-score.test.ts",
+    "test:ai-gateway": "npm run test:free-first-router && npm run test:free-first-executor && npm run test:evidence-gate && npm run test:style-score"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
