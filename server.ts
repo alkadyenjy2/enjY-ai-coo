@@ -166,8 +166,8 @@ app.get("/api/organizations", requireAuth, async (req, res) => {
 app.use("/api/clinic", clinicRouter);
 
 // Protected API surfaces. Webhook routes remain signature-authenticated separately.
-app.use(["/api/agent", "/api/connectors", "/api/env-status"], requireAuth);
-app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard"], requireOrganizationAccess);
+app.use(["/api/agent", "/api/connectors", "/api/env-status", "/api/executions"], requireAuth);
+app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard", "/api/executions"], requireOrganizationAccess);
 
 async function rememberOperationalRecord(record: OperationalExecutionRecord) {
   operationalMemoryRecords.unshift(record);
@@ -436,6 +436,28 @@ Rules for Response:
     `.trim();
 
     if (!ai && !isOpenAIRequested) {
+      if (process.env.NODE_ENV === "production" || process.env.REQUIRE_LIVE_DEPENDENCIES === "true") {
+        const failedRecord: OperationalExecutionRecord = {
+          id: `exec-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          command: userPromptStr,
+          project: projectNameStr,
+          intent: commandClass,
+          tool: "Production Guardrail",
+          selectedTools: ["Production Guardrail"],
+          actionsExecuted: [{ tool: "Production Guardrail", status: "blocked", details: "No live model provider is configured; offline simulation is forbidden in production." }],
+          results: { responseSnippet: "LIVE_MODEL_PROVIDER_REQUIRED" },
+          state_history: ["RECEIVED", "ROUTED", "FAILED"],
+          evidence: "Production execution was fail-closed because no live model provider was available.",
+          verificationStatus: "FAILED",
+          final_state_reason: "LIVE_MODEL_PROVIDER_REQUIRED",
+          errors: ["LIVE_MODEL_PROVIDER_REQUIRED"],
+          approvalStatus: "AUTO_APPROVED"
+        };
+        await rememberOperationalRecord(failedRecord);
+        return res.status(503).json({ content: "LIVE_MODEL_PROVIDER_REQUIRED", executionRecord: failedRecord, actionsTaken: failedRecord.actionsExecuted });
+      }
+
       const fallbackContent = `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock the configured Gemini fallback engine.`;
       const fallbackActions = [
         { tool: 'Memory System', status: 'success', details: 'Retrieved 3 memory items' },
@@ -479,7 +501,9 @@ Rules for Response:
     // Real Gemini Model Execution
     const selectedModel = model || "gemini-3.6-flash";
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const authContext = getAuthContext(res);
     const supabaseApiKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseBearer = authContext?.accessToken || supabaseApiKey;
 
     const allowedFuncDecls: any[] = [];
     if (commandClass === "DATABASE") {
@@ -648,7 +672,7 @@ Rules for Response:
           const dbRes = await fetch(targetUrl, {
             headers: {
               "apikey": supabaseApiKey,
-              "Authorization": `Bearer ${supabaseApiKey}`
+              "Authorization": `Bearer ${supabaseBearer}`
             }
           });
           const dbData = await dbRes.json();
