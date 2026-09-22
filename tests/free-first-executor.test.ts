@@ -76,3 +76,31 @@ test("rejects a successful provider response without evidence", async () => {
     /ALL_PROVIDERS_FAILED/,
   );
 });
+
+
+test("fails closed before provider execution when paid use is disallowed", async () => {
+  let providerCalls = 0;
+  const paidCandidate = {
+    ...candidates[0],
+    pricingStatus: "FREE_TIER",
+  };
+
+  await assert.rejects(
+    () =>
+      executeWithFailover(
+        [paidCandidate],
+        { prompt: "hello", evidence, allowPaid: false },
+        async () => {
+          providerCalls += 1;
+          return { response: "must not execute", evidence };
+        },
+      ),
+    (error) => {
+      assert.ok(error instanceof AllProvidersFailedError);
+      assert.equal(error.attempts[0]?.error, "PAID_PROVIDER_BLOCKED");
+      return true;
+    },
+  );
+
+  assert.equal(providerCalls, 0);
+});
