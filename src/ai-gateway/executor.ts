@@ -5,6 +5,7 @@ export interface ExecutorRequest {
   prompt: string;
   evidence?: ResponseEvidence;
   systemInstruction?: string;
+  allowPaid?: boolean;
 }
 
 export interface ProviderExecutionResult {
@@ -43,6 +44,18 @@ export class AllProvidersFailedError extends Error {
     super("ALL_PROVIDERS_FAILED");
     this.name = "AllProvidersFailedError";
     this.attempts = attempts;
+  }
+}
+
+const GUARANTEED_FREE_STATUSES = new Set<RouteCandidate["pricingStatus"]>([
+  "VERIFIED_FREE",
+  "LOCAL_FREE",
+  "OSS_FREE",
+]);
+
+function assertCandidateAllowed(candidate: RouteCandidate, allowPaid: boolean): void {
+  if (!allowPaid && !GUARANTEED_FREE_STATUSES.has(candidate.pricingStatus)) {
+    throw new Error("PAID_PROVIDER_BLOCKED");
   }
 }
 
@@ -132,6 +145,7 @@ async function callGemini(request: ExecutorRequest): Promise<ProviderExecutionRe
 }
 
 export const defaultProviderExecutor: ProviderExecutor = async (candidate, request) => {
+  assertCandidateAllowed(candidate, request.allowPaid ?? false);
   const keyName = envKeyForTool(candidate.toolId);
   const apiKey = keyName ? process.env[keyName]?.trim() : "";
   if (!apiKey) throw new Error(`${keyName || "PROVIDER_API_KEY"}_NOT_CONFIGURED`);
@@ -171,6 +185,7 @@ export async function executeWithFailover(
   for (const candidate of candidates) {
     const started = Date.now();
     try {
+      assertCandidateAllowed(candidate, request.allowPaid ?? false);
       const result = await providerExecutor(candidate, request);
       const evidence = result.evidence || request.evidence;
       if (!evidence) throw new Error("EVIDENCE_REQUIRED");
