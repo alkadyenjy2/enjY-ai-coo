@@ -36,7 +36,7 @@ test("fails over from Groq to Cerebras and logs evidence", async () => {
       if (candidate.toolId === "groq") throw new Error("GROQ_DOWN");
       return { response: "hello from cerebras", evidence };
     },
-    (attempt) => logged.push(attempt),
+    (attempt) => { logged.push(attempt); },
   );
 
   assert.equal(result.provider, "cerebras");
