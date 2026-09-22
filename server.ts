@@ -1,10 +1,6 @@
 import express from "express";
-import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
-import type { Client } from "@temporalio/client";
-import type { WorkflowInput, CoreState } from "./temporal-proof/workflows";
-
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
 import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
@@ -71,121 +67,6 @@ export interface OperationalExecutionRecord {
 
 const operationalMemoryRecords: OperationalExecutionRecord[] = [];
 
-// Temporal Workflow Engine Manager Singleton
-class TemporalWorkflowManager {
-  private client: Client | null = null;
-  private worker: import("@temporalio/worker").Worker | null = null;
-  private testEnv: import("@temporalio/testing").TestWorkflowEnvironment | null = null;
-  private initializingPromise: Promise<Client> | null = null;
-
-  public async getClient(): Promise<Client> {
-    if (this.client) return this.client;
-    if (this.initializingPromise) return this.initializingPromise;
-
-	    this.initializingPromise = (async () => {
-      const { Connection, Client } = await import("@temporalio/client");
-	      console.log("⏳ Initializing Temporal Workflow Engine in server.ts...");
-	      const taskQueue = "ai-core-conformance-queue";
-
-	      if (process.env.TEMPORAL_ADDRESS) {
-	        const temporalApiKey = process.env.TEMPORAL_API_KEY?.trim();
-	        const temporalNamespace = process.env.TEMPORAL_NAMESPACE?.trim() || "default";
-	        const connection = await Connection.connect({
-	          address: process.env.TEMPORAL_ADDRESS,
-	          apiKey: temporalApiKey || undefined,
-	          tls: temporalApiKey ? true : undefined,
-	        });
-	        this.client = new Client({ connection, namespace: temporalNamespace });
-	        console.log(`✅ Connected to external Temporal Server at ${process.env.TEMPORAL_ADDRESS}`);
-      } else if (process.env.NODE_ENV === "production") {
-        throw new Error("PRODUCTION_TEMPORAL_ADDRESS_REQUIRED");
-      } else {
-        const { TestWorkflowEnvironment } = await import("@temporalio/testing");
-        const { Worker } = await import("@temporalio/worker");
-        this.testEnv = await TestWorkflowEnvironment.createLocal();
-        this.client = this.testEnv.client;
-
-        const runtimeDir = path.dirname(__filename);
-        const workflowsPath = path.resolve(runtimeDir, "./temporal-proof/workflows.ts");
-
-        this.worker = await Worker.create({
-          connection: this.testEnv.nativeConnection,
-          namespace: "default",
-          taskQueue,
-          workflowsPath,
-          activities: await import("./temporal-proof/activities")
-        });
-
-        this.worker.run().catch((err) => {
-          console.warn("Temporal Worker Background Loop note:", err?.message || err);
-        });
-
-        console.log("✅ Local Temporal Test Environment & Worker active in server.ts.");
-      }
-
-      return this.client;
-    })();
-
-    return this.initializingPromise;
-  }
-
-  public async startWorkflow(input: WorkflowInput): Promise<{ workflowId: string; runId: string }> {
-    const client = await this.getClient();
-    const workflowId = `wf-core-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const taskQueue = "ai-core-conformance-queue";
-
-    const { aiCoreRuntimeWorkflow } = await import("./temporal-proof/workflows");
-    const handle = await client.workflow.start(aiCoreRuntimeWorkflow, {
-      taskQueue,
-      workflowId,
-      args: [input]
-    });
-
-    return { workflowId, runId: handle.firstExecutionRunId };
-  }
-
-  public async getWorkflowState(workflowId: string): Promise<CoreState | null> {
-    const client = await this.getClient();
-    const handle = client.workflow.getHandle(workflowId);
-    try {
-      const { getCoreStateQuery } = await import("./temporal-proof/workflows");
-      return await handle.query(getCoreStateQuery);
-    } catch (err) {
-      return null;
-    }
-  }
-
-  public async signalApproval(workflowId: string, approved: boolean): Promise<boolean> {
-    const client = await this.getClient();
-    const handle = client.workflow.getHandle(workflowId);
-    try {
-      const { humanApprovalSignal } = await import("./temporal-proof/workflows");
-      await handle.signal(humanApprovalSignal, approved);
-      return true;
-    } catch (err) {
-      return false;
-    }
-  }
-
-  public async getWorkflowResult(workflowId: string): Promise<CoreState> {
-    const client = await this.getClient();
-    const handle = client.workflow.getHandle(workflowId);
-    return await handle.result();
-  }
-
-  public async fetchHistory(workflowId: string): Promise<any> {
-    const client = await this.getClient();
-    const handle = client.workflow.getHandle(workflowId);
-    try {
-      return await handle.fetchHistory();
-    } catch (err: any) {
-      return { error: err?.message || String(err) };
-    }
-  }
-}
-
-export const temporalManager = new TemporalWorkflowManager();
-
 // Initialize GoogleGenAI SDK (Server-Side Only)
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -213,7 +94,6 @@ app.get("/api/health", (req, res) => {
     version: "2.5.0",
     hasApiKey: hasOpenAI || hasGemini,
     modelProviders: { openai: hasOpenAI, gemini: hasGemini },
-    temporalEngineActive: Boolean(process.env.TEMPORAL_ADDRESS),
     executionHistoryCount: operationalMemoryRecords.length,
     timestamp: new Date().toISOString()
   });
@@ -227,17 +107,14 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
     (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   );
-  const hasExternalTemporal = Boolean(process.env.TEMPORAL_ADDRESS);
   const hasModelProvider = hasOpenAI || hasGemini;
-  const directExecutionActive = process.env.NODE_ENV === "production";
   const requireLiveDependencies = process.env.NODE_ENV === "production" || process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
   const checks = {
     process: true,
     openai: hasOpenAI,
     gemini: hasGemini,
     supabase: hasSupabase,
-    temporal: hasExternalTemporal || !requireLiveDependencies,
-    execution: hasExternalTemporal || !requireLiveDependencies,
+    execution: true,
   };
   const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.execution));
   return res.status(ready ? 200 : 503).json({
@@ -287,268 +164,8 @@ app.get("/api/organizations", requireAuth, async (req, res) => {
 app.use("/api/clinic", clinicRouter);
 
 // Protected API surfaces. Webhook routes remain signature-authenticated separately.
-app.use(["/api/agent", "/api/connectors", "/api/temporal", "/api/env-status"], requireAuth);
-app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard", "/api/temporal"], requireOrganizationAccess);
-
-// API Routes: Temporal Workflow Control & Monitoring
-app.post("/api/temporal/start", async (req, res) => {
-  try {
-    const {
-      command = "Execute AI Core Workflow",
-      requireHumanApproval = false,
-      requireEvidence = false,
-      provideEvidence = false,
-      evidenceText,
-      maxLoopIterations = 1,
-      failAttempts = 0,
-      nonRetryableError = false,
-      testId = "CUSTOM_EXECUTION",
-      postizPayload,
-      whopPayload,
-      tavilyPayload,
-      stripePayload,
-      roofingPayload,
-      feedbackPayload,
-      optimizePromptPayload,
-      runOperationsAudit
-    } = req.body;
-
-    const input: WorkflowInput = {
-      testId,
-      command,
-      requireHumanApproval,
-      requireEvidence,
-      provideEvidence,
-      evidenceText,
-      maxLoopIterations,
-      failAttempts,
-      nonRetryableError,
-      postizPayload,
-      whopPayload,
-      tavilyPayload,
-      stripePayload,
-      roofingPayload,
-      feedbackPayload,
-      optimizePromptPayload,
-      runOperationsAudit
-    };
-
-    const result = await temporalManager.startWorkflow(input);
-    const initialState = await temporalManager.getWorkflowState(result.workflowId);
-
-    return res.json({
-      success: true,
-      workflowId: result.workflowId,
-      runId: result.runId,
-      initialState,
-      message: "Temporal AI CORE Workflow started successfully."
-    });
-  } catch (err: any) {
-    return res.status(500).json({
-      success: false,
-      error: err?.message || String(err)
-    });
-  }
-});
-
-app.get("/api/temporal/status/:workflowId", async (req, res) => {
-  try {
-    const { workflowId } = req.params;
-    const state = await temporalManager.getWorkflowState(workflowId);
-    if (!state) {
-      return res.status(404).json({ success: false, error: "Workflow not found or state unavailable." });
-    }
-    return res.json({
-      success: true,
-      workflowId,
-      state
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err?.message || String(err) });
-  }
-});
-
-app.post("/api/temporal/signal/:workflowId", async (req, res) => {
-  try {
-    const { workflowId } = req.params;
-    const { approved = true } = req.body;
-
-    const success = await temporalManager.signalApproval(workflowId, Boolean(approved));
-    if (!success) {
-      return res.status(400).json({ success: false, error: "Failed to send signal to workflow handle." });
-    }
-
-    await new Promise((r) => setTimeout(r, 200));
-    const state = await temporalManager.getWorkflowState(workflowId);
-
-    return res.json({
-      success: true,
-      workflowId,
-      approved,
-      state,
-      message: `Signaled human approval (${approved}) to workflow.`
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err?.message || String(err) });
-  }
-});
-
-app.get("/api/temporal/history/:workflowId", async (req, res) => {
-  try {
-    const { workflowId } = req.params;
-    const history = await temporalManager.fetchHistory(workflowId);
-    return res.json({
-      success: true,
-      workflowId,
-      history
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err?.message || String(err) });
-  }
-});
-
-async function executeDirectly(input: WorkflowInput, autoApprove: boolean): Promise<CoreState> {
-  const activities = await import("./temporal-proof/activities");
-  const state: CoreState = {
-    currentStatus: "RECEIVED",
-    stateHistory: ["RECEIVED"],
-    approvalStatus: "AUTO_APPROVED",
-    verificationStatus: "NOT_REQUIRED",
-    loopIterationsExecuted: 0
-  };
-  const transition = (status: CoreState["currentStatus"]) => {
-    state.currentStatus = status;
-    state.stateHistory.push(status);
-  };
-
-  transition("ROUTED");
-  const classification = await activities.classifyDirectiveActivity(input.command);
-  state.intent = classification.intent;
-  state.intentMode = classification.mode;
-  if (classification.mode === "PLAN") {
-    state.errorDetails = "PLANNING_DIRECTIVE_REQUIRES_PLANNER";
-    transition("REJECTED");
-    return state;
-  }
-
-  const needsApproval = input.requireHumanApproval || classification.requiresApproval;
-  if (needsApproval && !autoApprove) {
-    state.approvalStatus = "WAITING";
-    transition("WAITING_FOR_APPROVAL");
-    return state;
-  }
-  if (needsApproval) state.approvalStatus = "APPROVED";
-
-  transition("DISPATCHED");
-  try {
-    const result = await activities.executeDeterministicActivity({
-      command: input.command,
-      failAttempts: input.failAttempts,
-      nonRetryableError: input.nonRetryableError
-    });
-    state.executionResult = result.result;
-    state.loopIterationsExecuted = 1;
-    transition("EXECUTED");
-    const evidence = await activities.verifyEvidenceActivity({
-      executionResult: state.executionResult,
-      evidence: input.provideEvidence ? input.evidenceText : undefined,
-      source: "activity-result"
-    });
-    if (!evidence.verified) {
-      state.verificationStatus = "FAILED";
-      state.errorDetails = evidence.proofRecord;
-      transition("FAILED");
-      return state;
-    }
-    state.verificationStatus = "VERIFIED";
-    state.evidenceProof = evidence.proofRecord;
-    state.evidenceSource = evidence.source;
-    transition("VERIFIED");
-    await activities.recordMemoryActivity({
-      testId: input.testId,
-      command: input.command,
-      finalState: "COMPLETED",
-      history: [...state.stateHistory, "COMPLETED"]
-    });
-    transition("COMPLETED");
-    return state;
-  } catch (error: any) {
-    state.errorDetails = error?.message || String(error);
-    transition("FAILED");
-    return state;
-  }
-}
-
-app.post("/api/temporal/execute-sync", async (req, res) => {
-  try {
-    const {
-      command = "Synchronous AI CORE Workflow",
-      requireHumanApproval = false,
-      autoApprove = true,
-      requireEvidence = false,
-      provideEvidence = false,
-      evidenceText,
-      maxLoopIterations = 1,
-      postizPayload,
-      whopPayload,
-      tavilyPayload,
-      stripePayload,
-      roofingPayload,
-      feedbackPayload,
-      optimizePromptPayload,
-      runOperationsAudit
-    } = req.body;
-
-    const input: WorkflowInput = {
-      testId: "SYNC_EXEC",
-      command,
-      requireHumanApproval,
-      requireEvidence,
-      provideEvidence,
-      evidenceText,
-      maxLoopIterations,
-      postizPayload,
-      whopPayload,
-      tavilyPayload,
-      stripePayload,
-      roofingPayload,
-      feedbackPayload,
-      optimizePromptPayload,
-      runOperationsAudit
-    };
-
-    // Production execution must always use the real Temporal path. A local/direct activity
-    // runner is test/dev infrastructure only and must never become a production fallback.
-    const useDirectExecution = process.env.NODE_ENV !== "production" && !process.env.TEMPORAL_ADDRESS;
-    let workflowId: string;
-    let runId: string;
-    let finalState: CoreState;
-    if (useDirectExecution) {
-      workflowId = `direct-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      runId = `direct-run-${Date.now()}`;
-      finalState = await executeDirectly(input, Boolean(autoApprove));
-    } else {
-      ({ workflowId, runId } = await temporalManager.startWorkflow(input));
-      if (requireHumanApproval && autoApprove) {
-        setTimeout(async () => {
-          await temporalManager.signalApproval(workflowId, true);
-        }, 300);
-      }
-      finalState = await temporalManager.getWorkflowResult(workflowId);
-    }
-
-    return res.json({
-      success: true,
-      workflowId,
-      runId,
-      finalState,
-      executionMode: useDirectExecution ? "DIRECT_EXECUTION" : "TEMPORAL",
-      conformanceResult: finalState.currentStatus === "COMPLETED" ? `${useDirectExecution ? "DIRECT_EXECUTION" : "TEMPORAL_CONFORMANCE"} = PROVEN` : "WORKFLOW_FAILED"
-    });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err?.message || String(err) });
-  }
-});
+app.use(["/api/agent", "/api/connectors", "/api/env-status"], requireAuth);
+app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard"], requireOrganizationAccess);
 
 async function rememberOperationalRecord(record: OperationalExecutionRecord) {
   operationalMemoryRecords.unshift(record);
