@@ -93,6 +93,13 @@ async function getDurableJobByIdempotency(organizationId: string, idempotencyKey
   return (data as DurableJob | null) || null;
 }
 
+export async function enqueueDurableJob(id: string): Promise<number> {
+  const client = adminClient();
+  const { data, error } = await client.rpc("ai_core_job_enqueue", { p_job_id: id });
+  if (error) throw new Error(`DURABLE_JOB_ENQUEUE_FAILED:${error.message}`);
+  return Number(data);
+}
+
 export async function updateDurableJob(
   id: string,
   patch: Partial<Pick<DurableJob, "status" | "current_step" | "state_history" | "execution_result" | "evidence_proof" | "approval_status" | "error_code" | "error_message" | "completed_at">>,
