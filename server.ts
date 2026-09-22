@@ -1,4 +1,5 @@
 import express from "express";
+import path from "node:path";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import { stripeAdapter } from "./src/adapters/stripe";
@@ -1504,18 +1505,26 @@ app.post("/api/webhooks/stripe", async (req, res) => {
       return res.status(400).json({ error: "Invalid webhook signature or payload" });
     }
 
-    // Trigger Temporal Workflow upon live payment completed
     if (verification.eventType === "checkout.session.completed") {
       const payload = verification.payload;
-      await temporalManager.startWorkflow({
-        command: `Process Paid Customer Order for event ${payload.id || "unknown"}`,
-        requireHumanApproval: false,
-        stripePayload: {
-          productName: payload.description || "Digital Product Purchase",
-          priceUSD: (payload.amount_total || 0) / 100,
-          customerEmail: payload.customer_email
-        }
-      });
+      const record: OperationalExecutionRecord = {
+        id: `stripe-webhook-${payload.id || Date.now()}`,
+        timestamp: new Date().toISOString(),
+        command: `Stripe checkout completed: ${payload.id || "unknown"}`,
+        project: "AI CORE COO",
+        intent: "PAYMENT_WEBHOOK",
+        tool: "Stripe Webhook",
+        selectedTools: ["Stripe Webhook"],
+        actionsExecuted: [{ tool: "Stripe Webhook", status: "acknowledged", details: "Verified checkout.session.completed webhook without legacy Temporal dispatch." }],
+        results: { eventType: verification.eventType, eventId: payload.id || null },
+        state_history: ["RECEIVED", "ROUTED", "EXECUTED", "VERIFIED", "COMPLETED"],
+        evidence: "Stripe signature verified by stripeAdapter.verifyAndProcessWebhook.",
+        verificationStatus: "VERIFIED",
+        final_state_reason: "Verified Stripe event acknowledged by the production runtime.",
+        errors: [],
+        approvalStatus: "AUTO_APPROVED"
+      };
+      await rememberOperationalRecord(record);
     }
 
     res.json({ received: true, eventType: verification.eventType });
@@ -1539,15 +1548,24 @@ app.post("/api/webhooks/whop", async (req, res) => {
     if (webhookId && processedWebhookIds.has(webhookId)) {
       return res.json({ received: true, duplicate: true });
     }
-    await temporalManager.startWorkflow({
-      command: `Process Whop Webhook Event: ${payload.action || "membership.created"}`,
-      requireHumanApproval: false,
-      whopPayload: {
-        name: payload.data?.name || "Whop Digital Membership",
-        description: payload.data?.description || "Automated Whop entitlement",
-        priceUSD: payload.data?.price || 49.00
-      }
-    });
+    const record: OperationalExecutionRecord = {
+      id: `whop-webhook-${webhookId || Date.now()}`,
+      timestamp: new Date().toISOString(),
+      command: `Whop webhook event: ${payload.action || "membership.created"}`,
+      project: "AI CORE COO",
+      intent: "WHOP_WEBHOOK",
+      tool: "Whop Webhook",
+      selectedTools: ["Whop Webhook"],
+      actionsExecuted: [{ tool: "Whop Webhook", status: "acknowledged", details: "Verified Whop webhook without legacy Temporal dispatch." }],
+      results: { action: payload.action || "membership.created", webhookId: webhookId || null },
+      state_history: ["RECEIVED", "ROUTED", "EXECUTED", "VERIFIED", "COMPLETED"],
+      evidence: "Whop webhook signature verified by verifyWhopWebhook.",
+      verificationStatus: "VERIFIED",
+      final_state_reason: "Verified Whop event acknowledged by the production runtime.",
+      errors: [],
+      approvalStatus: "AUTO_APPROVED"
+    };
+    await rememberOperationalRecord(record);
     if (webhookId) processedWebhookIds.add(webhookId);
     res.json({ received: true, action: payload.action || "processed" });
   } catch (err: any) {
