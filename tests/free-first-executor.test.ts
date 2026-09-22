@@ -31,7 +31,7 @@ test("fails over from Groq to Cerebras and logs evidence", async () => {
   const logged: any[] = [];
   const result = await executeWithFailover(
     candidates,
-    { prompt: "hello", evidence },
+    { prompt: "hello", evidence, allowPaid: true },
     async (candidate) => {
       if (candidate.toolId === "groq") throw new Error("GROQ_DOWN");
       return { response: "hello from cerebras", evidence };
@@ -70,7 +70,7 @@ test("rejects a successful provider response without evidence", async () => {
     () =>
       executeWithFailover(
         [candidates[0]],
-        { prompt: "hello" },
+        { prompt: "hello", allowPaid: true },
         async () => ({ response: "invented success" }),
       ),
     /ALL_PROVIDERS_FAILED/,
