@@ -11,7 +11,7 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
-import { createDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs";
+import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -279,7 +279,116 @@ function isToolAllowed(intent: string, toolName: string): boolean {
   return allowed.includes(toolName);
 }
 
-// Durable execution control plane. Persists state around the canonical command path.\napp.post("/api/executions/start", async (req, res) => {\n  const auth = getAuthContext(res);\n  const organization = getOrganizationAccess(res);\n  if (!auth || !organization) return res.status(401).json({ success: false, error: "Authentication and organization access are required." });\n  const command = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";\n  if (!command) return res.status(400).json({ success: false, error: "prompt is required." });\n  const idempotencyKey = String(req.header("idempotency-key") || req.body?.idempotency_key || "").trim() || undefined;\n  try {\n    const job = await createDurableJob({ organizationId: organization.organizationId, userId: auth.user.id, command, idempotencyKey, inputPayload: { userProfile: req.body?.userProfile || null, activeProject: req.body?.activeProject || null, memoryContext: req.body?.memoryContext || null, model: req.body?.model || "gpt-6-astra", gmailApprovalConfirmed: req.body?.gmailApprovalConfirmed === true } });\n    if (["COMPLETED", "VERIFIED", "FAILED", "REJECTED", "WAITING_FOR_APPROVAL"].includes(job.status)) {\n      return res.status(200).json({ success: job.status !== "FAILED" && job.status !== "REJECTED", executionId: job.id, job });\n    }\n    await updateDurableJob(job.id, { status: "RUNNING", current_step: "EXECUTING", state_history: [...job.state_history, "RUNNING"] });\n    const baseUrl = (process.env.APP_URL || "").trim().replace(/\/$/, "");\n    if (!baseUrl) throw new Error("APP_URL is required for durable execution dispatch.");\n    const upstream = await fetch(baseUrl + "/api/agent/command", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer " + auth.accessToken }, body: JSON.stringify({ prompt: command, userProfile: req.body?.userProfile, activeProject: req.body?.activeProject, memoryContext: req.body?.memoryContext, model: req.body?.model || "gpt-6-astra", gmailApprovalConfirmed: req.body?.gmailApprovalConfirmed === true, organization_id: organization.organizationId }) });\n    const result = await upstream.json().catch(() => ({}));\n    const executionRecord = result?.executionRecord;\n    const verified = executionRecord?.verificationStatus === "VERIFIED";\n    const waiting = executionRecord?.approvalStatus === "REQUIRES_HUMAN_APPROVAL";\n    const terminalStatus = verified ? "COMPLETED" : waiting ? "WAITING_FOR_APPROVAL" : "FAILED";\n    const terminalStep = verified ? "VERIFIED" : waiting ? "WAITING_FOR_APPROVAL" : "FAILED";\n    const current = await getDurableJob(job.id, organization.organizationId);\n    const history = [...(current?.state_history || ["RECEIVED", "QUEUED", "RUNNING"]), terminalStep];\n    const updated = await updateDurableJob(job.id, { status: terminalStatus, current_step: terminalStep, state_history: history, execution_result: result, evidence_proof: executionRecord?.evidence || null, approval_status: waiting ? "WAITING" : "AUTO_APPROVED", error_code: upstream.ok && !verified && !waiting ? "EXECUTION_NOT_VERIFIED" : upstream.ok ? null : "COMMAND_ROUTE_FAILED", error_message: upstream.ok ? (verified || waiting ? null : String(executionRecord?.final_state_reason || "Execution did not produce verification evidence.")) : String(result?.error || "Command route failed."), completed_at: new Date().toISOString() });\n    return res.status(verified || waiting ? 200 : 502).json({ success: verified || waiting, executionId: updated.id, job: updated, result });\n  } catch (error: any) {\n    return res.status(500).json({ success: false, error: error?.message || "Durable execution failed." });\n  }\n});\n\napp.get("/api/executions/:executionId", async (req, res) => {\n  const organization = getOrganizationAccess(res);\n  if (!organization) return res.status(401).json({ success: false, error: "Organization access is required." });\n  try {\n    const job = await getDurableJob(req.params.executionId, organization.organizationId);\n    if (!job) return res.status(404).json({ success: false, error: "Execution not found." });\n    return res.json({ success: true, executionId: job.id, job });\n  } catch (error: any) {\n    return res.status(500).json({ success: false, error: error?.message || "Execution lookup failed." });\n  }\n});\n// API Route: Agent Command Execution (Chat / Command Center)
+// Durable execution control plane. Queue first; worker performs the canonical command path.
+app.post("/api/executions/start", async (req, res) => {
+  const auth = getAuthContext(res);
+  const organization = getOrganizationAccess(res);
+  if (!auth || !organization) return res.status(401).json({ success: false, error: "Authentication and organization access are required." });
+  const command = typeof req.body?.prompt === "string" ? req.body.prompt.trim() : "";
+  if (!command) return res.status(400).json({ success: false, error: "prompt is required." });
+  const idempotencyKey = String(req.header("idempotency-key") || req.body?.idempotency_key || "").trim() || undefined;
+  try {
+    const job = await createDurableJob({
+      organizationId: organization.organizationId,
+      userId: auth.user.id,
+      command,
+      idempotencyKey,
+      inputPayload: {
+        userProfile: req.body?.userProfile || null,
+        activeProject: req.body?.activeProject || null,
+        memoryContext: req.body?.memoryContext || null,
+        model: req.body?.model || "gpt-6-astra",
+        gmailApprovalConfirmed: req.body?.gmailApprovalConfirmed === true,
+      },
+    });
+    if (["COMPLETED", "VERIFIED", "FAILED", "REJECTED", "WAITING_FOR_APPROVAL"].includes(job.status)) {
+      return res.status(200).json({ success: job.status !== "FAILED" && job.status !== "REJECTED", executionId: job.id, job });
+    }
+    const messageId = await enqueueDurableJob(job.id);
+    return res.status(202).json({ success: true, executionId: job.id, queueMessageId: messageId, job: { ...job, status: "QUEUED", current_step: "QUEUED" } });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || "Durable execution enqueue failed." });
+  }
+});
+
+app.post("/api/executions/worker", async (req, res) => {
+  const organization = getOrganizationAccess(res);
+  if (!organization) return res.status(401).json({ success: false, error: "Organization access is required." });
+  const executionId = String(req.body?.execution_id || "").trim();
+  if (!executionId) return res.status(400).json({ success: false, error: "execution_id is required." });
+  try {
+    const job = await getDurableJob(executionId, organization.organizationId);
+    if (!job) return res.status(404).json({ success: false, error: "Execution not found." });
+    if (["COMPLETED", "VERIFIED", "FAILED", "REJECTED", "WAITING_FOR_APPROVAL"].includes(job.status)) {
+      return res.json({ success: job.status !== "FAILED" && job.status !== "REJECTED", executionId: job.id, job });
+    }
+
+    const payload = {
+      prompt: job.command,
+      organization_id: job.organization_id,
+      userProfile: job.input_payload?.userProfile || null,
+      activeProject: job.input_payload?.activeProject || null,
+      memoryContext: job.input_payload?.memoryContext || null,
+      model: job.input_payload?.model || "gpt-6-astra",
+      gmailApprovalConfirmed: job.input_payload?.gmailApprovalConfirmed === true,
+    };
+    const timestamp = Date.now();
+    const crypto = await import("node:crypto");
+    const serverSecret = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+    if (!serverSecret) throw new Error("DURABLE_WORKER_SECRET_MISSING");
+    const signature = crypto.createHmac("sha256", serverSecret).update(`${timestamp}.${JSON.stringify(payload)}`).digest("hex");
+
+    const baseUrl = (process.env.APP_URL || "").trim().replace(/\/$/, "");
+    if (!baseUrl) throw new Error("APP_URL is required for durable worker dispatch.");
+    const upstream = await fetch(baseUrl + "/api/agent/command", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-jarvis-internal": "worker",
+        "x-jarvis-worker-timestamp": String(timestamp),
+        "x-jarvis-worker-signature": signature,
+        "x-jarvis-worker-user-id": job.user_id,
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await upstream.json().catch(() => ({}));
+    const executionRecord = result?.executionRecord;
+    const verified = executionRecord?.verificationStatus === "VERIFIED";
+    const waiting = executionRecord?.approvalStatus === "REQUIRES_HUMAN_APPROVAL";
+    const terminalStatus = verified ? "COMPLETED" : waiting ? "WAITING_FOR_APPROVAL" : "FAILED";
+    const terminalStep = verified ? "VERIFIED" : waiting ? "WAITING_FOR_APPROVAL" : "FAILED";
+    const current = await getDurableJob(job.id, organization.organizationId);
+    const history = [...(current?.state_history || ["RECEIVED", "QUEUED", "RUNNING"]), terminalStep];
+    const updated = await updateDurableJob(job.id, {
+      status: terminalStatus,
+      current_step: terminalStep,
+      state_history: history,
+      execution_result: result,
+      evidence_proof: executionRecord?.evidence || null,
+      approval_status: waiting ? "WAITING" : "AUTO_APPROVED",
+      error_code: upstream.ok && !verified && !waiting ? "EXECUTION_NOT_VERIFIED" : upstream.ok ? null : "COMMAND_ROUTE_FAILED",
+      error_message: upstream.ok ? (verified || waiting ? null : String(executionRecord?.final_state_reason || "Execution did not produce verification evidence.")) : String(result?.error || "Command route failed."),
+      completed_at: new Date().toISOString(),
+    });
+    return res.json({ success: verified || waiting, executionId: updated.id, job: updated, result });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || "Durable worker execution failed." });
+  }
+});
+
+app.get("/api/executions/:executionId", async (req, res) => {
+  const organization = getOrganizationAccess(res);
+  if (!organization) return res.status(401).json({ success: false, error: "Organization access is required." });
+  try {
+    const job = await getDurableJob(req.params.executionId, organization.organizationId);
+    if (!job) return res.status(404).json({ success: false, error: "Execution not found." });
+    return res.json({ success: true, executionId: job.id, job });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || "Execution lookup failed." });
+  }
+});
+
+// API Route: Agent Command Execution (Chat / Command Center)
 app.post("/api/agent/command", async (req, res) => {
   const { prompt, userProfile, activeProject, memoryContext, model = "gpt-6-astra", gmailApprovalConfirmed = false } = req.body;
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
