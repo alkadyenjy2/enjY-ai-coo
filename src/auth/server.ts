@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import type { NextFunction, Request, Response } from "express";
 import { runPersistenceContext } from "../adapters/request-context";
