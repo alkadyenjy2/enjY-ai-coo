@@ -29,8 +29,8 @@ test('returns fallback candidates in deterministic priority order', () => {
   });
 
   assert.deepEqual(
-    routes.slice(0, 4).map((route) => route.toolId),
-    ['openrouter', 'gemini-api', 'groq', 'mistral'],
+    routes.map((route) => route.toolId),
+    ['openrouter'],
   );
 });
 
@@ -59,4 +59,26 @@ test('does not select paid-only routes unless explicitly allowed', () => {
   });
 
   assert.equal(routes.length, 0);
+});
+
+test('allowPaid=false excludes every non-guaranteed-free pricing status', () => {
+  const registry = ['FREE_TIER', 'FREE_WEB_ONLY', 'PAID_ONLY', 'UNVERIFIED'].map((pricingStatus, index) => ({
+    toolId: `provider-${index}`,
+    name: `Provider ${index}`,
+    category: 'ai',
+    accessType: 'API' as const,
+    capabilities: ['chat'],
+    pricingStatus: pricingStatus as any,
+    requiresAccount: true,
+    requiresCard: false,
+    automationLevel: 'FULL_API' as const,
+    priority: index,
+    enabled: true,
+    verificationStatus: 'VERIFIED' as const,
+    lastVerifiedAt: '2026-09-22',
+    verificationSource: 'test',
+    fallbackToolIds: [],
+  }));
+
+  assert.equal(selectRoutes(registry, { capabilities: ['chat'], allowPaid: false }).length, 0);
 });
