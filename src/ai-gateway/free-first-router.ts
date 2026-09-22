@@ -1,10 +1,8 @@
 import type { AIRegistryEntry } from './registry-types';
 import type { RouteCandidate, RouteRequest } from './router-types';
 
-const FREE_STATUSES = new Set([
+const GUARANTEED_FREE_STATUSES = new Set([
   'VERIFIED_FREE',
-  'FREE_TIER',
-  'FREE_WEB_ONLY',
   'LOCAL_FREE',
   'OSS_FREE',
 ]);
@@ -15,7 +13,7 @@ function capabilityMatch(entry: AIRegistryEntry, requested: string[]): boolean {
 
 function eligible(entry: AIRegistryEntry, request: RouteRequest): boolean {
   if (!entry.enabled || entry.verificationStatus !== 'VERIFIED') return false;
-  if (!request.allowPaid && !FREE_STATUSES.has(entry.pricingStatus)) return false;
+  if (!request.allowPaid && !GUARANTEED_FREE_STATUSES.has(entry.pricingStatus)) return false;
   if (request.requireApi && !entry.accessType.includes('API')) return false;
   return capabilityMatch(entry, request.capabilities);
 }
