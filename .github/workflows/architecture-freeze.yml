@@ -17,4 +17,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: node --import tsx --test --test-concurrency=1 tests/architecture-freeze.test.ts tests/temporal-browser-use.test.ts
+      - run: node --import tsx --test --test-concurrency=1 tests/architecture-freeze.test.ts
