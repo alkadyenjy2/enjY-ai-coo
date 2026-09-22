@@ -16,5 +16,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run build
       - run: npm run lint
       - run: node --import tsx --test --test-concurrency=1 tests/architecture-freeze.test.ts
