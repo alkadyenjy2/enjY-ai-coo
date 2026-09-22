@@ -93,6 +93,13 @@ async function getDurableJobByIdempotency(organizationId: string, idempotencyKey
   return (data as DurableJob | null) || null;
 }
 
+export async function getDurableWorkerSecret(): Promise<string> {
+  const client = adminClient();
+  const { data, error } = await client.rpc("ai_core_get_worker_shared_secret");
+  if (error || !data) throw new Error("DURABLE_WORKER_SHARED_SECRET_UNAVAILABLE");
+  return String(data);
+}
+
 export async function enqueueDurableJob(id: string): Promise<number> {
   const client = adminClient();
   const { data, error } = await client.rpc("ai_core_job_enqueue", { p_job_id: id });
