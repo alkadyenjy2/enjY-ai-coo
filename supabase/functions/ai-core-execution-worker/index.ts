@@ -4,6 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const secretKeys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}");
 const secretKey = secretKeys.default || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const invocationKey = publishableKeys.default || Deno.env.get("SUPABASE_ANON_KEY") || "";
 const supabase = createClient(supabaseUrl, secretKey, { auth: { autoRefreshToken: false, persistSession: false } });
 const appUrl = "https://enj-y-ai-coo.vercel.app";
 
@@ -16,7 +17,7 @@ async function hmacHex(secret: string, value: string): Promise<string> {
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
   const callerKey = req.headers.get("apikey") || "";
-  if (!secretKey || callerKey !== secretKey) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  if (!invocationKey || callerKey !== invocationKey) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: claimed, error: claimError } = await supabase.rpc("ai_core_job_claim", { p_visibility_seconds: 300 });
   if (claimError) return Response.json({ error: claimError.message }, { status: 500 });
