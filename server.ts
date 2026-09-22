@@ -11,7 +11,7 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
-import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs";
+import { createDurableJob, enqueueDurableJob, getDurableJob, getDurableWorkerSecret, updateDurableJob } from "./src/execution/durable-jobs";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -334,9 +334,8 @@ app.post("/api/executions/worker", async (req, res) => {
     };
     const timestamp = Date.now();
     const crypto = await import("node:crypto");
-    const serverSecret = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-    if (!serverSecret) throw new Error("DURABLE_WORKER_SECRET_MISSING");
-    const signature = crypto.createHmac("sha256", serverSecret).update(`${timestamp}.${JSON.stringify(payload)}`).digest("hex");
+    const workerSecret = await getDurableWorkerSecret();
+    const signature = crypto.createHmac("sha256", workerSecret).update(`${timestamp}.${JSON.stringify(payload)}`).digest("hex");
 
     const baseUrl = (process.env.APP_URL || "").trim().replace(/\/$/, "");
     if (!baseUrl) throw new Error("APP_URL is required for durable worker dispatch.");
