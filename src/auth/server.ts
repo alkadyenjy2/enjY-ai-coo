@@ -44,8 +44,23 @@ function getServerSecretKey(): string | null {
   return secret || null;
 }
 
-async function authenticateTrustedTelegramRequest(req: Request): Promise<AuthContext | null> {
-  if (req.header("x-jarvis-internal") !== "telegram") return null;
+async function authenticateTrustedInternalRequest(req: Request): Promise<AuthContext | null> {
+  const internalType = req.header("x-jarvis-internal");
+  if (internalType !== "telegram" && internalType !== "worker") return null;
+  const serverSecret = getServerSecretKey();
+  const suppliedSecret = req.header("x-jarvis-internal-key")?.trim() || "";
+  if (internalType === "telegram") {
+    if (!serverSecret || !suppliedSecret || suppliedSecret !== serverSecret) return null;
+  } else {
+    const timestamp = Number(req.header("x-jarvis-worker-timestamp") || 0);
+    const signature = req.header("x-jarvis-worker-signature")?.trim() || "";
+    if (!serverSecret || !signature || !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 300000) return null;
+    const crypto = await import("node:crypto");
+    const body = JSON.stringify(req.body || {});
+    const payload = `${timestamp}.${body}`;
+    const expected = crypto.createHmac("sha256", serverSecret).update(payload).digest("hex");
+    if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  }
   const serverSecret = getServerSecretKey();
   const suppliedSecret = req.header("x-jarvis-internal-key")?.trim() || "";
   if (!serverSecret || !suppliedSecret || suppliedSecret !== serverSecret) return null;
@@ -74,8 +89,12 @@ async function authenticateTrustedTelegramRequest(req: Request): Promise<AuthCon
   return { user: userData.user, accessToken: serverSecret, supabase: admin };
 }
 
+async function authenticateTrustedTelegramRequest(req: Request): Promise<AuthContext | null> {
+  return authenticateTrustedInternalRequest(req);
+}
+
 export async function authenticateRequest(req: Request): Promise<AuthContext | null> {
-  const trustedTelegramAuth = await authenticateTrustedTelegramRequest(req);
+  const trustedTelegramAuth = await authenticateTrustedInternalRequest(req);
   if (trustedTelegramAuth) return trustedTelegramAuth;
 
   const accessToken = extractBearerToken(req);
