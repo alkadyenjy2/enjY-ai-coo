@@ -12,7 +12,9 @@ import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
-import { executeBrowserSkill } from "./src/adapters/browserskill";`r`nimport { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";`r`nimport { kolboMediaExecutionProvider } from "./src/execution/kolbo-provider.ts";
+import { executeBrowserSkill } from "./src/adapters/browserskill";
+import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
+import { kolboMediaExecutionProvider } from "./src/execution/kolbo-provider.ts";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
