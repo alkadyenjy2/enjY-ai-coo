@@ -767,6 +767,11 @@ Rules for Response:
           verificationStatus = "FAILED";
           actionsTakenList.push({ tool: "Media Execution Guard", status: "blocked", details: "Unsupported media operation or missing instruction." });
           responseText = "⚠️ **[Media Execution Guard]** طلب الوسائط غير مكتمل أو غير مدعوم.";
+        } else if (!resolvedOrganizationId || !resolvedUserId) {
+          executionErrors.push("Authenticated organization and user context are required for durable media execution.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({ tool: "Media Execution Guard", status: "blocked", details: "Missing authenticated organization or user context; no durable job was created." });
+          responseText = "🔒 **[Media Execution Guard]** لا يمكن تشغيل تعديل الفيديو بدون سياق المؤسسة والمستخدم الموثق.";
         } else {
           const mediaRequest = {
             operation: "lighting" as const,
@@ -792,7 +797,8 @@ Rules for Response:
 * **Execution ID:** \`${durableJob.id}\`
 * **Status:** \`QUEUED\`
 * **Worker:** \`Supabase durable execution worker\``;
-        }      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
+        }
+      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
         const targetUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/${table}?select=${select}`;
