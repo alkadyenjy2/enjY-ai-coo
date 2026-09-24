@@ -16,6 +16,9 @@ import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
 import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
+import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
+import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
+import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 =======
 import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider } from "./src/execution/kolbo-provider.ts";
@@ -286,6 +289,79 @@ function isToolAllowed(intent: string, toolName: string): boolean {
   const allowed = INTENT_TOOL_POLICY[intent] || [];
   return allowed.includes(toolName);
 }
+
+// Durable worker step for provider-backed media jobs. One invocation performs one bounded provider step.
+app.post("/api/executions/worker", async (req, res) => {
+  const executionId = String(req.body?.execution_id || "").trim();
+  if (!executionId) return res.status(400).json({ success: false, error: "execution_id is required." });
+  try {
+    const timestamp = String(req.header("x-jarvis-worker-timestamp") || "").trim();
+    const signature = String(req.header("x-jarvis-worker-signature") || "").trim();
+    if (req.header("x-jarvis-internal") !== "worker" || !timestamp || !signature) return res.status(401).json({ success: false, error: "Internal worker authentication required." });
+    const crypto = await import("node:crypto");
+    const workerSecret = await (await import("./src/execution/durable-jobs.ts")).getDurableWorkerSecret();
+    const expected = crypto.createHmac("sha256", workerSecret).update(`${timestamp}.${JSON.stringify(req.body)}`).digest("hex");
+    if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return res.status(401).json({ success: false, error: "Invalid worker signature." });
+    const organizationId = String(req.body?.organization_id || "").trim();
+    if (!organizationId) return res.status(400).json({ success: false, error: "organization_id is required." });
+    const job = await getDurableJob(executionId, organizationId);
+    if (!job) return res.status(404).json({ success: false, error: "Execution not found." });
+    const media = job.input_payload?.kind === "media_execution" ? job.input_payload : null;
+    if (!media) return res.status(409).json({ success: false, error: "Unsupported durable execution payload." });
+    if (["COMPLETED", "FAILED", "REJECTED"].includes(job.status)) return res.json({ success: job.status === "COMPLETED", executionId: job.id, job });
+
+    const request = media.mediaRequest as any;
+    const state = (job.execution_result && typeof job.execution_result === "object" ? job.execution_result : {}) as any;
+    if (!state.providerJobId) {
+      const started = await startKolboMediaJob(request);
+      const updated = await updateDurableJob(job.id, {
+        status: "RUNNING",
+        current_step: "PROVIDER_RUNNING",
+        state_history: [...(job.state_history || []), "PROVIDER_SUBMITTED"],
+        execution_result: { provider: "kolbo", providerJobId: started.providerJobId, pollIntervalMs: started.pollIntervalMs },
+        evidence_proof: "Kolbo generation submitted; durable worker will resume polling on the next scheduled run.",
+      });
+      await enqueueDurableJob(job.id);
+      return res.json({ success: true, waiting: true, executionId: updated.id, job: updated });
+    }
+
+    const polled = await pollKolboMediaJob(String(state.providerJobId));
+    if (polled.state === "RUNNING") {
+      const updated = await updateDurableJob(job.id, { status: "RUNNING", current_step: "PROVIDER_POLLING", state_history: [...(job.state_history || []), "PROVIDER_POLLING"], execution_result: state });
+      await enqueueDurableJob(job.id);
+      return res.json({ success: true, waiting: true, executionId: updated.id, job: updated });
+    }
+    if (polled.state === "FAILED") {
+      const updated = await updateDurableJob(job.id, { status: "FAILED", current_step: "FAILED", state_history: [...(job.state_history || []), "FAILED"], error_code: "KOLBO_EXECUTION_FAILED", error_message: polled.error || "Kolbo execution failed.", execution_result: { ...state, error: polled.error }, completed_at: new Date().toISOString() });
+      const chatId = Number(media.telegramChatId || 0);
+      if (chatId) await sendTelegramMessage(chatId, `Γ¥î JARVIS ΓÇö ╪¬╪╣╪»┘è┘ä ╪º┘ä┘ü┘è╪»┘è┘ê ┘ü╪┤┘ä. ╪º┘ä╪│╪¿╪¿: ${polled.error || "Kolbo execution failed."}`);
+      return res.json({ success: false, executionId: updated.id, job: updated });
+    }
+
+    const verification = await verifyKolboArtifact(polled.outputArtifact);
+    if (!verification.passed) {
+      const updated = await updateDurableJob(job.id, { status: "FAILED", current_step: "VERIFICATION_FAILED", state_history: [...(job.state_history || []), "VERIFICATION_FAILED"], error_code: "MEDIA_VERIFICATION_FAILED", error_message: verification.details || "Artifact verification failed.", execution_result: { ...state, outputArtifact: polled.outputArtifact, verification }, completed_at: new Date().toISOString() });
+      const chatId = Number(media.telegramChatId || 0);
+      if (chatId) await sendTelegramMessage(chatId, `Γ¥î JARVIS ΓÇö ╪¬┘à ╪Ñ┘å╪┤╪º╪í ┘à╪«╪▒╪¼ ┘ä┘â┘å ┘ü╪┤┘ä ╪º┘ä╪¬╪¡┘é┘é ┘à┘å┘ç: ${verification.details || "artifact verification failed"}`);
+      return res.json({ success: false, executionId: updated.id, job: updated });
+    }
+
+    const updated = await updateDurableJob(job.id, {
+      status: "COMPLETED",
+      current_step: "VERIFIED",
+      state_history: [...(job.state_history || []), "COMPLETED", "VERIFIED"],
+      execution_result: { ...state, outputArtifact: polled.outputArtifact, verification, provider: "kolbo" },
+      evidence_proof: `Kolbo generation ${state.providerJobId} completed and artifact verification passed: ${polled.outputArtifact.url}`,
+      completed_at: new Date().toISOString(),
+    });
+    const chatId = Number(media.telegramChatId || 0);
+    if (chatId) await sendTelegramMessage(chatId, `### ≡ƒÄ¼ JARVIS ΓÇö Media Edit Executed & Verified\\n* **Operation:** \`lighting:darker\`\\n* **Provider:** \`kolbo\`\\n* **Provider Job:** \`${state.providerJobId}\`\\n* **Output Artifact:** \`${polled.outputArtifact.url}\`\\n* **Verification:** \`VERIFIED\``);
+    return res.json({ success: true, executionId: updated.id, job: updated });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || "Durable media worker failed." });
+  }
+});
+
 
 // API Route: Agent Command Execution (Chat / Command Center)
 app.post("/api/agent/command", async (req, res) => {
