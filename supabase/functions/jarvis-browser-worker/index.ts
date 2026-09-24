@@ -14,9 +14,7 @@ function pemBytes(pem:string){
 
 let cachedPublicKey:CryptoKey|null=null;
 async function getPublicKey(){
-  if(!cachedPublicKey){
-    cachedPublicKey=await crypto.subtle.importKey("spki",pemBytes(PUBLIC_KEY_PEM),{name:"Ed25519"},false,["verify"]);
-  }
+  if(!cachedPublicKey)cachedPublicKey=await crypto.subtle.importKey("spki",pemBytes(PUBLIC_KEY_PEM),{name:"Ed25519"},false,["verify"]);
   return cachedPublicKey;
 }
 
@@ -31,19 +29,10 @@ async function verifyWorker(req:Request,body:any){
   const raw=JSON.stringify(unsigned);
   const message=timestamp+"\n"+mode+"\n"+raw;
   try{
-    return await crypto.subtle.verify(
-      {name:"Ed25519"},
-      await getPublicKey(),
-      pemBytes("-----BEGIN PUBLIC KEY-----\n"+signature+"\n-----END PUBLIC KEY-----"),
-      new TextEncoder().encode(message),
-    );
-  }catch{
-    try{
-      const binary=atob(signature);
-      const sig=Uint8Array.from(binary,c=>c.charCodeAt(0));
-      return await crypto.subtle.verify({name:"Ed25519"},await getPublicKey(),sig,new TextEncoder().encode(message));
-    }catch{return false;}
-  }
+    const binary=atob(signature);
+    const sig=Uint8Array.from(binary,c=>c.charCodeAt(0));
+    return await crypto.subtle.verify({name:"Ed25519"},await getPublicKey(),sig,new TextEncoder().encode(message));
+  }catch{return false;}
 }
 
 Deno.serve(async(req)=>{
