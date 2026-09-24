@@ -11,7 +11,12 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
+<<<<<<< HEAD
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
+=======
+import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
+import { kolboMediaExecutionProvider } from "./src/execution/kolbo-provider.ts";
+>>>>>>> d898cd7 (feat(jarvis): wire Kolbo media execution into command router)
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -262,7 +267,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
 const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
-  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email"],
+  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "execute_media"],
   SYSTEM_HEALTH: ["check_connector_status"],
   REPORTING: ["check_connector_status"],
   RESEARCH: [],
@@ -524,6 +529,20 @@ Rules for Response:
           }
         },
         {
+          name: "execute_media",
+          description: "Executes an authorized media mutation through the configured provider and verifies the resulting artifact. Never invent a sourceArtifactUrl; if no real source artifact URL is available, do not call this tool.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              operation: { type: Type.STRING, description: "Media operation. Currently only lighting." },
+              sourceArtifactUrl: { type: Type.STRING, description: "Existing real source media URL. Must be supplied by trusted context or the user; never invent one." },
+              instruction: { type: Type.STRING, description: "Normalized media instruction, e.g. lighting:darker." },
+              idempotencyKey: { type: Type.STRING, description: "Stable idempotency key for this requested mutation." }
+            },
+            required: ["operation", "sourceArtifactUrl", "instruction", "idempotencyKey"]
+          }
+        },
+        {
           name: "send_email",
           description: "Sends one explicit email through the connected Gmail account. Only use when the request is explicitly approved by the human operator.",
           parameters: {
@@ -637,6 +656,64 @@ Rules for Response:
             verificationStatus = "FAILED";
             actionsTakenList.push({ tool: 'Gmail Send Tool', status: 'error', details: gmailErr?.message || String(gmailErr) });
             responseText = `❌ فشل تنفيذ Gmail send_email: ${gmailErr?.message || String(gmailErr)}`;
+          }
+        }
+      } else if (call.name === "execute_media") {
+        const args = (call.args || {}) as any;
+        const sourceArtifactUrl = typeof args.sourceArtifactUrl === "string" ? args.sourceArtifactUrl.trim() : "";
+        const operation = args.operation === "lighting" ? "lighting" : "";
+        const instruction = typeof args.instruction === "string" ? args.instruction.trim() : "";
+        const idempotencyKey = typeof args.idempotencyKey === "string" && args.idempotencyKey.trim()
+          ? args.idempotencyKey.trim()
+          : `telegram:${userProfile?.telegramChatId || "unknown"}:${cacheKey}`;
+
+        if (!/^https?:\/\//i.test(sourceArtifactUrl)) {
+          executionErrors.push("A real sourceArtifactUrl is required for media execution.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({
+            tool: "Media Execution Guard",
+            status: "blocked",
+            details: "No trusted source artifact URL was provided; no provider call was attempted."
+          });
+          responseText = "⚠️ **[Media Execution Guard]** لم يتم تنفيذ التعديل لأن رابط الفيديو المصدر الحقيقي غير متوفر.";
+        } else if (operation !== "lighting" || !instruction) {
+          executionErrors.push("Unsupported or incomplete media execution request.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({
+            tool: "Media Execution Guard",
+            status: "blocked",
+            details: "Unsupported media operation or missing instruction."
+          });
+          responseText = "⚠️ **[Media Execution Guard]** طلب الوسائط غير مكتمل أو غير مدعوم.";
+        } else {
+          const mediaRequest = {
+            operation: "lighting" as const,
+            sourceArtifactUrl,
+            instruction,
+            idempotencyKey,
+            requestedBy: {
+              userId: String(userProfile?.userId || "unknown"),
+              organizationId: String(userProfile?.organizationId || "unknown"),
+            },
+            metadata: { source: String(userProfile?.source || "command-center") },
+          };
+          const mediaJob = createMediaExecutionJob(mediaRequest);
+          const mediaResult = await executeMediaJob(mediaJob, kolboMediaExecutionProvider);
+          verificationStatus = mediaResult.status === "SUCCEEDED" ? "VERIFIED" : "FAILED";
+          actionsTakenList.push({
+            tool: "Kolbo Media Execution",
+            status: mediaResult.status === "SUCCEEDED" ? "success" : "error",
+            details: JSON.stringify(mediaResult.evidence) + (mediaResult.error ? ` error=${mediaResult.error}` : ""),
+          });
+          if (mediaResult.status === "SUCCEEDED") {
+            responseText = `### 🎬 JARVIS — Media Edit Executed & Verified
+* **Operation:** \`lighting:darker\`
+* **Provider:** \`kolbo\`
+* **Provider Job:** \`${mediaResult.evidence.providerJobId || "unknown"}\`
+* **Output Artifact:** \`${mediaResult.evidence.outputArtifact?.url || "missing"}\`
+* **Verification:** \`VERIFIED\``;
+          } else {
+            responseText = `❌ **[Media Execution Failed]** لم يتم اعتبار تعديل الفيديو ناجحًا. الحالة: \`${mediaResult.status}\`. السبب: \`${mediaResult.error || "unknown"}\``;
           }
         }
       } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
