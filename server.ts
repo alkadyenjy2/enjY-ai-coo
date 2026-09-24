@@ -12,7 +12,7 @@ import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
-import { executeBrowserSkill } from "./src/adapters/browserskill";
+import { executeBrowserSkill } from "./src/adapters/browserskill";`r`nimport { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";`r`nimport { kolboMediaExecutionProvider } from "./src/execution/kolbo-provider.ts";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -263,7 +263,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
 const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
-  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task"],
+  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task", "execute_media"],
   SYSTEM_HEALTH: ["check_connector_status"],
   REPORTING: ["check_connector_status"],
   RESEARCH: [],
@@ -525,6 +525,7 @@ Rules for Response:
           }
         },
         {
+
           name: "send_email",
           description: "Sends one explicit email through Gmail only after explicit human approval.",
           parameters: {
@@ -684,6 +685,7 @@ Rules for Response:
             ? "### 🌐 BrowserSkill — Browser task verified\n* Session: " + (browserResult.sessionId || "n/a") + "\n* Steps: " + browserResult.steps.length + "\n* Verification: VERIFIED\n* Evidence: real BrowserSkill doctor/session/action output captured."
             : "⚠️ BrowserSkill did not produce verified execution evidence. Status: " + browserResult.status + ". " + (browserResult.error || "");
         }
+
       } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
