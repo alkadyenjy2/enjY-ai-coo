@@ -1,7 +1,7 @@
 import type { MediaArtifactRef, MediaExecutionProvider } from "./media-execution.ts";
 
 const DEFAULT_BASE_URL = "https://api.kolbo.ai";
-const POLL_INTERVAL_MS = 4000;
+const POLL_INTERVAL_MS = 8000;
 const MAX_POLLS = 90;
 
 type KolboStatus = {
@@ -46,28 +46,45 @@ async function verifyArtifact(artifact: MediaArtifactRef) {
   return { passed, checks, details: passed ? "Verified " + contentType + ", " + contentLength + " bytes." : "Unexpected artifact metadata: content-type=" + (contentType || "missing") + ", content-length=" + contentLength + "." };
 }
 
+export async function startKolboMediaJob(request: Parameters<MediaExecutionProvider["execute"]>[0]) {
+  if (request.operation !== "lighting") throw new Error("Kolbo provider does not support operation: " + request.operation);
+  const { apiKey, baseUrl } = getConfig();
+  const started = await kolboRequest<{ generation_id?: string; poll_interval_hint?: number; credits_charged?: number | null }>(
+    baseUrl + "/api/v1/edit/video",
+    { method: "POST", body: JSON.stringify({ video_url: request.sourceArtifactUrl, operation: "magic_edit", prompt: "Make the lighting darker and more cinematic. Keep everything else the same." }) },
+    apiKey,
+  );
+  if (!started.generation_id) throw new Error("Kolbo did not return generation_id.");
+  return { providerJobId: started.generation_id, pollIntervalMs: Math.max(4000, Math.min(15000, Number(started.poll_interval_hint || 8) * 1000)) };
+}
+
+export async function pollKolboMediaJob(providerJobId: string) {
+  const { apiKey, baseUrl } = getConfig();
+  const status = await kolboRequest<KolboStatus>(baseUrl + "/api/v1/generate/" + encodeURIComponent(providerJobId) + "/status", { method: "GET" }, apiKey);
+  if (status.state === "completed") {
+    const url = status.result?.urls?.[0];
+    if (!url) throw new Error("Kolbo completed without an output artifact URL.");
+    return { state: "SUCCEEDED" as const, outputArtifact: { url, contentType: "video/mp4" } };
+  }
+  if (status.state === "failed" || status.state === "cancelled") {
+    return { state: "FAILED" as const, error: status.error || "Kolbo generation " + status.state + "." };
+  }
+  return { state: "RUNNING" as const };
+}
+
+export async function verifyKolboArtifact(artifact: MediaArtifactRef) {
+  return verifyArtifact(artifact);
+}
+
 export const kolboMediaExecutionProvider: MediaExecutionProvider = {
   name: "kolbo",
   async execute(request) {
-    if (request.operation !== "lighting") throw new Error("Kolbo provider does not support operation: " + request.operation);
-    const { apiKey, baseUrl } = getConfig();
-    const started = await kolboRequest<{ generation_id?: string; poll_interval_hint?: number; credits_charged?: number | null }>(
-      baseUrl + "/api/v1/edit/video",
-      { method: "POST", body: JSON.stringify({ video_url: request.sourceArtifactUrl, operation: "magic_edit", prompt: "Make the lighting darker and more cinematic. Keep everything else the same." }) },
-      apiKey,
-    );
-    const generationId = started.generation_id;
-    if (!generationId) throw new Error("Kolbo did not return generation_id.");
+    const started = await startKolboMediaJob(request);
     for (let attempt = 0; attempt < MAX_POLLS; attempt += 1) {
-      const waitMs = Math.max(1000, Math.min(15000, Number(started.poll_interval_hint || POLL_INTERVAL_MS / 1000) * 1000));
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-      const status = await kolboRequest<KolboStatus>(baseUrl + "/api/v1/generate/" + encodeURIComponent(generationId) + "/status", { method: "GET" }, apiKey);
-      if (status.state === "completed") {
-        const url = status.result?.urls?.[0];
-        if (!url) throw new Error("Kolbo completed without an output artifact URL.");
-        return { providerJobId: generationId, outputArtifact: { url, contentType: "video/mp4" } };
-      }
-      if (status.state === "failed" || status.state === "cancelled") throw new Error(status.error || "Kolbo generation " + status.state + ".");
+      await new Promise((resolve) => setTimeout(resolve, started.pollIntervalMs));
+      const result = await pollKolboMediaJob(started.providerJobId);
+      if (result.state === "SUCCEEDED") return { providerJobId: started.providerJobId, outputArtifact: result.outputArtifact };
+      if (result.state === "FAILED") throw new Error(result.error);
     }
     throw new Error("Kolbo generation polling timed out before completion.");
   },
