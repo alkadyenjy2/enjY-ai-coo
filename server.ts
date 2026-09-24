@@ -13,7 +13,7 @@ import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
-import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
+import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
 import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 
@@ -773,13 +773,22 @@ Rules for Response:
             requestedBy: { userId: String(userProfile?.userId || "unknown"), organizationId: String(userProfile?.organizationId || "unknown") },
             metadata: { source: String(userProfile?.source || "command-center") },
           };
-          const mediaJob = createMediaExecutionJob(mediaRequest);
-          const mediaResult = await executeMediaJob(mediaJob, kolboMediaExecutionProvider);
+          const durableJob = await createDurableJob({
+            organizationId: String(userProfile?.organizationId || "unknown"),
+            userId: String(userProfile?.userId || "unknown"),
+            command: "__MEDIA_EXECUTION__",
+            inputPayload: { kind: "media_execution", mediaRequest, telegramChatId: Number(userProfile?.telegramChatId || 0) },
+            idempotencyKey,
+          });
+          await enqueueDurableJob(durableJob.id);
           verificationStatus = "NOT_REQUIRED";
-          actionsTakenList.push({ tool: "Kolbo Media Execution", status: mediaResult.status === "SUCCEEDED" ? "success" : "error", details: JSON.stringify(mediaResult.evidence) + (mediaResult.error ? ` error=${mediaResult.error}` : "") });
-          responseText = mediaResult.status === "SUCCEEDED"
-            ? `### 🎬 JARVIS — Media Edit Executed & Verified\n* **Operation:** \`lighting:darker\`\n* **Provider:** \`kolbo\`\n* **Provider Job:** \`${mediaResult.evidence.providerJobId || "unknown"}\`\n* **Output Artifact:** \`${mediaResult.evidence.outputArtifact?.url || "missing"}\`\n* **Verification:** \`VERIFIED\``
-            : `❌ **[Media Execution Failed]** لم يتم اعتبار تعديل الفيديو ناجحًا. الحالة: \`${mediaResult.status}\`. السبب: \`${mediaResult.error || "unknown"}\``;
+          actionsTakenList.push({ tool: "Kolbo Media Execution", status: "queued", details: `Durable execution queued: ${durableJob.id}` });
+          responseText = `### 🎬 JARVIS — Media Edit Queued
+* **Operation:** \`lighting:darker\`
+* **Provider:** \`kolbo\`
+* **Execution ID:** \`${durableJob.id}\`
+* **Status:** \`QUEUED\`
+* **Worker:** \`Supabase durable execution worker\``;
         }      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
