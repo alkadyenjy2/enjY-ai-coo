@@ -773,7 +773,7 @@ Rules for Response:
             sourceArtifactUrl,
             instruction,
             idempotencyKey,
-            requestedBy: { userId: resolvedUserId, organizationId: String(userProfile?.organizationId || "unknown") },
+            requestedBy: { userId: resolvedUserId, organizationId: resolvedOrganizationId },
             metadata: { source: String(userProfile?.source || "command-center") },
           };
           const durableJob = await createDurableJob({
