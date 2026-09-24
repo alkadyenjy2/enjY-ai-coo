@@ -37,7 +37,7 @@ function getConfig() {
   return { url, key };
 }
 
-function adminClient() {
+export function adminClient() {
   const { url, key } = getConfig();
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }

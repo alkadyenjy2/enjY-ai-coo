@@ -25,7 +25,9 @@
     "demo:jarvis-e2e": "node scripts/jarvis-e2e-demo.mjs",
     "gmail:oauth": "node --import tsx scripts/gmail-oauth.ts",
     "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts",
-    "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts"
+    "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts",
+    "browser:worker": "node --import tsx scripts/browser-worker.ts",
+    "test:browser-worker": "node --import tsx scripts/test-browser-worker-e2e.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
