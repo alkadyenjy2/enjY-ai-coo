@@ -490,8 +490,8 @@ Rules for Response:
         parameters: {
           type: Type.OBJECT,
           properties: {
-            table: { type: Type.STRING, description: "The table name to query (e.g., 'leads', 'posts')." },
-            select: { type: Type.STRING, description: "Select columns or count (e.g., 'count' or '*')." }
+            table: { type: Type.STRING, description: "The table name to query (e.g., leads, posts)." },
+            select: { type: Type.STRING, description: "Select columns or count." }
           },
           required: ["table"]
         }
@@ -504,54 +504,77 @@ Rules for Response:
           parameters: {
             type: Type.OBJECT,
             properties: {
-              table: { type: Type.STRING, description: "The table name to query (e.g., 'leads', 'posts')." },
-              select: { type: Type.STRING, description: "Select columns or count (e.g., 'count' or '*')." }
+              table: { type: Type.STRING, description: "The table name to query." },
+              select: { type: Type.STRING, description: "Select columns or count." }
             },
             required: ["table"]
           }
         },
         {
           name: "update_supabase",
-          description: "Executes an update query against Supabase database REST API and requires post-read verification.",
+          description: "Executes an update query against Supabase and requires post-read verification.",
           parameters: {
             type: Type.OBJECT,
             properties: {
-              table: { type: Type.STRING, description: "The table name to update (e.g., 'leads')." },
-              matchColumn: { type: Type.STRING, description: "Column name to match (e.g., 'id' or 'status')." },
-              matchValue: { type: Type.STRING, description: "Value to match for the update." },
-              updatePayload: { type: Type.OBJECT, description: "Key-value payload to update." }
+              table: { type: Type.STRING },
+              matchColumn: { type: Type.STRING },
+              matchValue: { type: Type.STRING },
+              updatePayload: { type: Type.OBJECT }
             },
             required: ["table", "matchColumn", "matchValue", "updatePayload"]
           }
         },
         {
           name: "send_email",
-          description: "Sends one explicit email through the connected Gmail account. Only use when the request is explicitly approved by the human operator.",
+          description: "Sends one explicit email through Gmail only after explicit human approval.",
           parameters: {
             type: Type.OBJECT,
             properties: {
-              to: { type: Type.STRING, description: "Recipient email address." },
-              subject: { type: Type.STRING, description: "Email subject." },
-              body: { type: Type.STRING, description: "Plain-text email body." }
+              to: { type: Type.STRING },
+              subject: { type: Type.STRING },
+              body: { type: Type.STRING }
             },
             required: ["to", "subject", "body"]
+          }
+        },
+        {
+          name: "browser_task",
+          description: "Execute a deterministic BrowserSkill task on the connected local Chromium browser. Safe actions are navigate, observe, and screenshot; mutation actions remain subject to JARVIS approval policy.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              steps: {
+                type: Type.ARRAY,
+                description: "Ordered BrowserSkill actions executed in one isolated session.",
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    action: { type: Type.STRING, enum: ["navigate", "observe", "click", "fill", "press", "screenshot"] },
+                    url: { type: Type.STRING },
+                    target: { type: Type.STRING },
+                    value: { type: Type.STRING },
+                    key: { type: Type.STRING },
+                    path: { type: Type.STRING }
+                  },
+                  required: ["action"]
+                }
+              }
+            },
+            required: ["steps"]
           }
         }
       );
     } else if (commandClass === "SYSTEM_HEALTH" || commandClass === "REPORTING") {
       allowedFuncDecls.push({
         name: "check_connector_status",
-        description: "Checks real status (REAL_LIVE, UNCONFIGURED, BROKEN) of external connectors.",
+        description: "Checks real status of external connectors.",
         parameters: {
           type: Type.OBJECT,
-          properties: {
-            connectorId: { type: Type.STRING, description: "ID of connector (e.g., 'supabase', 'n8n', 'github', 'telegram', 'gcp')." }
-          },
+          properties: { connectorId: { type: Type.STRING } },
           required: ["connectorId"]
         }
       });
     }
-
     const tools = allowedFuncDecls.length > 0 ? [{ functionDeclarations: allowedFuncDecls }] : undefined;
 
     const isOpenAIModel = selectedModel === "gpt-6-astra";
