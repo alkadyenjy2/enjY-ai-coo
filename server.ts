@@ -16,7 +16,6 @@ import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
 import { adminClient, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
-import { verifyBrowserWorkerRequest } from "./src/execution/browser-worker-auth";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -284,41 +283,6 @@ function isToolAllowed(intent: string, toolName: string): boolean {
   return allowed.includes(toolName);
 }
 
-// BrowserSkill durable worker control-plane bridge.
-app.post("/api/executions/browser-worker/claim", async (req, res) => {
-  if (!verifyBrowserWorkerRequest(req)) return res.status(401).json({ success:false,error:"Invalid browser worker authentication." });
-  try {
-    const client=adminClient();
-    const {data,error}=await client.rpc("ai_core_browser_job_claim",{p_visibility_seconds:300});
-    if(error) throw new Error(error.message);
-    const job=Array.isArray(data)?data[0]:data;
-    return res.json({success:true,message_id:job?.message_id??null,job:job??null});
-  } catch(error) {
-    console.error("browser-worker-claim-error",error);
-    return res.status(500).json({success:false,error:error?.message||"Browser worker claim failed."});
-  }
-});
-app.post("/api/executions/browser-worker/complete", async (req, res) => {
-  if (!verifyBrowserWorkerRequest(req)) return res.status(401).json({ success:false,error:"Invalid browser worker authentication." });
-  const jobId=String(req.body?.job_id||"").trim();
-  const messageId=Number(req.body?.message_id);
-  if(!jobId||!Number.isFinite(messageId)) return res.status(400).json({success:false,error:"job_id and message_id are required."});
-  try {
-    const organizationId=String(req.body?.organization_id||"").trim();
-    const job=await getDurableJob(jobId,organizationId);
-    if(!job) return res.status(404).json({success:false,error:"Execution not found."});
-    const updated=await updateDurableJob(job.id,{status:req.body?.status==="COMPLETED"?"COMPLETED":"FAILED",current_step:String(req.body?.current_step||"FAILED"),state_history:Array.isArray(req.body?.state_history)?req.body.state_history:["FAILED"],execution_result:req.body?.execution_result??null,evidence_proof:typeof req.body?.evidence_proof==="string"?req.body.evidence_proof:null,error_code:req.body?.error_code||null,error_message:req.body?.error_message||null,completed_at:new Date().toISOString()});
-    const client=adminClient();
-    const {error}=await client.rpc("ai_core_browser_job_delete_message",{p_message_id:messageId});
-    if(error) throw new Error(error.message);
-    const {error:auditError}=await client.from("audit_logs").insert({organization_id:job.organization_id,user_id:job.user_id,title:"AI CORE BROWSER - "+updated.status,description:"BrowserSkill durable execution completed by Windows worker.",type:"ai_core_execution",status:updated.status==="COMPLETED"?"success":"failed",risk_level:"low",event_metadata:{job_id:job.id,worker:"fattouh-browser-worker-1",evidence:updated.evidence_proof},workflow_name:"Core AI Agent",execution_id:job.id,provider:"browserskill",error_code:updated.error_code,error_message:updated.error_message,completed_at:updated.completed_at});
-    if(auditError) throw new Error("AUDIT_LOG_WRITE_FAILED:"+auditError.message);
-    return res.json({success:updated.status==="COMPLETED",job:updated});
-  } catch(error) {
-    console.error("browser-worker-complete-error",error);
-    return res.status(500).json({success:false,error:error?.message||"Browser worker completion failed."});
-  }
-});
 // Durable worker step for provider-backed media jobs. One invocation performs one bounded provider step.
 app.post("/api/executions/worker", async (req, res) => {
   const executionId = String(req.body?.execution_id || "").trim();
@@ -771,7 +735,7 @@ Rules for Response:
           verificationStatus="FAILED";
           actionsTakenList.push({tool:"Human Approval Gate",status:"blocked",details:"BrowserSkill mutation blocked pending explicit approval."});
           responseText="Human approval required before BrowserSkill mutation.";
-        } else if(!resolvedOrganizationId || !resolvedUserId) {
+        } else if(!requestAuth || !resolvedOrganizationId || !resolvedUserId) {
           executionErrors.push("Authenticated organization and user context are required for durable BrowserSkill execution.");
           verificationStatus="FAILED";
           actionsTakenList.push({tool:"BrowserSkill Durable Guard",status:"blocked",details:"Missing authenticated organization or user context; no durable browser job was created."});
@@ -783,13 +747,11 @@ Rules for Response:
           responseText="BrowserSkill task is empty.";
         } else {
           const idempotencyKey=typeof browserArgs.idempotencyKey==="string"&&browserArgs.idempotencyKey.trim()?browserArgs.idempotencyKey.trim():"browser:"+resolvedUserId+":"+cacheKey;
-          const durableJob=await createDurableJob({organizationId:resolvedOrganizationId,userId:resolvedUserId,command:"__BROWSER_EXECUTION__",inputPayload:{kind:"browser_execution",steps,requestedBy:{userId:resolvedUserId,organizationId:resolvedOrganizationId},source:String(userProfile?.source||"command-center")},idempotencyKey});
-          const client=adminClient();
-          const {error:enqueueError}=await client.rpc("ai_core_browser_job_enqueue",{p_job_id:durableJob.id});
-          if(enqueueError) throw new Error(enqueueError.message);
+          const {data:browserJobId,error:browserJobError}=await requestAuth.supabase.rpc("ai_core_browser_job_create_enqueue",{p_organization_id:resolvedOrganizationId,p_user_id:resolvedUserId,p_command:"__BROWSER_EXECUTION__",p_input_payload:{kind:"browser_execution",steps,requestedBy:{userId:resolvedUserId,organizationId:resolvedOrganizationId},source:String(userProfile?.source||"command-center")},p_idempotency_key:idempotencyKey});
+          if(browserJobError||!browserJobId) throw new Error(browserJobError?.message||"BROWSER_JOB_CREATE_FAILED");
           verificationStatus="NOT_REQUIRED";
-          actionsTakenList.push({tool:"BrowserSkill Durable Execution",status:"queued",details:"Durable browser execution queued: "+durableJob.id});
-          responseText="BrowserSkill task queued. Execution ID: "+durableJob.id+". Steps: "+steps.length+". Status: QUEUED. Worker: Windows BrowserSkill worker. Evidence Gate: pending worker execution.";
+          actionsTakenList.push({tool:"BrowserSkill Durable Execution",status:"queued",details:"Durable browser execution queued: "+browserJobId});
+          responseText="BrowserSkill task queued. Execution ID: "+browserJobId+". Steps: "+steps.length+". Status: QUEUED. Worker: Windows BrowserSkill worker. Evidence Gate: pending worker execution.";
         }
       } else if (call.name === "execute_media") {
         const args = (call.args || {}) as any;
