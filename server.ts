@@ -11,6 +11,7 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
+import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -803,7 +804,7 @@ Rules for Response:
       selectedTools: actionsTakenList.map(a => a.tool),
       actionsExecuted: actionsTakenList,
       results: { responseSnippet: responseText.slice(0, 150) },
-      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : verificationStatus === "NOT_REQUIRED" ? "COMPLETED" : "FAILED"],
+      state_history: buildLifecycleHistory({ needsApproval: approvalStatus === "REQUIRES_HUMAN_APPROVAL", executed: true, verification: verificationStatus }),
       evidence: primaryEvidence,
       verificationStatus,
       final_state_reason: verificationStatus === "VERIFIED" 
@@ -1047,7 +1048,7 @@ app.post("/api/agent/onboard", async (req, res) => {
         userProfile: {
           communicationPreference: answers.commStyle || 'concise',
           technicalLevel: answers.techLevel || 'advanced',
-          autonomyLevel: answers.autonomy || 'full_autonomy',
+          autonomyLevel: answers.autonomy || 'full_autonomy',          autonomyLevel: answers.autonomy || 'full_autonomy',
           decisionStyle: answers.decisionStyle || 'execute_first',
           executionSpeed: 'fast'
         },
@@ -1497,7 +1498,7 @@ T1hhTiaCeIY/OwwwNUY2yvcCAwEAAQ==
 app.post("/api/webhooks/stripe", async (req, res) => {
   try {
     const rawBodyBuffer = (req as express.Request & { rawBody?: Buffer }).rawBody;
-    const rawBody = rawBodyBuffer?.toString("utf8") || "";
+    const rawBody = rawBodyBuffer?.toString("utf8") || "";    const rawBody = rawBodyBuffer?.toString("utf8") || "";
     const sig = (req.headers["stripe-signature"] as string) || "";
     const verification = stripeAdapter.verifyAndProcessWebhook(rawBody, sig);
 
