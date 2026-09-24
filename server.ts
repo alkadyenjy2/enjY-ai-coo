@@ -12,6 +12,7 @@ import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
+import { executeBrowserSkill } from "./src/adapters/browserskill";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -262,7 +263,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
 const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
-  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email"],
+  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task"],
   SYSTEM_HEALTH: ["check_connector_status"],
   REPORTING: ["check_connector_status"],
   RESEARCH: [],
@@ -362,7 +363,7 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   // 3. Sensitive Action Gate (NEEDS_APPROVAL)
-  const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);
+  const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|browser.*(click|fill|press|upload|download)|\b(click|fill|press|upload|download)\b.*browser|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);
   const isEmailSendAction = /(send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail)/i.test(userPromptStr);
   const emailApprovalGranted = isEmailSendAction && gmailApprovalConfirmed === true;
   if (isSensitiveAction && !emailApprovalGranted) {
@@ -639,6 +640,46 @@ Rules for Response:
             responseText = `❌ فشل تنفيذ Gmail send_email: ${gmailErr?.message || String(gmailErr)}`;
           }
         }
+      }
+        ,
+        {
+          name: "browser_task",
+          description: "Execute a deterministic BrowserSkill task on the connected local Chromium browser. Safe actions are navigate, observe, and screenshot; mutation actions remain subject to JARVIS approval policy.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              steps: {
+                type: Type.ARRAY,
+                description: "Ordered BrowserSkill actions executed in one isolated session.",
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    action: { type: Type.STRING, enum: ["navigate", "observe", "click", "fill", "press", "screenshot"] },
+                    url: { type: Type.STRING },
+                    target: { type: Type.STRING },
+                    value: { type: Type.STRING },
+                    key: { type: Type.STRING },
+                    path: { type: Type.STRING }
+                  },
+                  required: ["action"]
+                }
+              }
+            },
+            required: ["steps"]
+          }
+        } else if (call.name === "browser_task") {
+        const browserArgs = (call.args || {}) as any;
+        const steps = Array.isArray(browserArgs.steps) ? browserArgs.steps : [];
+        const browserResult = await executeBrowserSkill(steps);
+        verificationStatus = browserResult.status === "VERIFIED" ? "VERIFIED" : "FAILED";
+        actionsTakenList.push({
+          tool: "BrowserSkill",
+          status: browserResult.status === "VERIFIED" ? "success" : "error",
+          details: browserResult.error ? browserResult.error + " | " + browserResult.evidence : browserResult.evidence
+        });
+        responseText = browserResult.status === "VERIFIED"
+          ? "### 🌐 BrowserSkill — Browser task verified\n* Session: " + (browserResult.sessionId || "n/a") + "\n* Steps: " + browserResult.steps.length + "\n* Verification: VERIFIED\n* Evidence: real BrowserSkill doctor/session/action output captured."
+          : "⚠️ BrowserSkill did not produce verified execution evidence. Status: " + browserResult.status + ". " + (browserResult.error || "");
       } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
