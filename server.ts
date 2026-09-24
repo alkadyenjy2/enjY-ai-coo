@@ -686,7 +686,42 @@ Rules for Response:
             : "⚠️ BrowserSkill did not produce verified execution evidence. Status: " + browserResult.status + ". " + (browserResult.error || "");
         }
 
-      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
+      } else if (call.name === "execute_media") {
+        const args = (call.args || {}) as any;
+        const sourceArtifactUrl = typeof args.sourceArtifactUrl === "string" ? args.sourceArtifactUrl.trim() : "";
+        const operation = args.operation === "lighting" ? "lighting" : "";
+        const instruction = typeof args.instruction === "string" ? args.instruction.trim() : "";
+        const idempotencyKey = typeof args.idempotencyKey === "string" && args.idempotencyKey.trim()
+          ? args.idempotencyKey.trim()
+          : `telegram:${userProfile?.telegramChatId || "unknown"}:${cacheKey}`;
+
+        if (!/^https?:\/\//i.test(sourceArtifactUrl)) {
+          executionErrors.push("A real sourceArtifactUrl is required for media execution.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({ tool: "Media Execution Guard", status: "blocked", details: "No trusted source artifact URL was provided; no provider call was attempted." });
+          responseText = "⚠️ **[Media Execution Guard]** لم يتم تنفيذ التعديل لأن رابط الفيديو المصدر الحقيقي غير متوفر.";
+        } else if (operation !== "lighting" || !instruction) {
+          executionErrors.push("Unsupported or incomplete media execution request.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({ tool: "Media Execution Guard", status: "blocked", details: "Unsupported media operation or missing instruction." });
+          responseText = "⚠️ **[Media Execution Guard]** طلب الوسائط غير مكتمل أو غير مدعوم.";
+        } else {
+          const mediaRequest = {
+            operation: "lighting" as const,
+            sourceArtifactUrl,
+            instruction,
+            idempotencyKey,
+            requestedBy: { userId: String(userProfile?.userId || "unknown"), organizationId: String(userProfile?.organizationId || "unknown") },
+            metadata: { source: String(userProfile?.source || "command-center") },
+          };
+          const mediaJob = createMediaExecutionJob(mediaRequest);
+          const mediaResult = await executeMediaJob(mediaJob, kolboMediaExecutionProvider);
+          verificationStatus = mediaResult.status === "SUCCEEDED" ? "VERIFIED" : "FAILED";
+          actionsTakenList.push({ tool: "Kolbo Media Execution", status: mediaResult.status === "SUCCEEDED" ? "success" : "error", details: JSON.stringify(mediaResult.evidence) + (mediaResult.error ? ` error=${mediaResult.error}` : "") });
+          responseText = mediaResult.status === "SUCCEEDED"
+            ? `### 🎬 JARVIS — Media Edit Executed & Verified\n* **Operation:** \`lighting:darker\`\n* **Provider:** \`kolbo\`\n* **Provider Job:** \`${mediaResult.evidence.providerJobId || "unknown"}\`\n* **Output Artifact:** \`${mediaResult.evidence.outputArtifact?.url || "missing"}\`\n* **Verification:** \`VERIFIED\``
+            : `❌ **[Media Execution Failed]** لم يتم اعتبار تعديل الفيديو ناجحًا. الحالة: \`${mediaResult.status}\`. السبب: \`${mediaResult.error || "unknown"}\``;
+        }      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
         const targetUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/${table}?select=${select}`;
