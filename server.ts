@@ -13,6 +13,9 @@ import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
+import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
+import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
+import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -263,7 +266,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
 const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
-  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task"],
+  EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task", "execute_media"],
   SYSTEM_HEALTH: ["check_connector_status"],
   REPORTING: ["check_connector_status"],
   RESEARCH: [],
@@ -280,12 +283,71 @@ function isToolAllowed(intent: string, toolName: string): boolean {
   return allowed.includes(toolName);
 }
 
+// Durable worker step for provider-backed media jobs. One invocation performs one bounded provider step.
+app.post("/api/executions/worker", async (req, res) => {
+  const executionId = String(req.body?.execution_id || "").trim();
+  const organizationId = String(req.body?.organization_id || "").trim();
+  const timestamp = String(req.header("x-jarvis-worker-timestamp") || "").trim();
+  const signature = String(req.header("x-jarvis-worker-signature") || "").trim();
+  if (!executionId || !organizationId) return res.status(400).json({ success: false, error: "execution_id and organization_id are required." });
+  if (req.header("x-jarvis-internal") !== "worker" || !timestamp || !signature) return res.status(401).json({ success: false, error: "Internal worker authentication required." });
+  const timestampMs = Number(timestamp);
+  if (!Number.isFinite(timestampMs) || Math.abs(Date.now() - timestampMs) > 5 * 60 * 1000) return res.status(401).json({ success: false, error: "Stale worker request." });
+  try {
+    const crypto = await import("node:crypto");
+    const workerSecret = await (await import("./src/execution/durable-jobs.ts")).getDurableWorkerSecret();
+    const expected = crypto.createHmac("sha256", workerSecret).update(`${timestamp}.${JSON.stringify(req.body)}`).digest("hex");
+    if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return res.status(401).json({ success: false, error: "Invalid worker signature." });
+    const job = await getDurableJob(executionId, organizationId);
+    if (!job) return res.status(404).json({ success: false, error: "Execution not found." });
+    const media = job.input_payload?.kind === "media_execution" ? job.input_payload as any : null;
+    if (!media) return res.status(409).json({ success: false, error: "Unsupported durable execution payload." });
+    if (["COMPLETED", "FAILED", "REJECTED"].includes(job.status)) return res.json({ success: job.status === "COMPLETED", executionId: job.id, job });
+    const request = media.mediaRequest as any;
+    const state = (job.execution_result && typeof job.execution_result === "object" ? job.execution_result : {}) as any;
+    if (!state.providerJobId) {
+      const started = await startKolboMediaJob(request);
+      const updated = await updateDurableJob(job.id, { status: "RUNNING", current_step: "PROVIDER_RUNNING", state_history: [...(job.state_history || []), "PROVIDER_SUBMITTED"], execution_result: { provider: "kolbo", providerJobId: started.providerJobId, pollIntervalMs: started.pollIntervalMs }, evidence_proof: "Kolbo generation submitted; durable worker will resume polling." });
+      await enqueueDurableJob(job.id);
+      return res.json({ success: true, waiting: true, executionId: updated.id, job: updated });
+    }
+    const polled = await pollKolboMediaJob(String(state.providerJobId));
+    if (polled.state === "RUNNING") {
+      const updated = await updateDurableJob(job.id, { status: "RUNNING", current_step: "PROVIDER_POLLING", state_history: [...(job.state_history || []), "PROVIDER_POLLING"], execution_result: state });
+      await enqueueDurableJob(job.id);
+      return res.json({ success: true, waiting: true, executionId: updated.id, job: updated });
+    }
+    if (polled.state === "FAILED") {
+      const updated = await updateDurableJob(job.id, { status: "FAILED", current_step: "FAILED", state_history: [...(job.state_history || []), "FAILED"], error_code: "KOLBO_EXECUTION_FAILED", error_message: polled.error || "Kolbo execution failed.", execution_result: { ...state, error: polled.error }, completed_at: new Date().toISOString() });
+      const chatId = Number(media.telegramChatId || 0);
+      if (chatId) await sendTelegramMessage(chatId, `❌ JARVIS — تعديل الفيديو فشل. السبب: ${polled.error || "Kolbo execution failed."}`);
+      return res.json({ success: false, executionId: updated.id, job: updated });
+    }
+    const verification = await verifyKolboArtifact(polled.outputArtifact);
+    if (!verification.passed) {
+      const updated = await updateDurableJob(job.id, { status: "FAILED", current_step: "VERIFICATION_FAILED", state_history: [...(job.state_history || []), "VERIFICATION_FAILED"], error_code: "MEDIA_VERIFICATION_FAILED", error_message: verification.details || "Artifact verification failed.", execution_result: { ...state, outputArtifact: polled.outputArtifact, verification }, completed_at: new Date().toISOString() });
+      const chatId = Number(media.telegramChatId || 0);
+      if (chatId) await sendTelegramMessage(chatId, `❌ JARVIS — تم إنشاء مخرج لكن فشل التحقق منه: ${verification.details || "artifact verification failed"}`);
+      return res.json({ success: false, executionId: updated.id, job: updated });
+    }
+    const updated = await updateDurableJob(job.id, { status: "COMPLETED", current_step: "VERIFIED", state_history: [...(job.state_history || []), "COMPLETED", "VERIFIED"], execution_result: { ...state, outputArtifact: polled.outputArtifact, verification, provider: "kolbo" }, evidence_proof: `Kolbo generation ${state.providerJobId} completed and artifact verification passed: ${polled.outputArtifact.url}`, completed_at: new Date().toISOString() });
+    const chatId = Number(media.telegramChatId || 0);
+    if (chatId) await sendTelegramMessage(chatId, `### 🎬 JARVIS — Media Edit Executed & Verified\n* **Operation:** \`lighting:darker\`\n* **Provider:** \`kolbo\`\n* **Provider Job:** \`${state.providerJobId}\`\n* **Output Artifact:** \`${polled.outputArtifact.url}\`\n* **Verification:** \`VERIFIED\``);
+    return res.json({ success: true, executionId: updated.id, job: updated });
+  } catch (error: any) {
+    console.error("durable-media-worker-error", error);
+    return res.status(500).json({ success: false, error: error?.message || "Durable media worker failed." });
+  }
+});
 // API Route: Agent Command Execution (Chat / Command Center)
 app.post("/api/agent/command", async (req, res) => {
   const { prompt, userProfile, activeProject, memoryContext, model = "gpt-6-astra", gmailApprovalConfirmed = false } = req.body;
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
   const projectNameStr = typeof activeProject?.name === "string" ? activeProject.name : "Core Operations HQ";
   const commandClass = classifyCommand(userPromptStr);
+  const requestAuth = getAuthContext(res);
+  const resolvedOrganizationId = String(userProfile?.organizationId || req.body?.organization_id || "").trim();
+  const resolvedUserId = String(userProfile?.userId || requestAuth?.user.id || "").trim();
 
   const cacheKey = userPromptStr.toLowerCase().trim();
   const cached = recentCommandCache.get(cacheKey);
@@ -525,6 +587,7 @@ Rules for Response:
           }
         },
         {
+
           name: "send_email",
           description: "Sends one explicit email through Gmail only after explicit human approval.",
           parameters: {
@@ -683,6 +746,57 @@ Rules for Response:
           responseText = browserResult.status === "VERIFIED"
             ? "### 🌐 BrowserSkill — Browser task verified\n* Session: " + (browserResult.sessionId || "n/a") + "\n* Steps: " + browserResult.steps.length + "\n* Verification: VERIFIED\n* Evidence: real BrowserSkill doctor/session/action output captured."
             : "⚠️ BrowserSkill did not produce verified execution evidence. Status: " + browserResult.status + ". " + (browserResult.error || "");
+        }
+
+      } else if (call.name === "execute_media") {
+        const args = (call.args || {}) as any;
+        const sourceArtifactUrl = typeof args.sourceArtifactUrl === "string" ? args.sourceArtifactUrl.trim() : "";
+        const operation = args.operation === "lighting" ? "lighting" : "";
+        const instruction = typeof args.instruction === "string" ? args.instruction.trim() : "";
+        const idempotencyKey = typeof args.idempotencyKey === "string" && args.idempotencyKey.trim()
+          ? args.idempotencyKey.trim()
+          : `telegram:${userProfile?.telegramChatId || "unknown"}:${cacheKey}`;
+
+        if (!/^https?:\/\//i.test(sourceArtifactUrl)) {
+          executionErrors.push("A real sourceArtifactUrl is required for media execution.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({ tool: "Media Execution Guard", status: "blocked", details: "No trusted source artifact URL was provided; no provider call was attempted." });
+          responseText = "⚠️ **[Media Execution Guard]** لم يتم تنفيذ التعديل لأن رابط الفيديو المصدر الحقيقي غير متوفر.";
+        } else if (operation !== "lighting" || !instruction) {
+          executionErrors.push("Unsupported or incomplete media execution request.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({ tool: "Media Execution Guard", status: "blocked", details: "Unsupported media operation or missing instruction." });
+          responseText = "⚠️ **[Media Execution Guard]** طلب الوسائط غير مكتمل أو غير مدعوم.";
+        } else if (!resolvedOrganizationId || !resolvedUserId) {
+          executionErrors.push("Authenticated organization and user context are required for durable media execution.");
+          verificationStatus = "FAILED";
+          actionsTakenList.push({ tool: "Media Execution Guard", status: "blocked", details: "Missing authenticated organization or user context; no durable job was created." });
+          responseText = "🔒 **[Media Execution Guard]** لا يمكن تشغيل تعديل الفيديو بدون سياق المؤسسة والمستخدم الموثق.";
+        } else {
+          const mediaRequest = {
+            operation: "lighting" as const,
+            sourceArtifactUrl,
+            instruction,
+            idempotencyKey,
+            requestedBy: { userId: resolvedUserId, organizationId: resolvedOrganizationId },
+            metadata: { source: String(userProfile?.source || "command-center") },
+          };
+          const durableJob = await createDurableJob({
+            organizationId: resolvedOrganizationId,
+            userId: resolvedUserId,
+            command: "__MEDIA_EXECUTION__",
+            inputPayload: { kind: "media_execution", mediaRequest, telegramChatId: Number(userProfile?.telegramChatId || 0) },
+            idempotencyKey,
+          });
+          await enqueueDurableJob(durableJob.id);
+          verificationStatus = "NOT_REQUIRED";
+          actionsTakenList.push({ tool: "Kolbo Media Execution", status: "queued", details: `Durable execution queued: ${durableJob.id}` });
+          responseText = `### 🎬 JARVIS — Media Edit Queued
+* **Operation:** \`lighting:darker\`
+* **Provider:** \`kolbo\`
+* **Execution ID:** \`${durableJob.id}\`
+* **Status:** \`QUEUED\`
+* **Worker:** \`Supabase durable execution worker\``;
         }
       } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
