@@ -13,6 +13,9 @@ import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 <<<<<<< HEAD
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
+import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
+import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
+import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 =======
 import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider } from "./src/execution/kolbo-provider.ts";
