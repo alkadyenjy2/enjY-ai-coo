@@ -1,11 +1,11 @@
-import { createSign } from "node:crypto";
+import { sign } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { executeBrowserSkill } from "../src/adapters/browserskill.ts";
 
 const configPath=process.env.JARVIS_BROWSER_WORKER_CONFIG||"C:/Users/LTC/.jarvis-browser-worker/config.json";
 let localConfig:any={};
 try{localConfig=JSON.parse(readFileSync(configPath,"utf8"));}catch{}
-const gatewayUrl=(process.env.JARVIS_BROWSER_WORKER_GATEWAY_URL||localConfig.gatewayUrl||"https://aislifqpskbduzvvbepz.supabase.co/functions/v1/ai-core-execution-worker").replace(/\/$/,"");
+const gatewayUrl=(process.env.JARVIS_BROWSER_WORKER_GATEWAY_URL||localConfig.gatewayUrl||"https://aislifqpskbduzvvbepz.supabase.co/functions/v1/jarvis-browser-worker").replace(/\/$/,"");
 const publishableKey=process.env.JARVIS_BROWSER_WORKER_PUBLISHABLE_KEY||localConfig.publishableKey||"";
 const keyPath=process.env.JARVIS_BROWSER_WORKER_PRIVATE_KEY||"C:/Users/LTC/.jarvis-browser-worker/private-key.pem";
 const privateKey=readFileSync(keyPath,"utf8");
@@ -14,12 +14,12 @@ const pollMs=Number(process.env.JARVIS_BROWSER_WORKER_POLL_MS||5000);
 function headers(mode:string,body:unknown){
  const ts=String(Date.now()); const raw=JSON.stringify(body??{});
  const message=ts+String.fromCharCode(10)+mode+String.fromCharCode(10)+raw;
- const sig=createSign("RSA-SHA256").update(message).sign(privateKey).toString("base64");
+ const sig=sign(null,Buffer.from(message),privateKey).toString("base64");
  return {"content-type":"application/json","apikey":publishableKey,"x-jarvis-browser-worker-timestamp":ts,"x-jarvis-browser-worker-signature":sig};
 }
 async function request(mode:string,body:unknown){
  const payload={mode,...(body as any||{})};
- const res=await fetch(gatewayUrl,{method:"POST",headers:headers(mode,payload),body:JSON.stringify(payload)});
+ const res=await fetch(gatewayUrl,{method:"POST",headers:headers(mode,body),body:JSON.stringify(payload)});
  const data=await res.json().catch(()=>({}));
  if(!res.ok) throw new Error("WORKER_HTTP_"+res.status+":"+(data?.error||"unknown"));
  return data;
@@ -45,5 +45,3 @@ async function processOne(){
 }
 console.log(JSON.stringify({event:"STARTED",gatewayUrl,pollMs,configured:Boolean(publishableKey)}));
 while(true){try{await processOne();}catch(e){console.error("POLL_ERROR",String(e));}await new Promise(r=>setTimeout(r,pollMs));}
-
-
