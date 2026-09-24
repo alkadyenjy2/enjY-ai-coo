@@ -225,7 +225,7 @@ export function classifyCommand(promptStr: string): CommandClass {
     return "UNKNOWN";
   }
 
-  const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|update|patch|execute|run workflow|تشغيل|send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail/i.test(p);
+  const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|تعديل الفيديو|الإضاءة|اضاءة|lighting(?::|\\s)|video edit|update|patch|execute|run workflow|تشغيل|send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail/i.test(p);
   const hasUrl = /(https?:\/\/[^\s]+)/.test(promptStr) || /بحث|أبحاث|مصادر|رابط|روابط|research|sources|urls?/i.test(p);
   const isPlanning = !isExecutionIntent && /خطة|plan|planning|يلا نعمل|دعنا نضع|استراتيجية|خطوات|roadmap|صمم خطة|ضع خطة/i.test(p);
 
@@ -436,7 +436,7 @@ Rules for Response:
 1. Match response structure strictly to the command classification (${commandClass}).
 2. If command is PLANNING or RESEARCH_PLANNING, do NOT call query_supabase unless explicitly asked. Produce an operational plan.
 3. If command is DATABASE, use query_supabase to inspect the exact table requested.
-4. If command is EXECUTION, perform required tool calls and perform follow-up READ verification.
+4. If command is EXECUTION, perform required tool calls and perform follow-up verification. For media edits, call execute_media only when a real sourceArtifactUrl is present; never invent or substitute a source URL.
 5. Never return generic Master COO Briefing unless command is SYSTEM_HEALTH or REPORTING.
     `.trim();
 
