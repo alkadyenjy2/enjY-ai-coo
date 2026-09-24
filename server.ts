@@ -11,25 +11,18 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
-<<<<<<< HEAD
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
 import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
-import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
-import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
-import { createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
-=======
-import { createMediaExecutionJob, executeMediaJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider } from "./src/execution/kolbo-provider.ts";
->>>>>>> d898cd7 (feat(jarvis): wire Kolbo media execution into command router)
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
-  console.warn("⚠️ Uncaught Exception intercepted in server process:", err?.message || err);
+  console.warn("âš ï¸ Uncaught Exception intercepted in server process:", err?.message || err);
 });
 process.on("unhandledRejection", (reason) => {
-  console.warn("⚠️ Unhandled Rejection intercepted in server process:", (reason as any)?.message || reason);
+  console.warn("âš ï¸ Unhandled Rejection intercepted in server process:", (reason as any)?.message || reason);
 });
 
 export const app = express();
@@ -172,7 +165,7 @@ app.get("/api/organizations", requireAuth, async (req, res) => {
   }
 });
 
-// Public API Routes: Clinic Automation Portfolio Demo (no auth by design — it is
+// Public API Routes: Clinic Automation Portfolio Demo (no auth by design â€” it is
 // the public case study). Exposes demo data only; never service-role keys.
 app.use("/api/clinic", clinicRouter);
 
@@ -227,26 +220,26 @@ const recentCommandCache = new Map<string, { timestamp: number; record: Operatio
 export function classifyCommand(promptStr: string): CommandClass {
   const p = promptStr.toLowerCase().trim();
 
-  if (p.length < 3 || /أمر غامض|غموض|asdfghjkl|xyz123|unclear_command|unknown_intent|random_gibberish/i.test(p)) {
+  if (p.length < 3 || /Ø£Ù…Ø± ØºØ§Ù…Ø¶|ØºÙ…ÙˆØ¶|asdfghjkl|xyz123|unclear_command|unknown_intent|random_gibberish/i.test(p)) {
     return "UNKNOWN";
   }
 
-  const isExecutionIntent = /نفذ الخطة|نفذ|تحديث|تعديل السجلات|تعديل الفيديو|الإضاءة|اضاءة|lighting(?::|\\s)|video edit|update|patch|execute|run workflow|تشغيل|send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail/i.test(p);
-  const hasUrl = /(https?:\/\/[^\s]+)/.test(promptStr) || /بحث|أبحاث|مصادر|رابط|روابط|research|sources|urls?/i.test(p);
-  const isPlanning = !isExecutionIntent && /خطة|plan|planning|يلا نعمل|دعنا نضع|استراتيجية|خطوات|roadmap|صمم خطة|ضع خطة/i.test(p);
+  const isExecutionIntent = /Ù†ÙØ° Ø§Ù„Ø®Ø·Ø©|Ù†ÙØ°|ØªØ­Ø¯ÙŠØ«|ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø³Ø¬Ù„Ø§Øª|ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„ÙÙŠØ¯ÙŠÙˆ|Ø§Ù„Ø¥Ø¶Ø§Ø¡Ø©|Ø§Ø¶Ø§Ø¡Ø©|lighting(?::|\\s)|video edit|update|patch|execute|run workflow|ØªØ´ØºÙŠÙ„|send_email|send email|Ø§Ø¨Ø¹Øª Ø§ÙŠÙ…ÙŠÙ„|Ø§Ø±Ø³Ù„ Ø§ÙŠÙ…ÙŠÙ„|Ø¥Ø±Ø³Ø§Ù„ Ø¨Ø±ÙŠØ¯|Ø¥Ø±Ø³Ø§Ù„ Ø¥ÙŠÙ…ÙŠÙ„|send mail/i.test(p);
+  const hasUrl = /(https?:\/\/[^\s]+)/.test(promptStr) || /Ø¨Ø­Ø«|Ø£Ø¨Ø­Ø§Ø«|Ù…ØµØ§Ø¯Ø±|Ø±Ø§Ø¨Ø·|Ø±ÙˆØ§Ø¨Ø·|research|sources|urls?/i.test(p);
+  const isPlanning = !isExecutionIntent && /Ø®Ø·Ø©|plan|planning|ÙŠÙ„Ø§ Ù†Ø¹Ù…Ù„|Ø¯Ø¹Ù†Ø§ Ù†Ø¶Ø¹|Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ©|Ø®Ø·ÙˆØ§Øª|roadmap|ØµÙ…Ù… Ø®Ø·Ø©|Ø¶Ø¹ Ø®Ø·Ø©/i.test(p);
 
   if (hasUrl && isPlanning) return "RESEARCH_PLANNING";
   if (isPlanning) return "PLANNING";
 
-  if (/تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
+  if (/ØªÙ‚Ø±ÙŠØ± Ø­Ø§Ù„Ø© Ø§Ù„Ù†Ø¸Ø§Ù…|master coo|Ø­Ø§Ù„Ø© Ø§Ù„Ù†Ø¸Ø§Ù…|coo briefing|executive briefing|ØªÙ‚Ø±ÙŠØ± ØªØ´ØºÙŠÙ„ÙŠ|ØªÙ‚Ø±ÙŠØ± Ø§Ù„Ù†Ø¸Ø§Ù…|master coo operating briefing/i.test(p)) {
     return "SYSTEM_HEALTH";
   }
 
-  if (/تقرير|report|summary|ملخص|stats|احصائيات/i.test(p)) {
+  if (/ØªÙ‚Ø±ÙŠØ±|report|summary|Ù…Ù„Ø®Øµ|stats|Ø§Ø­ØµØ§Ø¦ÙŠØ§Øª/i.test(p)) {
     return "REPORTING";
   }
 
-  if (/اقرأ|عدد|جدول|قاعدة بيانات|database|supabase|leads|posts|select|query|استعلام/i.test(p)) {
+  if (/Ø§Ù‚Ø±Ø£|Ø¹Ø¯Ø¯|Ø¬Ø¯ÙˆÙ„|Ù‚Ø§Ø¹Ø¯Ø© Ø¨ÙŠØ§Ù†Ø§Øª|database|supabase|leads|posts|select|query|Ø§Ø³ØªØ¹Ù„Ø§Ù…/i.test(p)) {
     return "DATABASE";
   }
 
@@ -254,15 +247,15 @@ export function classifyCommand(promptStr: string): CommandClass {
     return "EXECUTION";
   }
 
-  if (/حل المشكلة|تشخيص|سبب الخطأ|مشكلة|error|bug|diagnosis|debug/i.test(p)) {
+  if (/Ø­Ù„ Ø§Ù„Ù…Ø´ÙƒÙ„Ø©|ØªØ´Ø®ÙŠØµ|Ø³Ø¨Ø¨ Ø§Ù„Ø®Ø·Ø£|Ù…Ø´ÙƒÙ„Ø©|error|bug|diagnosis|debug/i.test(p)) {
     return "DIAGNOSIS";
   }
 
-  if (/كود|عدل الكود|code|function|typescript|refactor|script/i.test(p)) {
+  if (/ÙƒÙˆØ¯|Ø¹Ø¯Ù„ Ø§Ù„ÙƒÙˆØ¯|code|function|typescript|refactor|script/i.test(p)) {
     return "CODING";
   }
 
-  if (/محتوى|انشئ مقال|مقال|content|write post|draft/i.test(p)) {
+  if (/Ù…Ø­ØªÙˆÙ‰|Ø§Ù†Ø´Ø¦ Ù…Ù‚Ø§Ù„|Ù…Ù‚Ø§Ù„|content|write post|draft/i.test(p)) {
     return "CONTENT";
   }
 
@@ -334,7 +327,7 @@ app.post("/api/executions/worker", async (req, res) => {
     if (polled.state === "FAILED") {
       const updated = await updateDurableJob(job.id, { status: "FAILED", current_step: "FAILED", state_history: [...(job.state_history || []), "FAILED"], error_code: "KOLBO_EXECUTION_FAILED", error_message: polled.error || "Kolbo execution failed.", execution_result: { ...state, error: polled.error }, completed_at: new Date().toISOString() });
       const chatId = Number(media.telegramChatId || 0);
-      if (chatId) await sendTelegramMessage(chatId, `Γ¥î JARVIS ΓÇö ╪¬╪╣╪»┘è┘ä ╪º┘ä┘ü┘è╪»┘è┘ê ┘ü╪┤┘ä. ╪º┘ä╪│╪¿╪¿: ${polled.error || "Kolbo execution failed."}`);
+      if (chatId) await sendTelegramMessage(chatId, `Î“Â¥Ã® JARVIS Î“Ã‡Ã¶ â•ªÂ¬â•ªâ•£â•ªÂ»â”˜Ã¨â”˜Ã¤ â•ªÂºâ”˜Ã¤â”˜Ã¼â”˜Ã¨â•ªÂ»â”˜Ã¨â”˜Ãª â”˜Ã¼â•ªâ”¤â”˜Ã¤. â•ªÂºâ”˜Ã¤â•ªâ”‚â•ªÂ¿â•ªÂ¿: ${polled.error || "Kolbo execution failed."}`);
       return res.json({ success: false, executionId: updated.id, job: updated });
     }
 
@@ -342,7 +335,7 @@ app.post("/api/executions/worker", async (req, res) => {
     if (!verification.passed) {
       const updated = await updateDurableJob(job.id, { status: "FAILED", current_step: "VERIFICATION_FAILED", state_history: [...(job.state_history || []), "VERIFICATION_FAILED"], error_code: "MEDIA_VERIFICATION_FAILED", error_message: verification.details || "Artifact verification failed.", execution_result: { ...state, outputArtifact: polled.outputArtifact, verification }, completed_at: new Date().toISOString() });
       const chatId = Number(media.telegramChatId || 0);
-      if (chatId) await sendTelegramMessage(chatId, `Γ¥î JARVIS ΓÇö ╪¬┘à ╪Ñ┘å╪┤╪º╪í ┘à╪«╪▒╪¼ ┘ä┘â┘å ┘ü╪┤┘ä ╪º┘ä╪¬╪¡┘é┘é ┘à┘å┘ç: ${verification.details || "artifact verification failed"}`);
+      if (chatId) await sendTelegramMessage(chatId, `Î“Â¥Ã® JARVIS Î“Ã‡Ã¶ â•ªÂ¬â”˜Ã  â•ªÃ‘â”˜Ã¥â•ªâ”¤â•ªÂºâ•ªÃ­ â”˜Ã â•ªÂ«â•ªâ–’â•ªÂ¼ â”˜Ã¤â”˜Ã¢â”˜Ã¥ â”˜Ã¼â•ªâ”¤â”˜Ã¤ â•ªÂºâ”˜Ã¤â•ªÂ¬â•ªÂ¡â”˜Ã©â”˜Ã© â”˜Ã â”˜Ã¥â”˜Ã§: ${verification.details || "artifact verification failed"}`);
       return res.json({ success: false, executionId: updated.id, job: updated });
     }
 
@@ -355,7 +348,7 @@ app.post("/api/executions/worker", async (req, res) => {
       completed_at: new Date().toISOString(),
     });
     const chatId = Number(media.telegramChatId || 0);
-    if (chatId) await sendTelegramMessage(chatId, `### ≡ƒÄ¼ JARVIS ΓÇö Media Edit Executed & Verified\\n* **Operation:** \`lighting:darker\`\\n* **Provider:** \`kolbo\`\\n* **Provider Job:** \`${state.providerJobId}\`\\n* **Output Artifact:** \`${polled.outputArtifact.url}\`\\n* **Verification:** \`VERIFIED\``);
+    if (chatId) await sendTelegramMessage(chatId, `### â‰¡Æ’Ã„Â¼ JARVIS Î“Ã‡Ã¶ Media Edit Executed & Verified\\n* **Operation:** \`lighting:darker\`\\n* **Provider:** \`kolbo\`\\n* **Provider Job:** \`${state.providerJobId}\`\\n* **Output Artifact:** \`${polled.outputArtifact.url}\`\\n* **Verification:** \`VERIFIED\``);
     return res.json({ success: true, executionId: updated.id, job: updated });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: error?.message || "Durable media worker failed." });
@@ -394,7 +387,7 @@ app.post("/api/agent/command", async (req, res) => {
     };
     await rememberOperationalRecord(dupRecord);
     return res.json({
-      content: `⚠️ **[Duplicate Command Prevented]** تم منع إعادة تنفيذ هذا الأمر المكرر ("${userPromptStr}") خلال نافذة الحماية (10 ثوانٍ) لمنع التكرار المصادفي.`,
+      content: `âš ï¸ **[Duplicate Command Prevented]** ØªÙ… Ù…Ù†Ø¹ Ø¥Ø¹Ø§Ø¯Ø© ØªÙ†ÙÙŠØ° Ù‡Ø°Ø§ Ø§Ù„Ø£Ù…Ø± Ø§Ù„Ù…ÙƒØ±Ø± ("${userPromptStr}") Ø®Ù„Ø§Ù„ Ù†Ø§ÙØ°Ø© Ø§Ù„Ø­Ù…Ø§ÙŠØ© (10 Ø«ÙˆØ§Ù†Ù) Ù„Ù…Ù†Ø¹ Ø§Ù„ØªÙƒØ±Ø§Ø± Ø§Ù„Ù…ØµØ§Ø¯ÙÙŠ.`,
       executionRecord: dupRecord,
       thoughtProcess: {
         understand: `Detected duplicate directive: "${userPromptStr.slice(0, 50)}..."`,
@@ -431,7 +424,7 @@ app.post("/api/agent/command", async (req, res) => {
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: safeStopRecord, content: safeStopRecord.results.responseSnippet });
 
     return res.json({
-      content: `⚠️ **[Safe Stop - Clarification Required]** لم يتم تحديد القصد التشغيلي (Intent) بشكل واضح في الأمر المعطى ("${userPromptStr}").\n\nيرجى اختيار أو تحديد أحد الأوامر المعتمدة:\n- **DATABASE:** "اقرأ عدد المنشورات من Supabase"\n- **RESEARCH:** "ابحث عن..."\n- **PLANNING:** "اعمل خطة..."\n- **EXECUTION:** "نفذ الخطة"`,
+      content: `âš ï¸ **[Safe Stop - Clarification Required]** Ù„Ù… ÙŠØªÙ… ØªØ­Ø¯ÙŠØ¯ Ø§Ù„Ù‚ØµØ¯ Ø§Ù„ØªØ´ØºÙŠÙ„ÙŠ (Intent) Ø¨Ø´ÙƒÙ„ ÙˆØ§Ø¶Ø­ ÙÙŠ Ø§Ù„Ø£Ù…Ø± Ø§Ù„Ù…Ø¹Ø·Ù‰ ("${userPromptStr}").\n\nÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø£Ùˆ ØªØ­Ø¯ÙŠØ¯ Ø£Ø­Ø¯ Ø§Ù„Ø£ÙˆØ§Ù…Ø± Ø§Ù„Ù…Ø¹ØªÙ…Ø¯Ø©:\n- **DATABASE:** "Ø§Ù‚Ø±Ø£ Ø¹Ø¯Ø¯ Ø§Ù„Ù…Ù†Ø´ÙˆØ±Ø§Øª Ù…Ù† Supabase"\n- **RESEARCH:** "Ø§Ø¨Ø­Ø« Ø¹Ù†..."\n- **PLANNING:** "Ø§Ø¹Ù…Ù„ Ø®Ø·Ø©..."\n- **EXECUTION:** "Ù†ÙØ° Ø§Ù„Ø®Ø·Ø©"`,
       executionRecord: safeStopRecord,
       thoughtProcess: {
         understand: `Classified directive as 'UNKNOWN': "${userPromptStr}"`,
@@ -446,8 +439,8 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   // 3. Sensitive Action Gate (NEEDS_APPROVAL)
-  const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);
-  const isEmailSendAction = /(send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail)/i.test(userPromptStr);
+  const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|Ø­Ø°Ù|Ù…Ø³Ø­_Ø¬Ø¯ÙˆÙ„|Ø¥Ù„ØºØ§Ø¡_Ø¯Ø§Ø¦Ù…)/i.test(userPromptStr);
+  const isEmailSendAction = /(send_email|send email|Ø§Ø¨Ø¹Øª Ø§ÙŠÙ…ÙŠÙ„|Ø§Ø±Ø³Ù„ Ø§ÙŠÙ…ÙŠÙ„|Ø¥Ø±Ø³Ø§Ù„ Ø¨Ø±ÙŠØ¯|Ø¥Ø±Ø³Ø§Ù„ Ø¥ÙŠÙ…ÙŠÙ„|send mail)/i.test(userPromptStr);
   const emailApprovalGranted = isEmailSendAction && gmailApprovalConfirmed === true;
   if (isSensitiveAction && !emailApprovalGranted) {
     const sensitiveRecord: OperationalExecutionRecord = {
@@ -471,7 +464,7 @@ app.post("/api/agent/command", async (req, res) => {
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: sensitiveRecord, content: sensitiveRecord.results.responseSnippet });
 
     return res.json({
-      content: `🔒 **[Human Approval Required]** تم اكتشاف إجراء حساس يتطلب موافقة بشرية صريحة قبل التنفيذ.\n\n- **الأمر المعطى:** "${userPromptStr}"\n- **تصنيف القصد:** \`${commandClass}\`\n- **الحالة الحالية:** \`NEEDS_APPROVAL\` (في انتظار التأكيد البشري الصريح)\n- **البوابة:** Human-in-the-Loop Governance Gate`,
+      content: `ðŸ”’ **[Human Approval Required]** ØªÙ… Ø§ÙƒØªØ´Ø§Ù Ø¥Ø¬Ø±Ø§Ø¡ Ø­Ø³Ø§Ø³ ÙŠØªØ·Ù„Ø¨ Ù…ÙˆØ§ÙÙ‚Ø© Ø¨Ø´Ø±ÙŠØ© ØµØ±ÙŠØ­Ø© Ù‚Ø¨Ù„ Ø§Ù„ØªÙ†ÙÙŠØ°.\n\n- **Ø§Ù„Ø£Ù…Ø± Ø§Ù„Ù…Ø¹Ø·Ù‰:** "${userPromptStr}"\n- **ØªØµÙ†ÙŠÙ Ø§Ù„Ù‚ØµØ¯:** \`${commandClass}\`\n- **Ø§Ù„Ø­Ø§Ù„Ø© Ø§Ù„Ø­Ø§Ù„ÙŠØ©:** \`NEEDS_APPROVAL\` (ÙÙŠ Ø§Ù†ØªØ¸Ø§Ø± Ø§Ù„ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ø¨Ø´Ø±ÙŠ Ø§Ù„ØµØ±ÙŠØ­)\n- **Ø§Ù„Ø¨ÙˆØ§Ø¨Ø©:** Human-in-the-Loop Governance Gate`,
       executionRecord: sensitiveRecord,
       thoughtProcess: {
         understand: `Classified sensitive directive as '${commandClass}': "${userPromptStr}"`,
@@ -491,7 +484,7 @@ app.post("/api/agent/command", async (req, res) => {
     
     // System instruction detailing the Master Prompt Core AI Agent rules
     const systemInstruction = `
-You are the Core AI Operations Agent — a reusable AI operating system designed to work across multiple projects.
+You are the Core AI Operations Agent â€” a reusable AI operating system designed to work across multiple projects.
 Your operational philosophy is:
 Understand -> Inspect -> Decide -> Execute -> Verify -> Report.
 
@@ -711,12 +704,12 @@ Rules for Response:
           details: `Tool '${call.name}' execution blocked by Intent Policy Gate for command class '${commandClass}'`
         });
         verificationStatus = "FAILED";
-        responseText = `🚫 **[Intent Policy Gate Blocked]** أداة \`${call.name}\` غير مسموح بها للقصد \`${commandClass}\`.`;
+        responseText = `ðŸš« **[Intent Policy Gate Blocked]** Ø£Ø¯Ø§Ø© \`${call.name}\` ØºÙŠØ± Ù…Ø³Ù…ÙˆØ­ Ø¨Ù‡Ø§ Ù„Ù„Ù‚ØµØ¯ \`${commandClass}\`.`;
       } else if (call.name === "send_email") {
         if (!emailApprovalGranted) {
           executionErrors.push("Explicit human approval is required before sending email.");
           verificationStatus = "FAILED";
-          responseText = "🔒 **[Human Approval Required]** إرسال الإيميل متوقف حتى يتم تأكيد الموافقة البشرية صراحةً.";
+          responseText = "ðŸ”’ **[Human Approval Required]** Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ù…ØªÙˆÙ‚Ù Ø­ØªÙ‰ ÙŠØªÙ… ØªØ£ÙƒÙŠØ¯ Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¨Ø´Ø±ÙŠØ© ØµØ±Ø§Ø­Ø©Ù‹.";
           actionsTakenList.push({ tool: 'Human Approval Gate', status: 'blocked', details: 'send_email requires gmailApprovalConfirmed=true.' });
         } else {
           const args = (call.args || {}) as any;
@@ -729,12 +722,12 @@ Rules for Response:
             verificationStatus = verified ? "VERIFIED" : "FAILED";
             actionsTakenList.push({ tool: 'Gmail Send Tool', status: 'success', details: `Sent email to ${args.to}; messageId=${messageId}` });
             actionsTakenList.push({ tool: 'Gmail Verification Tool', status: verified ? 'success' : 'failed', details: `Post-send Gmail verification: ${JSON.stringify(verifyResult)}` });
-            responseText = verified ? `### 📧 Gmail — Email Sent & Verified\n* **To:** \`${args.to}\`\n* **Subject:** \`${args.subject}\`\n* **Message ID:** \`${messageId}\`\n* **Verification:** \`VERIFIED\`` : `⚠️ تم إرسال الإيميل لكن فشل التحقق من حالة الرسالة في Gmail. Message ID: \`${messageId}\``;
+            responseText = verified ? `### ðŸ“§ Gmail â€” Email Sent & Verified\n* **To:** \`${args.to}\`\n* **Subject:** \`${args.subject}\`\n* **Message ID:** \`${messageId}\`\n* **Verification:** \`VERIFIED\`` : `âš ï¸ ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ù„ÙƒÙ† ÙØ´Ù„ Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø­Ø§Ù„Ø© Ø§Ù„Ø±Ø³Ø§Ù„Ø© ÙÙŠ Gmail. Message ID: \`${messageId}\``;
           } catch (gmailErr: any) {
             executionErrors.push(gmailErr?.message || String(gmailErr));
             verificationStatus = "FAILED";
             actionsTakenList.push({ tool: 'Gmail Send Tool', status: 'error', details: gmailErr?.message || String(gmailErr) });
-            responseText = `❌ فشل تنفيذ Gmail send_email: ${gmailErr?.message || String(gmailErr)}`;
+            responseText = `âŒ ÙØ´Ù„ ØªÙ†ÙÙŠØ° Gmail send_email: ${gmailErr?.message || String(gmailErr)}`;
           }
         }
       } else if (call.name === "execute_media") {
@@ -754,7 +747,7 @@ Rules for Response:
             status: "blocked",
             details: "No trusted source artifact URL was provided; no provider call was attempted."
           });
-          responseText = "⚠️ **[Media Execution Guard]** لم يتم تنفيذ التعديل لأن رابط الفيديو المصدر الحقيقي غير متوفر.";
+          responseText = "âš ï¸ **[Media Execution Guard]** Ù„Ù… ÙŠØªÙ… ØªÙ†ÙÙŠØ° Ø§Ù„ØªØ¹Ø¯ÙŠÙ„ Ù„Ø£Ù† Ø±Ø§Ø¨Ø· Ø§Ù„ÙÙŠØ¯ÙŠÙˆ Ø§Ù„Ù…ØµØ¯Ø± Ø§Ù„Ø­Ù‚ÙŠÙ‚ÙŠ ØºÙŠØ± Ù…ØªÙˆÙØ±.";
         } else if (operation !== "lighting" || !instruction) {
           executionErrors.push("Unsupported or incomplete media execution request.");
           verificationStatus = "FAILED";
@@ -763,7 +756,7 @@ Rules for Response:
             status: "blocked",
             details: "Unsupported media operation or missing instruction."
           });
-          responseText = "⚠️ **[Media Execution Guard]** طلب الوسائط غير مكتمل أو غير مدعوم.";
+          responseText = "âš ï¸ **[Media Execution Guard]** Ø·Ù„Ø¨ Ø§Ù„ÙˆØ³Ø§Ø¦Ø· ØºÙŠØ± Ù…ÙƒØªÙ…Ù„ Ø£Ùˆ ØºÙŠØ± Ù…Ø¯Ø¹ÙˆÙ….";
         } else {
           const mediaRequest = {
             operation: "lighting" as const,
@@ -785,18 +778,18 @@ Rules for Response:
             details: JSON.stringify(mediaResult.evidence) + (mediaResult.error ? ` error=${mediaResult.error}` : ""),
           });
           if (mediaResult.status === "SUCCEEDED") {
-            responseText = `### 🎬 JARVIS — Media Edit Executed & Verified
+            responseText = `### ðŸŽ¬ JARVIS â€” Media Edit Executed & Verified
 * **Operation:** \`lighting:darker\`
 * **Provider:** \`kolbo\`
 * **Provider Job:** \`${mediaResult.evidence.providerJobId || "unknown"}\`
 * **Output Artifact:** \`${mediaResult.evidence.outputArtifact?.url || "missing"}\`
 * **Verification:** \`VERIFIED\``;
           } else {
-            responseText = `❌ **[Media Execution Failed]** لم يتم اعتبار تعديل الفيديو ناجحًا. الحالة: \`${mediaResult.status}\`. السبب: \`${mediaResult.error || "unknown"}\``;
+            responseText = `âŒ **[Media Execution Failed]** Ù„Ù… ÙŠØªÙ… Ø§Ø¹ØªØ¨Ø§Ø± ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„ÙÙŠØ¯ÙŠÙˆ Ù†Ø§Ø¬Ø­Ù‹Ø§. Ø§Ù„Ø­Ø§Ù„Ø©: \`${mediaResult.status}\`. Ø§Ù„Ø³Ø¨Ø¨: \`${mediaResult.error || "unknown"}\``;
           }
         }
       } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
-        const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
+        const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("Ø§Ù„Ù…Ù†Ø´ÙˆØ±Ø§Øª") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
         const targetUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/${table}?select=${select}`;
 
@@ -865,11 +858,11 @@ Rules for Response:
             responseText = followUpText;
           } else {
             const recordCount = Array.isArray(dbData) ? dbData.length : (dbData?.count ?? 0);
-            responseText = `### 📊 نتائج استعلام قاعدة البيانات (Database Query Output)
-* **الجدول المستعلم عنه:** \`${table}\`
-* **إجمالي السجلات الحالية:** \`${recordCount}\`
-* **بيانات الواقع الفعلي:** \`${JSON.stringify(dbData)}\`
-* **حالة التحقق (Verification Status):** \`VERIFIED\``;
+            responseText = `### ðŸ“Š Ù†ØªØ§Ø¦Ø¬ Ø§Ø³ØªØ¹Ù„Ø§Ù… Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª (Database Query Output)
+* **Ø§Ù„Ø¬Ø¯ÙˆÙ„ Ø§Ù„Ù…Ø³ØªØ¹Ù„Ù… Ø¹Ù†Ù‡:** \`${table}\`
+* **Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ø§Ù„Ø­Ø§Ù„ÙŠØ©:** \`${recordCount}\`
+* **Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ÙˆØ§Ù‚Ø¹ Ø§Ù„ÙØ¹Ù„ÙŠ:** \`${JSON.stringify(dbData)}\`
+* **Ø­Ø§Ù„Ø© Ø§Ù„ØªØ­Ù‚Ù‚ (Verification Status):** \`VERIFIED\``;
           }
         } catch (dbErr: any) {
           executionErrors.push(dbErr.message);
@@ -914,12 +907,12 @@ Rules for Response:
             details: `Updated '${table}' where ${matchColumn}=${matchValue}. Follow-up READ verification check result: ${JSON.stringify(verifiedData)}`
           });
 
-          responseText = `### 🔄 نتيجة تحديث قواعد البيانات والتحقق آلياً
-* **الجدول:** \`${table}\`
-* **الشرط:** \`${matchColumn} = ${matchValue}\`
-* **الحمولة:** \`${JSON.stringify(updatePayload)}\`
-* **نتيجة القراءة التابعة للتحقق (Follow-up Read Verification):** \`${verificationStatus}\`
-* **بيانات السجل المؤكدة:** \`${JSON.stringify(verifiedData)}\``;
+          responseText = `### ðŸ”„ Ù†ØªÙŠØ¬Ø© ØªØ­Ø¯ÙŠØ« Ù‚ÙˆØ§Ø¹Ø¯ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ÙˆØ§Ù„ØªØ­Ù‚Ù‚ Ø¢Ù„ÙŠØ§Ù‹
+* **Ø§Ù„Ø¬Ø¯ÙˆÙ„:** \`${table}\`
+* **Ø§Ù„Ø´Ø±Ø·:** \`${matchColumn} = ${matchValue}\`
+* **Ø§Ù„Ø­Ù…ÙˆÙ„Ø©:** \`${JSON.stringify(updatePayload)}\`
+* **Ù†ØªÙŠØ¬Ø© Ø§Ù„Ù‚Ø±Ø§Ø¡Ø© Ø§Ù„ØªØ§Ø¨Ø¹Ø© Ù„Ù„ØªØ­Ù‚Ù‚ (Follow-up Read Verification):** \`${verificationStatus}\`
+* **Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„Ù…Ø¤ÙƒØ¯Ø©:** \`${JSON.stringify(verifiedData)}\``;
         } catch (updateErr: any) {
           executionErrors.push(updateErr.message);
           verificationStatus = "FAILED";
@@ -940,9 +933,9 @@ Rules for Response:
           details: `Probed connector '${connectorId}': ${statusStr}`
         });
 
-        responseText = `### 🔌 حالة الموصل المطلوب (${connectorId})
-* **الحالة:** \`${statusStr}\`
-* **المصادقة:** ${statusStr === 'REAL_LIVE' ? 'مفعلة وتدعم الاتصال المباشر' : 'غير متوفرة في بيئة الأسرار (UNCONFIGURED)'}`;
+        responseText = `### ðŸ”Œ Ø­Ø§Ù„Ø© Ø§Ù„Ù…ÙˆØµÙ„ Ø§Ù„Ù…Ø·Ù„ÙˆØ¨ (${connectorId})
+* **Ø§Ù„Ø­Ø§Ù„Ø©:** \`${statusStr}\`
+* **Ø§Ù„Ù…ØµØ§Ø¯Ù‚Ø©:** ${statusStr === 'REAL_LIVE' ? 'Ù…ÙØ¹Ù„Ø© ÙˆØªØ¯Ø¹Ù… Ø§Ù„Ø§ØªØµØ§Ù„ Ø§Ù„Ù…Ø¨Ø§Ø´Ø±' : 'ØºÙŠØ± Ù…ØªÙˆÙØ±Ø© ÙÙŠ Ø¨ÙŠØ¦Ø© Ø§Ù„Ø£Ø³Ø±Ø§Ø± (UNCONFIGURED)'}`;
       }
     }
 
@@ -1009,63 +1002,63 @@ Rules for Response:
 
     if (commandClass === "PLANNING") {
       verificationStatus = "NOT_REQUIRED";
-      fallbackReport = `### 📋 خطة التشغيل التنفيذية (Operational Plan)
+      fallbackReport = `### ðŸ“‹ Ø®Ø·Ø© Ø§Ù„ØªØ´ØºÙŠÙ„ Ø§Ù„ØªÙ†ÙÙŠØ°ÙŠØ© (Operational Plan)
 
-#### 1. الهدف الرئيسي (Objective)
-تأسيس وتشغيل خطة عمليات ذكية متكاملة لإدارة واستجابة المهام تلقائياً بالذكاء الاصطناعي.
+#### 1. Ø§Ù„Ù‡Ø¯Ù Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠ (Objective)
+ØªØ£Ø³ÙŠØ³ ÙˆØªØ´ØºÙŠÙ„ Ø®Ø·Ø© Ø¹Ù…Ù„ÙŠØ§Øª Ø°ÙƒÙŠØ© Ù…ØªÙƒØ§Ù…Ù„Ø© Ù„Ø¥Ø¯Ø§Ø±Ø© ÙˆØ§Ø³ØªØ¬Ø§Ø¨Ø© Ø§Ù„Ù…Ù‡Ø§Ù… ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹ Ø¨Ø§Ù„Ø°ÙƒØ§Ø¡ Ø§Ù„Ø§ØµØ·Ù†Ø§Ø¹ÙŠ.
 
-#### 2. الاستراتيجية والخطوات التشغيلية (Operational Strategy & Steps)
-1. **فحص المدخلات والمتطلبات:** تحليل متطلبات المهمة وتحديد النطاق والبيانات المطلوبة.
-2. **تجهيز سير العمل والتصنيف:** أتمتة معالجة البيانات وتصنيف المهام تلقائياً.
-3. **التنفيذ والتصعيد المباشر:** معالجة المهام العادية تلقائياً وتصعيد المهام الحساسة للبوابات البشرية.
+#### 2. Ø§Ù„Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ© ÙˆØ§Ù„Ø®Ø·ÙˆØ§Øª Ø§Ù„ØªØ´ØºÙŠÙ„ÙŠØ© (Operational Strategy & Steps)
+1. **ÙØ­Øµ Ø§Ù„Ù…Ø¯Ø®Ù„Ø§Øª ÙˆØ§Ù„Ù…ØªØ·Ù„Ø¨Ø§Øª:** ØªØ­Ù„ÙŠÙ„ Ù…ØªØ·Ù„Ø¨Ø§Øª Ø§Ù„Ù…Ù‡Ù…Ø© ÙˆØªØ­Ø¯ÙŠØ¯ Ø§Ù„Ù†Ø·Ø§Ù‚ ÙˆØ§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø·Ù„ÙˆØ¨Ø©.
+2. **ØªØ¬Ù‡ÙŠØ² Ø³ÙŠØ± Ø§Ù„Ø¹Ù…Ù„ ÙˆØ§Ù„ØªØµÙ†ÙŠÙ:** Ø£ØªÙ…ØªØ© Ù…Ø¹Ø§Ù„Ø¬Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ÙˆØªØµÙ†ÙŠÙ Ø§Ù„Ù…Ù‡Ø§Ù… ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹.
+3. **Ø§Ù„ØªÙ†ÙÙŠØ° ÙˆØ§Ù„ØªØµØ¹ÙŠØ¯ Ø§Ù„Ù…Ø¨Ø§Ø´Ø±:** Ù…Ø¹Ø§Ù„Ø¬Ø© Ø§Ù„Ù…Ù‡Ø§Ù… Ø§Ù„Ø¹Ø§Ø¯ÙŠØ© ØªÙ„Ù‚Ø§Ø¦ÙŠØ§Ù‹ ÙˆØªØµØ¹ÙŠØ¯ Ø§Ù„Ù…Ù‡Ø§Ù… Ø§Ù„Ø­Ø³Ø§Ø³Ø© Ù„Ù„Ø¨ÙˆØ§Ø¨Ø§Øª Ø§Ù„Ø¨Ø´Ø±ÙŠØ©.
 
-#### 3. خريطة الأتمتة بالذكاء الاصطناعي (AI Automation Map)
-* **الأتمتة التلقائية (Autonomous):** التحليل، التصنيف، حساب تقييمات الأولوية، وتوثيق سجل السجلات.
-* **البوابات البشرية (Human Approval):** إرسال الرسائل الخارجية، الحذف الدائم، وتعديل الأسرار.
+#### 3. Ø®Ø±ÙŠØ·Ø© Ø§Ù„Ø£ØªÙ…ØªØ© Ø¨Ø§Ù„Ø°ÙƒØ§Ø¡ Ø§Ù„Ø§ØµØ·Ù†Ø§Ø¹ÙŠ (AI Automation Map)
+* **Ø§Ù„Ø£ØªÙ…ØªØ© Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠØ© (Autonomous):** Ø§Ù„ØªØ­Ù„ÙŠÙ„ØŒ Ø§Ù„ØªØµÙ†ÙŠÙØŒ Ø­Ø³Ø§Ø¨ ØªÙ‚ÙŠÙŠÙ…Ø§Øª Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ©ØŒ ÙˆØªÙˆØ«ÙŠÙ‚ Ø³Ø¬Ù„ Ø§Ù„Ø³Ø¬Ù„Ø§Øª.
+* **Ø§Ù„Ø¨ÙˆØ§Ø¨Ø§Øª Ø§Ù„Ø¨Ø´Ø±ÙŠØ© (Human Approval):** Ø¥Ø±Ø³Ø§Ù„ Ø§Ù„Ø±Ø³Ø§Ø¦Ù„ Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠØ©ØŒ Ø§Ù„Ø­Ø°Ù Ø§Ù„Ø¯Ø§Ø¦Ù…ØŒ ÙˆØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø£Ø³Ø±Ø§Ø±.
 
-#### 4. الأدوات والموصلات المطلوبة (Required Tools)
-* **Supabase:** إدارة وتخزين بيانات السجلات المباشرة (REAL_LIVE ✅)
-* **n8n Workflow Engine:** أتمتة سريان العمليات والمكالمات الخارجية (REAL_LIVE ✅)
-* **Telegram / Comms:** إرسال إشعارات وتنبيهات الفريق المباشرة
+#### 4. Ø§Ù„Ø£Ø¯ÙˆØ§Øª ÙˆØ§Ù„Ù…ÙˆØµÙ„Ø§Øª Ø§Ù„Ù…Ø·Ù„ÙˆØ¨Ø© (Required Tools)
+* **Supabase:** Ø¥Ø¯Ø§Ø±Ø© ÙˆØªØ®Ø²ÙŠÙ† Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ø§Ù„Ù…Ø¨Ø§Ø´Ø±Ø© (REAL_LIVE âœ…)
+* **n8n Workflow Engine:** Ø£ØªÙ…ØªØ© Ø³Ø±ÙŠØ§Ù† Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª ÙˆØ§Ù„Ù…ÙƒØ§Ù„Ù…Ø§Øª Ø§Ù„Ø®Ø§Ø±Ø¬ÙŠØ© (REAL_LIVE âœ…)
+* **Telegram / Comms:** Ø¥Ø±Ø³Ø§Ù„ Ø¥Ø´Ø¹Ø§Ø±Ø§Øª ÙˆØªÙ†Ø¨ÙŠÙ‡Ø§Øª Ø§Ù„ÙØ±ÙŠÙ‚ Ø§Ù„Ù…Ø¨Ø§Ø´Ø±Ø©
 
-#### 5. بوابات الحوكمة والموافقة البشرية (Human Approval Gates)
-* أي إجراء خارجي عالي التأثير أو تعديل أسرار التكوين.
+#### 5. Ø¨ÙˆØ§Ø¨Ø§Øª Ø§Ù„Ø­ÙˆÙƒÙ…Ø© ÙˆØ§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¨Ø´Ø±ÙŠØ© (Human Approval Gates)
+* Ø£ÙŠ Ø¥Ø¬Ø±Ø§Ø¡ Ø®Ø§Ø±Ø¬ÙŠ Ø¹Ø§Ù„ÙŠ Ø§Ù„ØªØ£Ø«ÙŠØ± Ø£Ùˆ ØªØ¹Ø¯ÙŠÙ„ Ø£Ø³Ø±Ø§Ø± Ø§Ù„ØªÙƒÙˆÙŠÙ†.
 
-#### 6. حالة الخطة ومؤشرات النجاح (Success Metrics)
-* **حالة الخطة:** \`PLANNED\`
-* **التنفيذ:** جاهز للبدء فور إصدار أمر \`نفذ الخطة\`.`;
+#### 6. Ø­Ø§Ù„Ø© Ø§Ù„Ø®Ø·Ø© ÙˆÙ…Ø¤Ø´Ø±Ø§Øª Ø§Ù„Ù†Ø¬Ø§Ø­ (Success Metrics)
+* **Ø­Ø§Ù„Ø© Ø§Ù„Ø®Ø·Ø©:** \`PLANNED\`
+* **Ø§Ù„ØªÙ†ÙÙŠØ°:** Ø¬Ø§Ù‡Ø² Ù„Ù„Ø¨Ø¯Ø¡ ÙÙˆØ± Ø¥ØµØ¯Ø§Ø± Ø£Ù…Ø± \`Ù†ÙØ° Ø§Ù„Ø®Ø·Ø©\`.`;
     } else if (commandClass === "RESEARCH_PLANNING") {
       verificationStatus = "NOT_REQUIRED";
-      fallbackReport = `### 🔬 أبحاث العمليات والتخطيط التنفيذي (Research & Operational Plan)
+      fallbackReport = `### ðŸ”¬ Ø£Ø¨Ø­Ø§Ø« Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª ÙˆØ§Ù„ØªØ®Ø·ÙŠØ· Ø§Ù„ØªÙ†ÙÙŠØ°ÙŠ (Research & Operational Plan)
 
-#### 1. نتائج تحليل المصادر والأبحاث (Research Findings & Source Analysis)
-* **تحليل المراجع:** تم فحص المصادر والأبحاث المحددة واستخلاص الآليات التشغيلية الرئيسية.
-* **الرؤية الاستراتيجية:** بناء نظام عمل قائم بالكامل على الذكاء الاصطناعي (AI COO) لتنفيذ وإدارة العمليات بدون احتكاك.
+#### 1. Ù†ØªØ§Ø¦Ø¬ ØªØ­Ù„ÙŠÙ„ Ø§Ù„Ù…ØµØ§Ø¯Ø± ÙˆØ§Ù„Ø£Ø¨Ø­Ø§Ø« (Research Findings & Source Analysis)
+* **ØªØ­Ù„ÙŠÙ„ Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹:** ØªÙ… ÙØ­Øµ Ø§Ù„Ù…ØµØ§Ø¯Ø± ÙˆØ§Ù„Ø£Ø¨Ø­Ø§Ø« Ø§Ù„Ù…Ø­Ø¯Ø¯Ø© ÙˆØ§Ø³ØªØ®Ù„Ø§Øµ Ø§Ù„Ø¢Ù„ÙŠØ§Øª Ø§Ù„ØªØ´ØºÙŠÙ„ÙŠØ© Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠØ©.
+* **Ø§Ù„Ø±Ø¤ÙŠØ© Ø§Ù„Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ©:** Ø¨Ù†Ø§Ø¡ Ù†Ø¸Ø§Ù… Ø¹Ù…Ù„ Ù‚Ø§Ø¦Ù… Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ Ø¹Ù„Ù‰ Ø§Ù„Ø°ÙƒØ§Ø¡ Ø§Ù„Ø§ØµØ·Ù†Ø§Ø¹ÙŠ (AI COO) Ù„ØªÙ†ÙÙŠØ° ÙˆØ¥Ø¯Ø§Ø±Ø© Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª Ø¨Ø¯ÙˆÙ† Ø§Ø­ØªÙƒØ§Ùƒ.
 
-#### 2. الخطة التشغيلية والأتمتة (Execution Strategy & AI Map)
-1. **ربط المصادر:** تحويل التوجيهات إلى خطوات تنفيذية قابلة للقياس.
-2. **التنفيذ الذاتي:** تشغيل الـ AI Reasoning Loop للمعالجة والتطبيق.
-3. **التوثيق والتحقق:** تسجيل كل خطوة في ذاكرة التنفيذ وحساب حالة التحقق.
+#### 2. Ø§Ù„Ø®Ø·Ø© Ø§Ù„ØªØ´ØºÙŠÙ„ÙŠØ© ÙˆØ§Ù„Ø£ØªÙ…ØªØ© (Execution Strategy & AI Map)
+1. **Ø±Ø¨Ø· Ø§Ù„Ù…ØµØ§Ø¯Ø±:** ØªØ­ÙˆÙŠÙ„ Ø§Ù„ØªÙˆØ¬ÙŠÙ‡Ø§Øª Ø¥Ù„Ù‰ Ø®Ø·ÙˆØ§Øª ØªÙ†ÙÙŠØ°ÙŠØ© Ù‚Ø§Ø¨Ù„Ø© Ù„Ù„Ù‚ÙŠØ§Ø³.
+2. **Ø§Ù„ØªÙ†ÙÙŠØ° Ø§Ù„Ø°Ø§ØªÙŠ:** ØªØ´ØºÙŠÙ„ Ø§Ù„Ù€ AI Reasoning Loop Ù„Ù„Ù…Ø¹Ø§Ù„Ø¬Ø© ÙˆØ§Ù„ØªØ·Ø¨ÙŠÙ‚.
+3. **Ø§Ù„ØªÙˆØ«ÙŠÙ‚ ÙˆØ§Ù„ØªØ­Ù‚Ù‚:** ØªØ³Ø¬ÙŠÙ„ ÙƒÙ„ Ø®Ø·ÙˆØ© ÙÙŠ Ø°Ø§ÙƒØ±Ø© Ø§Ù„ØªÙ†ÙÙŠØ° ÙˆØ­Ø³Ø§Ø¨ Ø­Ø§Ù„Ø© Ø§Ù„ØªØ­Ù‚Ù‚.
 
-#### 3. الخطوات التنفيذية (First Executable Actions)
-* **حالة الخطة:** \`PLANNED\`
-* **التنفيذ المتوقع:** جاهز لتشغيل المهام المؤتمتة فور الاعتماد.`;
+#### 3. Ø§Ù„Ø®Ø·ÙˆØ§Øª Ø§Ù„ØªÙ†ÙÙŠØ°ÙŠØ© (First Executable Actions)
+* **Ø­Ø§Ù„Ø© Ø§Ù„Ø®Ø·Ø©:** \`PLANNED\`
+* **Ø§Ù„ØªÙ†ÙÙŠØ° Ø§Ù„Ù…ØªÙˆÙ‚Ø¹:** Ø¬Ø§Ù‡Ø² Ù„ØªØ´ØºÙŠÙ„ Ø§Ù„Ù…Ù‡Ø§Ù… Ø§Ù„Ù…Ø¤ØªÙ…ØªØ© ÙÙˆØ± Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯.`;
     } else if (commandClass === "RESEARCH") {
       verificationStatus = "NOT_REQUIRED";
-      fallbackReport = `### 🔬 ملخص الأبحاث والدراسات (Research Findings)
+      fallbackReport = `### ðŸ”¬ Ù…Ù„Ø®Øµ Ø§Ù„Ø£Ø¨Ø­Ø§Ø« ÙˆØ§Ù„Ø¯Ø±Ø§Ø³Ø§Øª (Research Findings)
 
-#### 1. النطاق والهدف (Scope & Objective)
-استكشاف وتقييم المصادر والممارسات المطلوبة للموضوع: "${userPromptStr}".
+#### 1. Ø§Ù„Ù†Ø·Ø§Ù‚ ÙˆØ§Ù„Ù‡Ø¯Ù (Scope & Objective)
+Ø§Ø³ØªÙƒØ´Ø§Ù ÙˆØªÙ‚ÙŠÙŠÙ… Ø§Ù„Ù…ØµØ§Ø¯Ø± ÙˆØ§Ù„Ù…Ù…Ø§Ø±Ø³Ø§Øª Ø§Ù„Ù…Ø·Ù„ÙˆØ¨Ø© Ù„Ù„Ù…ÙˆØ¶ÙˆØ¹: "${userPromptStr}".
 
-#### 2. أهم الرؤى والتوصيات (Key Research Insights)
-1. **التحليل الفني والتشغيلي:** فحص الممارسات الحديثة والأطر الموصى بها.
-2. **استراتيجية التطبيق:** إدماج المخرجات ضمن سير العمليات التلقائي ونظام الأتمتة المعتمد.
-3. **مؤشرات الأداء (KPIs):** ضمان استقرارية الأداء والدقة التشغيلية للحل المستهدف.
+#### 2. Ø£Ù‡Ù… Ø§Ù„Ø±Ø¤Ù‰ ÙˆØ§Ù„ØªÙˆØµÙŠØ§Øª (Key Research Insights)
+1. **Ø§Ù„ØªØ­Ù„ÙŠÙ„ Ø§Ù„ÙÙ†ÙŠ ÙˆØ§Ù„ØªØ´ØºÙŠÙ„ÙŠ:** ÙØ­Øµ Ø§Ù„Ù…Ù…Ø§Ø±Ø³Ø§Øª Ø§Ù„Ø­Ø¯ÙŠØ«Ø© ÙˆØ§Ù„Ø£Ø·Ø± Ø§Ù„Ù…ÙˆØµÙ‰ Ø¨Ù‡Ø§.
+2. **Ø§Ø³ØªØ±Ø§ØªÙŠØ¬ÙŠØ© Ø§Ù„ØªØ·Ø¨ÙŠÙ‚:** Ø¥Ø¯Ù…Ø§Ø¬ Ø§Ù„Ù…Ø®Ø±Ø¬Ø§Øª Ø¶Ù…Ù† Ø³ÙŠØ± Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠ ÙˆÙ†Ø¸Ø§Ù… Ø§Ù„Ø£ØªÙ…ØªØ© Ø§Ù„Ù…Ø¹ØªÙ…Ø¯.
+3. **Ù…Ø¤Ø´Ø±Ø§Øª Ø§Ù„Ø£Ø¯Ø§Ø¡ (KPIs):** Ø¶Ù…Ø§Ù† Ø§Ø³ØªÙ‚Ø±Ø§Ø±ÙŠØ© Ø§Ù„Ø£Ø¯Ø§Ø¡ ÙˆØ§Ù„Ø¯Ù‚Ø© Ø§Ù„ØªØ´ØºÙŠÙ„ÙŠØ© Ù„Ù„Ø­Ù„ Ø§Ù„Ù…Ø³ØªÙ‡Ø¯Ù.
 
-#### 3. الخطوات التالية (Next Steps)
-* تحويل توصيات البحث إلى خطة عمل تنفيذية عبر إرسال أمر \`اعمل خطة...\`.`;
+#### 3. Ø§Ù„Ø®Ø·ÙˆØ§Øª Ø§Ù„ØªØ§Ù„ÙŠØ© (Next Steps)
+* ØªØ­ÙˆÙŠÙ„ ØªÙˆØµÙŠØ§Øª Ø§Ù„Ø¨Ø­Ø« Ø¥Ù„Ù‰ Ø®Ø·Ø© Ø¹Ù…Ù„ ØªÙ†ÙÙŠØ°ÙŠØ© Ø¹Ø¨Ø± Ø¥Ø±Ø³Ø§Ù„ Ø£Ù…Ø± \`Ø§Ø¹Ù…Ù„ Ø®Ø·Ø©...\`.`;
     } else if (commandClass === "DATABASE") {
-      const targetTable = (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات")) ? "posts" : "leads";
+      const targetTable = (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("Ø§Ù„Ù…Ù†Ø´ÙˆØ±Ø§Øª")) ? "posts" : "leads";
       let dbData: any = [];
       if (supabaseUrl && supabaseApiKey) {
         try {
@@ -1087,12 +1080,12 @@ Rules for Response:
         }
       }
       const recordCount = Array.isArray(dbData) ? dbData.length : (dbData?.count ?? 0);
-      fallbackReport = `### 📊 نتائج استعلام قاعدة البيانات (Database Query Output)
-* **الموصل:** \`Supabase REST PostgREST API\` (REAL_LIVE ✅)
-* **الجدول المستعلم عنه:** \`${targetTable}\`
-* **إجمالي السجلات الحالية:** \`${recordCount}\`
-* **بيانات الواقع الفعلي المسترجعة:** \`${JSON.stringify(dbData)}\`
-* **حالة التحقق (Verification Status):** \`${verificationStatus}\``;
+      fallbackReport = `### ðŸ“Š Ù†ØªØ§Ø¦Ø¬ Ø§Ø³ØªØ¹Ù„Ø§Ù… Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª (Database Query Output)
+* **Ø§Ù„Ù…ÙˆØµÙ„:** \`Supabase REST PostgREST API\` (REAL_LIVE âœ…)
+* **Ø§Ù„Ø¬Ø¯ÙˆÙ„ Ø§Ù„Ù…Ø³ØªØ¹Ù„Ù… Ø¹Ù†Ù‡:** \`${targetTable}\`
+* **Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ø§Ù„Ø­Ø§Ù„ÙŠØ©:** \`${recordCount}\`
+* **Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ÙˆØ§Ù‚Ø¹ Ø§Ù„ÙØ¹Ù„ÙŠ Ø§Ù„Ù…Ø³ØªØ±Ø¬Ø¹Ø©:** \`${JSON.stringify(dbData)}\`
+* **Ø­Ø§Ù„Ø© Ø§Ù„ØªØ­Ù‚Ù‚ (Verification Status):** \`${verificationStatus}\``;
     } else if (commandClass === "EXECUTION") {
       let dbData: any = [];
       if (supabaseUrl && supabaseApiKey) {
@@ -1115,41 +1108,41 @@ Rules for Response:
         }
       }
       const recordCount = Array.isArray(dbData) ? dbData.length : (dbData?.count ?? 0);
-      fallbackReport = `### ⚡ نتيجة التنفيذ والتحقق التلقائي (Execution & Verification Output)
-* **العملية المنفذة:** فحص وتصنيف سجلات العملاء وترتيب الأولويات التشغيلية
-* **الجدول المتأثر:** \`leads\`
-* **إجمالي السجلات المفحوصة:** \`${recordCount}\`
-* **بيانات السجلات المكتشفة:** \`${JSON.stringify(dbData)}\`
-* **حالة التحقق التابعة للقراءة (Follow-up Read Verification):** \`${verificationStatus}\`
-* **حالة الاعتماد:** \`AUTO_APPROVED\``;
+      fallbackReport = `### âš¡ Ù†ØªÙŠØ¬Ø© Ø§Ù„ØªÙ†ÙÙŠØ° ÙˆØ§Ù„ØªØ­Ù‚Ù‚ Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠ (Execution & Verification Output)
+* **Ø§Ù„Ø¹Ù…Ù„ÙŠØ© Ø§Ù„Ù…Ù†ÙØ°Ø©:** ÙØ­Øµ ÙˆØªØµÙ†ÙŠÙ Ø³Ø¬Ù„Ø§Øª Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡ ÙˆØªØ±ØªÙŠØ¨ Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ§Øª Ø§Ù„ØªØ´ØºÙŠÙ„ÙŠØ©
+* **Ø§Ù„Ø¬Ø¯ÙˆÙ„ Ø§Ù„Ù…ØªØ£Ø«Ø±:** \`leads\`
+* **Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ø§Ù„Ù…ÙØ­ÙˆØµØ©:** \`${recordCount}\`
+* **Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ø§Ù„Ù…ÙƒØªØ´ÙØ©:** \`${JSON.stringify(dbData)}\`
+* **Ø­Ø§Ù„Ø© Ø§Ù„ØªØ­Ù‚Ù‚ Ø§Ù„ØªØ§Ø¨Ø¹Ø© Ù„Ù„Ù‚Ø±Ø§Ø¡Ø© (Follow-up Read Verification):** \`${verificationStatus}\`
+* **Ø­Ø§Ù„Ø© Ø§Ù„Ø§Ø¹ØªÙ…Ø§Ø¯:** \`AUTO_APPROVED\``;
     } else if (commandClass === "SYSTEM_HEALTH") {
       verificationStatus = "VERIFIED";
       const isSupabaseLive = !!(supabaseUrl && supabaseApiKey);
-      fallbackReport = `### 🏥 تقرير حالة الموصلات والنظام (System Health)
-* **Supabase Database:** \`${isSupabaseLive ? "REAL_LIVE ✅" : "UNCONFIGURED ⚠️"}\`
-* **Gemini LLM Engine:** \`REAL_LIVE ✅\`
+      fallbackReport = `### ðŸ¥ ØªÙ‚Ø±ÙŠØ± Ø­Ø§Ù„Ø© Ø§Ù„Ù…ÙˆØµÙ„Ø§Øª ÙˆØ§Ù„Ù†Ø¸Ø§Ù… (System Health)
+* **Supabase Database:** \`${isSupabaseLive ? "REAL_LIVE âœ…" : "UNCONFIGURED âš ï¸"}\`
+* **Gemini LLM Engine:** \`REAL_LIVE âœ…\`
 * **Execution Memory Store:** \`ACTIVE (${operationalMemoryRecords.length} records logged)\`
 * **Command Router Status:** \`OPERATIONAL (Zero Unsafe Directives)\``;
     } else if (commandClass === "REPORTING") {
       verificationStatus = "VERIFIED";
       const recordCount = operationalMemoryRecords.length;
-      const recentSummary = operationalMemoryRecords.slice(0, 5).map((r, i) => `${i + 1}. [${r.intent}] "${r.command}" → State: ${r.state_history.join("→")} (${r.verificationStatus})`).join("\n");
-      fallbackReport = `### 📜 تقرير ذاكرة التنفيذ والعمليات (Execution History Report)
-* **إجمالي العمليات المسجلة في الذاكرة:** \`${recordCount}\`
-* **آخر العمليات المنفذة:**
-${recentSummary || "لا توجد عمليات سابقة مسجلة بعيداً عن الجلسة الحالية."}`;
+      const recentSummary = operationalMemoryRecords.slice(0, 5).map((r, i) => `${i + 1}. [${r.intent}] "${r.command}" â†’ State: ${r.state_history.join("â†’")} (${r.verificationStatus})`).join("\n");
+      fallbackReport = `### ðŸ“œ ØªÙ‚Ø±ÙŠØ± Ø°Ø§ÙƒØ±Ø© Ø§Ù„ØªÙ†ÙÙŠØ° ÙˆØ§Ù„Ø¹Ù…Ù„ÙŠØ§Øª (Execution History Report)
+* **Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª Ø§Ù„Ù…Ø³Ø¬Ù„Ø© ÙÙŠ Ø§Ù„Ø°Ø§ÙƒØ±Ø©:** \`${recordCount}\`
+* **Ø¢Ø®Ø± Ø§Ù„Ø¹Ù…Ù„ÙŠØ§Øª Ø§Ù„Ù…Ù†ÙØ°Ø©:**
+${recentSummary || "Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¹Ù…Ù„ÙŠØ§Øª Ø³Ø§Ø¨Ù‚Ø© Ù…Ø³Ø¬Ù„Ø© Ø¨Ø¹ÙŠØ¯Ø§Ù‹ Ø¹Ù† Ø§Ù„Ø¬Ù„Ø³Ø© Ø§Ù„Ø­Ø§Ù„ÙŠØ©."}`;
     } else {
       // GENERAL / UNKNOWN / UNMATCHED DIRECTIVES
       verificationStatus = "NOT_REQUIRED";
-      fallbackReport = `⚠️ **[Safe Stop - Directive Analysis]**
-الأمر المعطى: "${userPromptStr}"
-تم تصنيفه تحت القصد: \`${commandClass}\`.
+      fallbackReport = `âš ï¸ **[Safe Stop - Directive Analysis]**
+Ø§Ù„Ø£Ù…Ø± Ø§Ù„Ù…Ø¹Ø·Ù‰: "${userPromptStr}"
+ØªÙ… ØªØµÙ†ÙŠÙÙ‡ ØªØ­Øª Ø§Ù„Ù‚ØµØ¯: \`${commandClass}\`.
 
-**القواعد الأمنية:**
-- لا يتم استدعاء أدوات قاعدة البيانات (Supabase) أو إحداث آثار جانبية للأوامر العامة بغير توجيه صريح.
-- لتشغيل استعلام قاعدة البيانات، استخدم: \`اقرأ عدد المنشورات من Supabase\`
-- لتطوير خطة تشغيل، استخدم: \`اعمل خطة...\`
-- للبحث والاستكشاف، استخدم: \`ابحث عن...\``;
+**Ø§Ù„Ù‚ÙˆØ§Ø¹Ø¯ Ø§Ù„Ø£Ù…Ù†ÙŠØ©:**
+- Ù„Ø§ ÙŠØªÙ… Ø§Ø³ØªØ¯Ø¹Ø§Ø¡ Ø£Ø¯ÙˆØ§Øª Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª (Supabase) Ø£Ùˆ Ø¥Ø­Ø¯Ø§Ø« Ø¢Ø«Ø§Ø± Ø¬Ø§Ù†Ø¨ÙŠØ© Ù„Ù„Ø£ÙˆØ§Ù…Ø± Ø§Ù„Ø¹Ø§Ù…Ø© Ø¨ØºÙŠØ± ØªÙˆØ¬ÙŠÙ‡ ØµØ±ÙŠØ­.
+- Ù„ØªØ´ØºÙŠÙ„ Ø§Ø³ØªØ¹Ù„Ø§Ù… Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§ØªØŒ Ø§Ø³ØªØ®Ø¯Ù…: \`Ø§Ù‚Ø±Ø£ Ø¹Ø¯Ø¯ Ø§Ù„Ù…Ù†Ø´ÙˆØ±Ø§Øª Ù…Ù† Supabase\`
+- Ù„ØªØ·ÙˆÙŠØ± Ø®Ø·Ø© ØªØ´ØºÙŠÙ„ØŒ Ø§Ø³ØªØ®Ø¯Ù…: \`Ø§Ø¹Ù…Ù„ Ø®Ø·Ø©...\`
+- Ù„Ù„Ø¨Ø­Ø« ÙˆØ§Ù„Ø§Ø³ØªÙƒØ´Ø§ÙØŒ Ø§Ø³ØªØ®Ø¯Ù…: \`Ø§Ø¨Ø­Ø« Ø¹Ù†...\``;
     }
 
     const primaryToolUsed = actionsTakenList.find(a => a.tool.includes("Supabase") || a.tool.includes("Reasoning"))?.tool || actionsTakenList[0]?.tool || "none";
