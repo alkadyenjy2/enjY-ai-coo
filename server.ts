@@ -11,6 +11,7 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
+import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -803,7 +804,7 @@ Rules for Response:
       selectedTools: actionsTakenList.map(a => a.tool),
       actionsExecuted: actionsTakenList,
       results: { responseSnippet: responseText.slice(0, 150) },
-      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : verificationStatus === "NOT_REQUIRED" ? "COMPLETED" : "FAILED"],
+      state_history: buildLifecycleHistory({ needsApproval: approvalStatus === "REQUIRES_HUMAN_APPROVAL", executed: true, verification: verificationStatus }),
       evidence: primaryEvidence,
       verificationStatus,
       final_state_reason: verificationStatus === "VERIFIED" 
