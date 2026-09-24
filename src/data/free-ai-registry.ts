@@ -154,10 +154,10 @@ export const FREE_AI_REGISTRY: AIRegistryEntry[] = [
     priority: 45,
     enabled: true,
     verificationStatus: 'VERIFIED',
-    lastVerifiedAt: '2026-09-23',
-    verificationSource: 'Tencent BrowserSkill GitHub repository and README',
+    lastVerifiedAt: '2026-09-24',
+    verificationSource: 'Tencent BrowserSkill: bsk doctor + live example.com session/navigate/observe/screenshot/stop',
     fallbackToolIds: [],
-    notes: 'Local CLI/daemon plus Chromium extension. Requires user-side browser connection; do not treat browser access as configured until bsk doctor and a real browser task provide evidence.',
+    notes: 'Local CLI/daemon plus Chromium extension. Live behavioral verification completed on Windows Chrome instance 9a9c7f01; do not treat browser access as configured unless a current bsk doctor and real browser task provide evidence.',
   },
   {
     toolId: 'pinokio',
