@@ -345,6 +345,9 @@ app.post("/api/agent/command", async (req, res) => {
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
   const projectNameStr = typeof activeProject?.name === "string" ? activeProject.name : "Core Operations HQ";
   const commandClass = classifyCommand(userPromptStr);
+  const requestAuth = getAuthContext(res);
+  const resolvedOrganizationId = String(userProfile?.organizationId || req.body?.organization_id || "").trim();
+  const resolvedUserId = String(userProfile?.userId || requestAuth?.user.id || "").trim();
 
   const cacheKey = userPromptStr.toLowerCase().trim();
   const cached = recentCommandCache.get(cacheKey);
@@ -770,12 +773,12 @@ Rules for Response:
             sourceArtifactUrl,
             instruction,
             idempotencyKey,
-            requestedBy: { userId: String(userProfile?.userId || "unknown"), organizationId: String(userProfile?.organizationId || "unknown") },
+            requestedBy: { userId: resolvedUserId, organizationId: String(userProfile?.organizationId || "unknown") },
             metadata: { source: String(userProfile?.source || "command-center") },
           };
           const durableJob = await createDurableJob({
-            organizationId: String(userProfile?.organizationId || "unknown"),
-            userId: String(userProfile?.userId || "unknown"),
+            organizationId: resolvedOrganizationId,
+            userId: resolvedUserId,
             command: "__MEDIA_EXECUTION__",
             inputPayload: { kind: "media_execution", mediaRequest, telegramChatId: Number(userProfile?.telegramChatId || 0) },
             idempotencyKey,
