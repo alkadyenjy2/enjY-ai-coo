@@ -7,7 +7,7 @@ let localConfig:any={};
 try{localConfig=JSON.parse(readFileSync(configPath,"utf8"));}catch{}
 const gatewayUrl=(process.env.JARVIS_BROWSER_WORKER_GATEWAY_URL||localConfig.gatewayUrl||"https://aislifqpskbduzvvbepz.supabase.co/functions/v1/jarvis-browser-worker").replace(/\/$/,"");
 const publishableKey=process.env.JARVIS_BROWSER_WORKER_PUBLISHABLE_KEY||localConfig.publishableKey||"";
-const keyPath=process.env.JARVIS_BROWSER_WORKER_PRIVATE_KEY||"C:/Users/LTC/.jarvis-browser-worker/private-key.pem";
+const keyPath=process.env.JARVIS_BROWSER_WORKER_PRIVATE_KEY||localConfig.privateKeyPath||"C:/Users/LTC/.jarvis-browser-worker/private-key.pem";
 const privateKey=readFileSync(keyPath,"utf8");
 const pollMs=Number(process.env.JARVIS_BROWSER_WORKER_POLL_MS||5000);
 
