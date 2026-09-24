@@ -1,0 +1,2 @@
+[functions.jarvis-browser-worker]
+verify_jwt = false
