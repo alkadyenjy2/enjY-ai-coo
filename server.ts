@@ -1048,7 +1048,7 @@ app.post("/api/agent/onboard", async (req, res) => {
         userProfile: {
           communicationPreference: answers.commStyle || 'concise',
           technicalLevel: answers.techLevel || 'advanced',
-          autonomyLevel: answers.autonomy || 'full_autonomy',          autonomyLevel: answers.autonomy || 'full_autonomy',
+          autonomyLevel: answers.autonomy || 'full_autonomy',
           decisionStyle: answers.decisionStyle || 'execute_first',
           executionSpeed: 'fast'
         },
@@ -1498,7 +1498,7 @@ T1hhTiaCeIY/OwwwNUY2yvcCAwEAAQ==
 app.post("/api/webhooks/stripe", async (req, res) => {
   try {
     const rawBodyBuffer = (req as express.Request & { rawBody?: Buffer }).rawBody;
-    const rawBody = rawBodyBuffer?.toString("utf8") || "";    const rawBody = rawBodyBuffer?.toString("utf8") || "";
+    const rawBody = rawBodyBuffer?.toString("utf8") || "";
     const sig = (req.headers["stripe-signature"] as string) || "";
     const verification = stripeAdapter.verifyAndProcessWebhook(rawBody, sig);
 
