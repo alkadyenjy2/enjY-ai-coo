@@ -100,7 +100,6 @@ app.get("/api/health", (req, res) => {
     version: "2.5.0",
     hasApiKey: hasOpenAI || hasGemini,
     modelProviders: { openai: hasOpenAI, gemini: hasGemini },
-    envProbe: Boolean(process.env.JARVIS_ENV_PROBE),
     executionHistoryCount: operationalMemoryRecords.length,
     timestamp: new Date().toISOString()
   });
