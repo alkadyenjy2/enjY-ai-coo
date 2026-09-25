@@ -45,6 +45,11 @@ function getServerSecretKey(): string | null {
   return secret || null;
 }
 
+function getOutboundWebhookUrl(): string | null {
+  const url = process.env.JARVIS_TELEGRAM_OUTBOUND_WEBHOOK_URL?.trim();
+  return url || null;
+}
+
 function getAllowedChatIds(): Set<number> | null {
   const raw = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS?.trim();
   if (!raw) return null;
@@ -187,14 +192,29 @@ async function telegramCall<T>(method: string, payload: Record<string, unknown>)
 }
 
 export async function sendTelegramMessage(chatId: number, text: string): Promise<void> {
-  await telegramCall("sendMessage", {
-    chat_id: chatId,
-    text: text.slice(0, 4096),
-    disable_web_page_preview: true,
-  });
-  console.log("[TELEGRAM_DIAG] TELEGRAM_SENT", { chatId, length: text.length });
-}
+  const token = getTelegramToken();
+  const outboundWebhookUrl = getOutboundWebhookUrl();
+  const boundedText = text.slice(0, 4096);
 
+  if (token) {
+    await telegramCall("sendMessage", {
+      chat_id: chatId,
+      text: boundedText,
+      disable_web_page_preview: true,
+    });
+  } else if (outboundWebhookUrl) {
+    const response = await originalFetch(outboundWebhookUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chatId, text: boundedText }),
+    });
+    if (!response.ok) throw new Error("Telegram outbound bridge failed: " + response.status);
+  } else {
+    throw new Error("No Telegram outbound transport is configured");
+  }
+
+  console.log("[TELEGRAM_DIAG] TELEGRAM_SENT", { chatId, length: boundedText.length, mode: token ? "direct" : "make_bridge" });
+}
 export function createTelegramRouter(): Router {
   const router = express.Router();
 
@@ -243,7 +263,7 @@ export function createTelegramRouter(): Router {
   });
 
   router.get("/status", (_req: Request, res: ExpressResponse) => {
-    const configured = Boolean(getTelegramToken());
+    const configured = Boolean(getTelegramToken() || getOutboundWebhookUrl());
     const webhookSecretConfigured = Boolean(getWebhookSecret());
     const commandAuthConfigured = Boolean((getServerSecretKey() || getTelegramRefreshToken()) && getTelegramOrganizationId());
     const allowedChatIdsConfigured = Boolean(getAllowedChatIds());
