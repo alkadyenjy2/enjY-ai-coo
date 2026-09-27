@@ -954,7 +954,21 @@ Rules for Response:
       }
     }
 
-    // Save Execution Record into Operational Memory
+    // Save Execution Record into Operational Memory.
+    // Model routing/reasoning is not execution. Only a real execution adapter action
+    // (or a durable execution queue handoff) may advance the lifecycle past DISPATCHED.
+    const executionToolNames = new Set([
+      "Supabase Query Tool",
+      "Supabase Update & Verification Tool",
+      "Gmail Send Tool",
+      "Gmail Verification Tool",
+      "BrowserSkill Durable Execution",
+      "Kolbo Media Execution",
+      "Connector Health Tool",
+    ]);
+    const executionStarted = actionsTakenList.some((action) =>
+      executionToolNames.has(action.tool) && ["success", "queued", "error", "failed"].includes(action.status)
+    );
     const primaryToolUsed = actionsTakenList.find(a => a.tool.includes("Supabase") || a.tool.includes("Connector") || a.tool.includes("Gemini") || a.tool.includes("Astra"))?.tool || actionsTakenList[0]?.tool || "none";
     const primaryEvidence = actionsTakenList.map(a => `[${a.tool}]: ${a.details}`).join(" | ");
 
@@ -968,12 +982,16 @@ Rules for Response:
       selectedTools: actionsTakenList.map(a => a.tool),
       actionsExecuted: actionsTakenList,
       results: { responseSnippet: responseText.slice(0, 150) },
-      state_history: buildLifecycleHistory({ needsApproval: approvalStatus === "REQUIRES_HUMAN_APPROVAL", executed: true, verification: verificationStatus }),
+      state_history: buildLifecycleHistory({ needsApproval: approvalStatus === "REQUIRES_HUMAN_APPROVAL", executed: executionStarted, verification: verificationStatus }),
       evidence: primaryEvidence,
       verificationStatus,
-      final_state_reason: verificationStatus === "VERIFIED" 
-        ? "Operation executed and verified against real live data." 
-        : (verificationStatus === "NOT_REQUIRED" ? "Planning/Research directive; state mutation verification not required." : "Executed with warnings or errors."),
+      final_state_reason: verificationStatus === "VERIFIED"
+        ? "Operation executed and verified against real live data."
+        : (verificationStatus === "NOT_REQUIRED"
+          ? (executionStarted
+            ? "Execution was started or handed off to a durable executor; terminal completion awaits execution/verification."
+            : "No external execution was started; the directive remains non-terminal.")
+          : "Execution failed or was blocked before successful verification."),
       errors: executionErrors,
       approvalStatus
     };
