@@ -217,6 +217,13 @@ export type CommandClass =
 
 const recentCommandCache = new Map<string, { timestamp: number; record: OperationalExecutionRecord; content: string }>();
 
+function hasRealExecutionStarted(actions: Array<{ tool: string; status: string }>): boolean {
+  return actions.some((action) =>
+    /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health/i.test(action.tool)
+    && ["success", "queued", "error", "failed"].includes(action.status)
+  );
+}
+
 export function classifyCommand(promptStr: string): CommandClass {
   const p = promptStr.toLowerCase().trim();
 
@@ -957,18 +964,7 @@ Rules for Response:
     // Save Execution Record into Operational Memory.
     // Model routing/reasoning is not execution. Only a real execution adapter action
     // (or a durable execution queue handoff) may advance the lifecycle past DISPATCHED.
-    const executionToolNames = new Set([
-      "Supabase Query Tool",
-      "Supabase Update & Verification Tool",
-      "Gmail Send Tool",
-      "Gmail Verification Tool",
-      "BrowserSkill Durable Execution",
-      "Kolbo Media Execution",
-      "Connector Health Tool",
-    ]);
-    const executionStarted = actionsTakenList.some((action) =>
-      executionToolNames.has(action.tool) && ["success", "queued", "error", "failed"].includes(action.status)
-    );
+    const executionStarted = hasRealExecutionStarted(actionsTakenList);
     const primaryToolUsed = actionsTakenList.find(a => a.tool.includes("Supabase") || a.tool.includes("Connector") || a.tool.includes("Gemini") || a.tool.includes("Astra"))?.tool || actionsTakenList[0]?.tool || "none";
     const primaryEvidence = actionsTakenList.map(a => `[${a.tool}]: ${a.details}`).join(" | ");
 
@@ -1191,12 +1187,20 @@ ${recentSummary || "لا توجد عمليات سابقة مسجلة بعيدا�
       selectedTools: actionsTakenList.map(a => a.tool),
       actionsExecuted: actionsTakenList,
       results: { responseSnippet: fallbackReport.slice(0, 150) },
-      state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "EXECUTED", verificationStatus === "VERIFIED" ? "VERIFIED" : verificationStatus === "NOT_REQUIRED" ? "COMPLETED" : "FAILED"],
+      state_history: buildLifecycleHistory({
+        needsApproval: false,
+        executed: hasRealExecutionStarted(actionsTakenList),
+        verification: verificationStatus,
+      }),
       evidence: primaryEvidence,
       verificationStatus,
       final_state_reason: verificationStatus === "VERIFIED"
         ? "Operation executed and verified against real live data/sources."
-        : (verificationStatus === "NOT_REQUIRED" ? "Planning/Research directive; state mutation verification not required." : "Executed with warnings/errors."),
+        : (verificationStatus === "NOT_REQUIRED"
+          ? (hasRealExecutionStarted(actionsTakenList)
+            ? "Execution was started or handed off to a real adapter; terminal completion awaits execution/verification."
+            : "No external execution was started; the directive remains non-terminal.")
+          : "Execution failed or was blocked before successful verification."),
       errors: [],
       approvalStatus: "AUTO_APPROVED"
     };
