@@ -1,8 +1,8 @@
 # JARVIS / ENJY AI COO — Production Evidence Matrix
 
 Generated: 2026-09-27
-Audited commit: `7c9fd868114032239d2b6752adf3d45d9b7e7249`
-Production deployment: `dpl_DWrY1HBTACNrL1eg2NVXFvapBsm7`
+Audited commit: `9b5b09bef1cbbe1a7b21d1bcf402d80323dddfd6`
+Production deployment: `dpl_Ch4YHV9EAyBGrWepeki4N7TBUJF7`
 Production alias: `https://enj-y-ai-coo.vercel.app`
 
 ## Evidence policy
@@ -11,19 +11,19 @@ Static/spec evidence is kept separate from behavioral execution evidence. No cre
 
 | Area | Status | Evidence |
 |---|---|---|
-| Architecture lock | DONE | Architecture Freeze run `36333960049` succeeded for the audited application code before this documentation-only head commit. Locked path remains Auth → Intent Policy Gate → Human Approval Gate → Duplicate Guard → Execution Adapters → Evidence → Audit. |
-| CI | DONE | CI run `36333959931` succeeded for the application parent commit `4d61b6f...`; this `7c9fd868...` head commit is documentation-only and has no workflow run returned by GitHub. |
-| Production deployment | DONE | Vercel deployment `dpl_DWrY1HBTACNrL1eg2NVXFvapBsm7` is READY, target production, commit `7c9fd868...`. |
-| Runtime error clusters | DONE | Vercel runtime error query for last 24h returned no runtime errors. |
-| Runtime status traffic | DONE | Last 24h on audited deployment: 2× HTTP 200 and 7× HTTP 401; no 5xx observed. |
-| Auth boundary | DONE | Fresh production behavior previously observed for audited deployment: unauthenticated `/api/agent/command` returned HTTP 401. Current runtime traffic continues to show 401 responses and no 5xx. |
-| Health endpoint | DONE | Production health was observed returning HTTP 200 on the audited deployment; current runtime traffic has no 5xx. |
-| Lifecycle fail-closed | DONE | Source + regression tests enforce that planning/routing without a real execution adapter cannot become COMPLETED. |
-| Telegram security | DONE | Webhook now fails closed with 503 when webhook secret or chat allowlist is absent; status advertises only `sendMessage` while security controls are missing. |
+| Architecture lock | VERIFIED | Architecture Freeze run `36333960049` succeeded for the audited application code before this documentation-only head commit. Locked path remains Auth → Intent Policy Gate → Human Approval Gate → Duplicate Guard → Execution Adapters → Evidence → Audit. |
+| CI | VERIFIED (parent code) | CI run `36333959931` succeeded for the application parent commit `4d61b6f...`; this `7c9fd868...` head commit is documentation-only and has no workflow run returned by GitHub. |
+| Production deployment | VERIFIED | Vercel deployment `dpl_Ch4YHV9EAyBGrWepeki4N7TBUJF7` is READY, target production, commit `9b5b09be...`. |
+| Runtime error clusters | VERIFIED | Vercel runtime error query for last 24h returned no runtime errors. |
+| Runtime status traffic | VERIFIED | Last 24h on audited deployment: 2× HTTP 200 and 7× HTTP 401; no 5xx observed. |
+| Auth boundary | VERIFIED | Fresh production behavior previously observed for audited deployment: unauthenticated `/api/agent/command` returned HTTP 401. Current runtime traffic continues to show 401 responses and no 5xx. |
+| Health endpoint | VERIFIED | Production health was observed returning HTTP 200 on the audited deployment; current runtime traffic has no 5xx. |
+| Lifecycle fail-closed | VERIFIED | Source + regression tests enforce that planning/routing without a real execution adapter cannot become COMPLETED. |
+| Telegram security | VERIFIED | Webhook now fails closed with 503 when webhook secret or chat allowlist is absent; status advertises only `sendMessage` while security controls are missing. |
 | Telegram live webhook | BLOCKED | Current production status shows webhook secret, command auth, and allowed chat IDs are not configured. No live webhook execution was attempted. |
 | Voice Layer | BLOCKED | Repository contains architecture/spec documentation but no fresh behavioral evidence of an end-to-end production voice transport. Provider credentials/session are not available in the current execution context. |
 | Morning Brief | NOT VERIFIED | No production Morning Brief implementation/evidence was found in the audited repository tree. No synthetic implementation was added. |
-| BrowserSkill static integration | DONE | BrowserSkill adapter, registry entry, safety documentation, and contract tests exist. |
+| BrowserSkill static integration | VERIFIED | BrowserSkill adapter, registry entry, safety documentation, and contract tests exist. |
 | BrowserSkill behavioral execution | NOT VERIFIED | Current environment has no fresh `bsk doctor`/browser session evidence. Historical registry notes are not treated as fresh proof. No real browser action was executed during this audit. |
 | Human Approval + BrowserSkill E2E | NOT VERIFIED | No fresh approved BrowserSkill execution record exists in this audit; therefore no claim of end-to-end execution is made. |
 | Voice benchmark (5 voices) | BLOCKED | No fresh five-provider benchmark can be run without actual voice provider/runtime access. No outbound production action was performed. |
