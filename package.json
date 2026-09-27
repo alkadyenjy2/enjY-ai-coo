@@ -27,7 +27,8 @@
     "test:gmail-tool": "node --import tsx scripts/test-gmail-tool.ts",
     "test:telegram": "node --import tsx --test --test-concurrency=1 tests/telegram.test.ts",
     "browser:worker": "node --import tsx scripts/browser-worker.ts",
-    "test:browser-worker": "node --import tsx scripts/test-browser-worker-e2e.ts"
+    "test:browser-worker": "node --import tsx scripts/test-browser-worker-e2e.ts",
+    "test:agent-lifecycle": "node --import tsx --test --test-concurrency=1 tests/agent-lifecycle.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
