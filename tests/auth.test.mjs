@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
-const repoRoot = new URL('..', import.meta.url).pathname;
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const serverEntry = `${repoRoot}/dist/server.cjs`;
 
 async function waitForHealth(baseUrl, child) {
