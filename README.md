@@ -73,12 +73,22 @@ The UI labels runtime state as `DEMO · IN-MEMORY` versus `LIVE · SUPABASE`; de
 
 AI CORE COO is an operating layer around AI models rather than a simple chatbot.
 
-- Natural-language command center backed by an Express API and Gemini.
-- Durable orchestration with Temporal workflows and retry policies.
+- Natural-language command center backed by an Express API and the configured model provider boundary.
+- Locked execution architecture: **Auth → Intent Policy Gate → Human Approval Gate → Duplicate Guard → Execution Adapters → Evidence → Audit**.
 - Human-approval signaling for side-effecting operations.
 - Evidence/verification gates before completion.
 - Operational history and execution logs for observability.
-- Provider boundaries for external capabilities.
+- External capabilities remain behind application-owned execution contracts.
+
+### Production readiness
+
+The production application is deployed on Vercel and uses fail-closed behavior for missing security configuration.
+
+- `GET /api/health` is the basic production health check.
+- Protected command execution returns `401` without authentication.
+- Telegram webhook handling returns `503` when its required webhook secret and chat allowlist are not configured, rather than accepting an unsecured public webhook.
+- CI and Architecture Freeze checks are required before accepting production changes.
+- A production deployment is not treated as fully closed merely because it builds: external credentials and live integration verification remain explicit dependencies.
 
 ## Reliability Patterns
 
@@ -90,8 +100,31 @@ AI CORE COO is an operating layer around AI models rather than a simple chatbot.
 - Execution logging
 - Human handoff for uncertain or clinical-specific requests
 - Verification before declaring an automation complete
+- Fail-closed authentication and webhook security
 
 ## Architecture
+
+### Production AI Operations execution path
+
+```text
+Auth
+  ↓
+Intent Policy Gate
+  ↓
+Human Approval Gate
+  ↓
+Duplicate Guard
+  ↓
+Execution Adapters
+  ↓
+Evidence
+  ↓
+Audit
+```
+
+The production system does not introduce a second orchestration framework or bypass these gates for convenience.
+
+### Portfolio clinic automation
 
 ```text
 Customer Message
@@ -115,12 +148,11 @@ Reporting
 
 ## Stack
 
-- Make — workflow orchestration
+- Make — portfolio/demo workflow orchestration
 - Supabase — data/CRM persistence
 - Google Gemini — AI qualification
 - React 19 + Vite + TypeScript
 - Express
-- Temporal
 - Browser Use Cloud
 - Tailwind CSS
 - GitHub Actions
@@ -128,9 +160,9 @@ Reporting
 
 ## Engineering Proof
 
-The repository contains a real Temporal workflow state machine with explicit states such as `RECEIVED`, `ROUTED`, `DISPATCHED`, `WAITING_FOR_APPROVAL`, `EXECUTED`, `VERIFIED`, `COMPLETED`, `REJECTED`, and `FAILED`.
+The repository contains explicit lifecycle and verification logic for production command execution. Planning, routing, tool selection, and queueing are not treated as successful external execution; completion requires the execution/verification path defined by the locked architecture.
 
-External providers remain behind application-owned execution contracts. The portfolio focuses on the engineering layer around the model: orchestration, reliability, approvals, verification, auditability, integrations, and operational history.
+External providers remain behind application-owned execution contracts. The portfolio focuses on the engineering layer around the model: reliability, approvals, verification, auditability, integrations, and operational history.
 
 ## Portfolio Positioning
 
