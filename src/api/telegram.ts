@@ -220,7 +220,12 @@ export function createTelegramRouter(): Router {
 
   router.post("/webhook", express.json({ limit: "256kb" }), async (req: Request, res: ExpressResponse) => {
     const expectedSecret = getWebhookSecret();
-    if (expectedSecret && req.header("x-telegram-bot-api-secret-token") !== expectedSecret) {
+    const allowedChatIds = getAllowedChatIds();
+    if (!expectedSecret || !allowedChatIds || allowedChatIds.size === 0) {
+      console.warn("[TELEGRAM_DIAG] WEBHOOK_SECURITY_NOT_CONFIGURED");
+      return res.status(503).json({ ok: false, error: "telegram webhook security is not configured" });
+    }
+    if (req.header("x-telegram-bot-api-secret-token") !== expectedSecret) {
       console.warn("[TELEGRAM_DIAG] INVALID_WEBHOOK_SECRET");
       return res.status(401).json({ ok: false, error: "invalid webhook secret" });
     }
@@ -232,8 +237,7 @@ export function createTelegramRouter(): Router {
 
     console.log("[TELEGRAM_DIAG] WEBHOOK_RECEIVED", { chatId, text, updateId: update.update_id });
 
-    const allowedChatIds = getAllowedChatIds();
-    if (allowedChatIds && !allowedChatIds.has(chatId)) {
+    if (!allowedChatIds.has(chatId)) {
       console.warn("[TELEGRAM_DIAG] CHAT_NOT_ALLOWED", { chatId });
       return res.status(403).json({ ok: false, error: "telegram chat is not authorized" });
     }
