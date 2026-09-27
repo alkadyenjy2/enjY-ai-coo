@@ -11,6 +11,7 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
+import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
@@ -94,12 +95,13 @@ const getGeminiClient = () => {
 app.get("/api/health", (req, res) => {
   const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
   const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+  const hasMetaModel = Boolean(process.env.META_MODEL_API_KEY);
   res.json({
     status: "ok",
     system: "Core AI Operations Agent",
     version: "2.5.0",
     hasApiKey: hasOpenAI || hasGemini,
-    modelProviders: { openai: hasOpenAI, gemini: hasGemini },
+    modelProviders: { openai: hasOpenAI, gemini: hasGemini, meta: hasMetaModel },
     executionHistoryCount: operationalMemoryRecords.length,
     timestamp: new Date().toISOString()
   });
@@ -109,16 +111,18 @@ app.get("/api/health", (req, res) => {
 const readinessHandler = (_req: express.Request, res: express.Response) => {
   const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
   const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+  const hasMetaModel = Boolean(process.env.META_MODEL_API_KEY);
   const hasSupabase = Boolean(
     (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
     (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   );
-  const hasModelProvider = hasOpenAI || hasGemini;
+  const hasModelProvider = hasOpenAI || hasGemini || hasMetaModel;
   const requireLiveDependencies = process.env.NODE_ENV === "production" || process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
   const checks = {
     process: true,
     openai: hasOpenAI,
     gemini: hasGemini,
+    meta: hasMetaModel,
     supabase: hasSupabase,
     execution: true,
   };
@@ -648,7 +652,8 @@ Rules for Response:
     const tools = allowedFuncDecls.length > 0 ? [{ functionDeclarations: allowedFuncDecls }] : undefined;
 
     const isOpenAIModel = selectedModel === "gpt-6-astra";
-    const response = isOpenAIModel
+    const isMetaModel = selectedModel === "muse-spark-1.3";
+    const response = isOpenAIModel || isMetaModel
       ? null
       : await ai!.models.generateContent({
           model: selectedModel,
@@ -666,6 +671,13 @@ Rules for Response:
           input: [prompt],
           tools: toOpenAITools(allowedFuncDecls)
         })
+      : isMetaModel
+      ? await callMetaModelResponses({
+          model: selectedModel,
+          instructions: systemInstruction,
+          input: [prompt],
+          tools: toOpenAITools(allowedFuncDecls)
+        })
       : {
           id: "",
           text: response?.text || "",
@@ -678,7 +690,7 @@ Rules for Response:
 
     const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [
       { tool: 'Command Router', status: 'success', details: `Classified directive as '${commandClass}'` },
-      { tool: isOpenAIModel ? 'OpenAI Astra Engine' : 'Gemini Engine', status: 'success', details: `Executed via ${selectedModel}` },
+      { tool: isOpenAIModel ? 'OpenAI Astra Engine' : isMetaModel ? 'Meta Muse Spark Engine' : 'Gemini Engine', status: 'success', details: `Executed via ${selectedModel}` },
       { tool: 'Memory Sync', status: 'success', details: 'Scanned 6 active memory items' }
     ];
 
@@ -836,6 +848,19 @@ Rules for Response:
           try {
             if (isOpenAIModel) {
               const followUp = await callOpenAIResponses({
+                model: selectedModel,
+                instructions: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`,
+                previousResponseId: modelResponse.id,
+                input: [{
+                  type: "function_call_output",
+                  call_id: call.callId,
+                  output: JSON.stringify({ result: dbData })
+                }],
+                tools: toOpenAITools(allowedFuncDecls)
+              });
+              followUpText = followUp.text;
+            } else if (isMetaModel) {
+              const followUp = await callMetaModelResponses({
                 model: selectedModel,
                 instructions: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`,
                 previousResponseId: modelResponse.id,
@@ -1533,6 +1558,20 @@ app.post("/api/connectors/test", async (req, res) => {
       latencyMs: 0,
       capabilitiesDiscovered: ["responses_api", "function_calling", "structured_outputs"],
       evidence: hasOpenAI ? "OPENAI_API_KEY active." : "Missing OPENAI_API_KEY environment variable."
+    });
+  }
+
+  if (connLower.includes("meta") || connLower.includes("muse")) {
+    const hasMetaModel = Boolean(process.env.META_MODEL_API_KEY);
+    return res.json({
+      status: hasMetaModel ? "REAL_LIVE" : "UNCONFIGURED",
+      connectorId: "meta-model-api",
+      message: hasMetaModel ? "Meta Model API / Muse Spark provider configured." : "Meta Model API key (META_MODEL_API_KEY) missing from environment secrets.",
+      authPresent: hasMetaModel,
+      actualCall: hasMetaModel,
+      latencyMs: 0,
+      capabilitiesDiscovered: ["responses_api", "function_calling", "reasoning_replay", "multimodal"],
+      evidence: hasMetaModel ? "META_MODEL_API_KEY active." : "Missing META_MODEL_API_KEY environment variable."
     });
   }
 
