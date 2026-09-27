@@ -100,7 +100,7 @@ app.get("/api/health", (req, res) => {
     status: "ok",
     system: "Core AI Operations Agent",
     version: "2.5.0",
-    hasApiKey: hasOpenAI || hasGemini,
+    hasApiKey: hasOpenAI || hasGemini || hasMetaModel,
     modelProviders: { openai: hasOpenAI, gemini: hasGemini, meta: hasMetaModel },
     executionHistoryCount: operationalMemoryRecords.length,
     timestamp: new Date().toISOString()
