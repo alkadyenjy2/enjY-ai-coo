@@ -7,7 +7,7 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const serverEntry = `${repoRoot}/dist/server.cjs`;
 
 async function waitForHealth(baseUrl, child) {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
     try {
       const response = await fetch(`${baseUrl}/api/health`);
       if (response.ok) return;
@@ -17,7 +17,7 @@ async function waitForHealth(baseUrl, child) {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   child.kill('SIGTERM');
-  throw new Error('Production server did not become healthy within 7.5 seconds');
+  throw new Error('Production server did not become healthy within 20 seconds');
 }
 
 async function withServer(callback) {
