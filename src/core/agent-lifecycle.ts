@@ -55,7 +55,7 @@ export function buildLifecycleHistory(input: {
     return history;
   }
 
-  if (input.executed === false) {
+  if (input.executed !== true) {
     return appendLifecycleState(history, "BLOCKED");
   }
 
@@ -72,5 +72,7 @@ export function buildLifecycleHistory(input: {
     return appendLifecycleState(history, "FAILED");
   }
 
-  return appendLifecycleState(history, "COMPLETED");
+  // Queueing/planning/tool selection is not execution completion.
+  // A real executor must later transition RUNNING -> COMPLETED or RUNNING -> VERIFYING.
+  return history;
 }
