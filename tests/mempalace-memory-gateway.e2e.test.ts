@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import test from 'node:test';
 import { MemPalaceMemoryGateway, MemPalaceMcpHttpTransport } from '../src/memory/mempalace-mcp.js';
@@ -11,7 +11,15 @@ async function waitForHealth(timeoutMs = 60_000): Promise<void> { const deadline
 function startServer(palacePath: string): ChildProcess { const child = spawn('mempalace-mcp', ['--transport', 'http', '--host', '127.0.0.1', '--port', '8765', '--palace', palacePath], { env: { ...process.env, MEMPALACE_MCP_IDLE_HOURS: '0' }, stdio: ['ignore', 'pipe', 'pipe'] }); let stderr = ''; child.stderr?.on('data', (chunk) => { stderr += String(chunk); }); child.on('exit', (code, signal) => { if (code !== 0 && signal !== 'SIGTERM') process.stderr.write(`MemPalace exited unexpectedly: code=${code} signal=${signal}\\n${stderr}`); }); return child; }
 test('MemPalace adapter real MCP smoke test', { timeout: 120_000 }, async (t) => {
   const palacePath = await mkdtemp(join(tmpdir(), 'enjY-mempalace-')); const server = startServer(palacePath);
-  t.after(async () => { server.kill('SIGTERM'); await Promise.race([new Promise<void>((resolve) => server.once('exit', () => resolve())), sleep(5_000).then(() => undefined)]); await rm(palacePath, { recursive: true, force: true }); });
+  t.after(async () => {
+    if (process.platform === 'win32' && server.pid) {
+      await new Promise<void>((resolve) => execFile('taskkill', ['/PID', String(server.pid), '/T', '/F'], () => resolve()));
+    } else {
+      server.kill('SIGTERM');
+    }
+    await Promise.race([new Promise<void>((resolve) => server.once('exit', () => resolve())), sleep(5_000).then(() => undefined)]);
+    await rm(palacePath, { recursive: true, force: true });
+  });
   await waitForHealth();
   const gateway = new MemPalaceMemoryGateway(new MemPalaceMcpHttpTransport(endpoint)); const tenantA = 'e2e-tenant-a'; const tenantB = 'e2e-tenant-b'; const marker = `enjY-real-mempalace-${Date.now()}`;
   const receipt = await gateway.write({ tenantId: tenantA, agentId: 'e2e-agent', memoryType: 'decision', content: `Durable memory smoke marker: ${marker}`, source: 'ci-real-mcp-smoke' });
