@@ -271,13 +271,21 @@ export function createTelegramRouter(): Router {
     const webhookSecretConfigured = Boolean(getWebhookSecret());
     const commandAuthConfigured = Boolean((getServerSecretKey() || getTelegramRefreshToken()) && getTelegramOrganizationId());
     const allowedChatIdsConfigured = Boolean(getAllowedChatIds());
+    const webhookSecurityConfigured = webhookSecretConfigured && allowedChatIdsConfigured;
     res.json({
       ok: true,
       configured,
       webhookSecretConfigured,
       commandAuthConfigured,
       allowedChatIdsConfigured,
-      capabilities: configured ? ["webhook", "sendMessage", ...(commandAuthConfigured ? ["authenticated_command_execution"] : [])] : [],
+      webhookSecurityConfigured,
+      capabilities: configured
+        ? [
+            ...(webhookSecurityConfigured ? ["webhook"] : []),
+            "sendMessage",
+            ...(commandAuthConfigured ? ["authenticated_command_execution"] : []),
+          ]
+        : [],
     });
   });
 
