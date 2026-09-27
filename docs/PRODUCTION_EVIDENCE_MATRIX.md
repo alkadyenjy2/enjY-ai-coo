@@ -1,8 +1,8 @@
 # JARVIS / ENJY AI COO — Production Evidence Matrix
 
 Generated: 2026-09-27
-Audited commit: `4d61b6f0938c13d0df220d8ccf3a122778eb4759`
-Production deployment: `dpl_J5isuv5wLdgD9zG7TAQbk42f97ub`
+Audited commit: `7c9fd868114032239d2b6752adf3d45d9b7e7249`
+Production deployment: `dpl_DWrY1HBTACNrL1eg2NVXFvapBsm7`
 Production alias: `https://enj-y-ai-coo.vercel.app`
 
 ## Evidence policy
@@ -11,9 +11,9 @@ Static/spec evidence is kept separate from behavioral execution evidence. No cre
 
 | Area | Status | Evidence |
 |---|---|---|
-| Architecture lock | DONE | Architecture Freeze run `36333960049` succeeded for audited commit. Locked path remains Auth → Intent Policy Gate → Human Approval Gate → Duplicate Guard → Execution Adapters → Evidence → Audit. |
-| CI | DONE | CI run `36333959931` succeeded for audited commit. |
-| Production deployment | DONE | Vercel deployment `dpl_J5isuv5wLdgD9zG7TAQbk42f97ub` is READY, target production, commit `4d61b6f...`. |
+| Architecture lock | DONE | Architecture Freeze run `36333960049` succeeded for the audited application code before this documentation-only head commit. Locked path remains Auth → Intent Policy Gate → Human Approval Gate → Duplicate Guard → Execution Adapters → Evidence → Audit. |
+| CI | DONE | CI run `36333959931` succeeded for the application parent commit `4d61b6f...`; this `7c9fd868...` head commit is documentation-only and has no workflow run returned by GitHub. |
+| Production deployment | DONE | Vercel deployment `dpl_DWrY1HBTACNrL1eg2NVXFvapBsm7` is READY, target production, commit `7c9fd868...`. |
 | Runtime error clusters | DONE | Vercel runtime error query for last 24h returned no runtime errors. |
 | Runtime status traffic | DONE | Last 24h on audited deployment: 2× HTTP 200 and 7× HTTP 401; no 5xx observed. |
 | Auth boundary | DONE | Fresh production behavior previously observed for audited deployment: unauthenticated `/api/agent/command` returned HTTP 401. Current runtime traffic continues to show 401 responses and no 5xx. |
