@@ -22,10 +22,12 @@ test("Telegram status reports unconfigured when no bot token is present", async 
   const previousSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
   const previousRefresh = process.env.JARVIS_TELEGRAM_REFRESH_TOKEN;
   const previousOrg = process.env.JARVIS_TELEGRAM_ORGANIZATION_ID;
+  const previousAllowlist = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
   delete process.env.TELEGRAM_BOT_TOKEN;
   delete process.env.TELEGRAM_WEBHOOK_SECRET;
   delete process.env.JARVIS_TELEGRAM_REFRESH_TOKEN;
   delete process.env.JARVIS_TELEGRAM_ORGANIZATION_ID;
+  delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
 
   try {
     await withServer(async (baseUrl) => {
@@ -48,6 +50,8 @@ test("Telegram status reports unconfigured when no bot token is present", async 
     else process.env.JARVIS_TELEGRAM_REFRESH_TOKEN = previousRefresh;
     if (previousOrg === undefined) delete process.env.JARVIS_TELEGRAM_ORGANIZATION_ID;
     else process.env.JARVIS_TELEGRAM_ORGANIZATION_ID = previousOrg;
+    if (previousAllowlist === undefined) delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+    else process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = previousAllowlist;
   }
 });
 
@@ -57,7 +61,7 @@ test("Telegram webhook delegates a text update to the JARVIS handler", async () 
   const previousAllowlist = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
   process.env.TELEGRAM_BOT_TOKEN = "test-token";
   process.env.TELEGRAM_WEBHOOK_SECRET = "test-secret";
-  delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+  process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = "12345";
   const received: Array<{ chatId: number; text: string }> = [];
 
   try {
@@ -173,11 +177,39 @@ test("Telegram webhook accepts an allowlisted chat", async () => {
   }
 });
 
+test("Telegram webhook fails closed when security is not configured", async () => {
+  const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+  const previousSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const previousAllowlist = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+  process.env.TELEGRAM_BOT_TOKEN = "test-token";
+  delete process.env.TELEGRAM_WEBHOOK_SECRET;
+  delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/telegram/webhook`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: { chat: { id: 1 }, text: "hello" } }),
+      });
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { ok: false, error: "telegram webhook security is not configured" });
+    });
+  } finally {
+    if (previousToken === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
+    else process.env.TELEGRAM_BOT_TOKEN = previousToken;
+    if (previousSecret === undefined) delete process.env.TELEGRAM_WEBHOOK_SECRET;
+    else process.env.TELEGRAM_WEBHOOK_SECRET = previousSecret;
+    if (previousAllowlist === undefined) delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+    else process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = previousAllowlist;
+  }
+});
+
 test("Telegram webhook rejects an invalid configured secret", async () => {
   const previousToken = process.env.TELEGRAM_BOT_TOKEN;
   const previousSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const previousAllowlist = process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
   process.env.TELEGRAM_BOT_TOKEN = "test-token";
   process.env.TELEGRAM_WEBHOOK_SECRET = "expected-secret";
+  process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = "1";
 
   try {
     await withServer(async (baseUrl) => {
@@ -194,5 +226,7 @@ test("Telegram webhook rejects an invalid configured secret", async () => {
     else process.env.TELEGRAM_BOT_TOKEN = previousToken;
     if (previousSecret === undefined) delete process.env.TELEGRAM_WEBHOOK_SECRET;
     else process.env.TELEGRAM_WEBHOOK_SECRET = previousSecret;
+    if (previousAllowlist === undefined) delete process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS;
+    else process.env.JARVIS_TELEGRAM_ALLOWED_CHAT_IDS = previousAllowlist;
   }
 });
