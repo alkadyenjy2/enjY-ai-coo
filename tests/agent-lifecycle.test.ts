@@ -38,3 +38,12 @@ test("failed verification terminates as FAILED", () => {
     "FAILED",
   ]);
 });
+
+test("non-executed lifecycle fails closed", () => {
+  assert.deepEqual(buildLifecycleHistory({ executed: false, verification: "NOT_REQUIRED" }), [
+    "RECEIVED","ROUTED","DISPATCHED","BLOCKED",
+  ]);
+  assert.deepEqual(buildLifecycleHistory({ executed: true, verification: "NOT_REQUIRED" }), [
+    "RECEIVED","ROUTED","DISPATCHED","RUNNING",
+  ]);
+});
