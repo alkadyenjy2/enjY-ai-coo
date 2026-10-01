@@ -15,7 +15,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
-import { apiFetch, getSession, supabase } from './auth/client';
+import { apiFetch } from './auth/client';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
@@ -40,15 +40,6 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     const loadAuthContext = async () => {
-      const session = await getSession();
-      if (!session) {
-        if (!cancelled) {
-          setAuthenticated(false);
-          setOrganizationId(null);
-          setAuthLoading(false);
-        }
-        return;
-      }
       const response = await apiFetch('/api/auth/me');
       const data = await response.json().catch(() => ({}));
       const firstOrganization = Array.isArray(data?.organizations) ? data.organizations[0] : null;
@@ -65,10 +56,8 @@ export default function App() {
         setAuthLoading(false);
       }
     });
-    const subscription = supabase?.auth.onAuthStateChange(() => { void loadAuthContext(); }).data.subscription;
     return () => {
       cancelled = true;
-      subscription?.unsubscribe();
     };
   }, []);
 
