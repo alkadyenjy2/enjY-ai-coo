@@ -66,3 +66,10 @@ test('public health stays available while operational routes require authenticat
     assert.equal(command.status, 401);
   });
 });
+
+test('personal mode fails closed when the server secret is unavailable', async () => {
+  await withServer(async (baseUrl) => {
+    const response = await fetch(baseUrl + '/api/auth/me');
+    assert.equal(response.status, 401);
+  });
+});
