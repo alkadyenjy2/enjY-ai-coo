@@ -44,6 +44,32 @@ function getServerSecretKey(): string | null {
   return secret || null;
 }
 
+async function authenticatePersonalModeRequest(): Promise<AuthContext | null> {
+  if (process.env.JARVIS_PERSONAL_MODE === "false") return null;
+
+  const config = getRuntimeConfig();
+  const serverSecret = getServerSecretKey();
+  if (!config || !serverSecret) return null;
+
+  const admin = createClient(config.url, serverSecret, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  });
+
+  const { data: membership, error: membershipError } = await admin
+    .from("organization_members")
+    .select("organization_id, user_id, role")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (membershipError || !membership?.user_id || !membership?.organization_id) return null;
+
+  const { data: userData, error: userError } = await admin.auth.admin.getUserById(String(membership.user_id));
+  if (userError || !userData.user) return null;
+
+  return { user: userData.user, accessToken: serverSecret, supabase: admin };
+}
+
 async function authenticateTrustedTelegramRequest(req: Request): Promise<AuthContext | null> {
   if (req.header("x-jarvis-internal") !== "telegram") return null;
   const serverSecret = getServerSecretKey();
@@ -75,6 +101,9 @@ async function authenticateTrustedTelegramRequest(req: Request): Promise<AuthCon
 }
 
 export async function authenticateRequest(req: Request): Promise<AuthContext | null> {
+  const personalModeAuth = await authenticatePersonalModeRequest();
+  if (personalModeAuth) return personalModeAuth;
+
   const trustedTelegramAuth = await authenticateTrustedTelegramRequest(req);
   if (trustedTelegramAuth) return trustedTelegramAuth;
 
