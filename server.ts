@@ -317,13 +317,39 @@ export function getSupabaseQueryActionStatus(
   httpStatus: number,
   payload: unknown,
 ): "success" | "failed" {
-  return httpStatus >= 200 && httpStatus < 300 ? "success" : "failed";
+  if (httpStatus < 200 || httpStatus >= 300) return "failed";
+
+  // PostgREST normally returns errors with non-2xx status codes, but an error-shaped
+  // object must never be treated as successful evidence merely because HTTP is 2xx.
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const candidate = payload as Record<string, unknown>;
+    if (typeof candidate.code === "string" && typeof candidate.message === "string" && candidate.code.trim() && candidate.message.trim()) {
+      return "failed";
+    }
+  }
+
+  return "success";
 }
 
 export function getDatabaseVerificationStatus(
   httpStatus: number,
+  payload: unknown = null,
 ): "VERIFIED" | "FAILED" {
-  return getSupabaseQueryActionStatus(httpStatus, null) === "success" ? "VERIFIED" : "FAILED";
+  return getSupabaseQueryActionStatus(httpStatus, payload) === "success" ? "VERIFIED" : "FAILED";
+}
+
+export function buildSupabaseReadUrl(
+  supabaseUrl: string,
+  table: string,
+  select: string,
+  authorizedOrganizationId?: string,
+): string {
+  const base = supabaseUrl.replace(/\/+$/, "") + "/rest/v1/" + table + "?select=" + select;
+  if (table === "leads") {
+    if (!authorizedOrganizationId) throw new Error("Authorized organization context is required for leads reads.");
+    return base + "&organization_id=eq." + encodeURIComponent(authorizedOrganizationId);
+  }
+  return base;
 }
 
 // Durable worker step for provider-backed media jobs. One invocation performs one bounded provider step.
@@ -389,7 +415,7 @@ app.post("/api/agent/command", async (req, res) => {
   const projectNameStr = typeof activeProject?.name === "string" ? activeProject.name : "Core Operations HQ";
   const commandClass = classifyCommand(userPromptStr);
   const requestAuth = getAuthContext(res);
-  const resolvedOrganizationId = String(userProfile?.organizationId || req.body?.organization_id || "").trim();
+  const resolvedOrganizationId = getOrganizationAccess(res)?.organizationId || "";
   const resolvedUserId = String(userProfile?.userId || requestAuth?.user.id || "").trim();
 
   const cacheKey = userPromptStr.toLowerCase().trim();
@@ -858,7 +884,7 @@ Rules for Response:
       } else if (call.name === "query_supabase" && supabaseUrl && supabaseReadApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
-        const targetUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/${table}?select=${select}`;
+        const targetUrl = buildSupabaseReadUrl(supabaseUrl, table, select, resolvedOrganizationId);
 
         try {
           const dbRes = await fetch(targetUrl, {
@@ -876,7 +902,7 @@ Rules for Response:
               status: 'success',
               details: `Read from table '${table}' via PostgREST (${targetUrl}) HTTP ${dbRes.status}: ${JSON.stringify(dbData)}`
             });
-            verificationStatus = "VERIFIED";
+            verificationStatus = getDatabaseVerificationStatus(dbRes.status, dbData);
           } else {
             const dbError = typeof dbData === "object" && dbData !== null
               ? JSON.stringify(dbData)
@@ -1168,7 +1194,7 @@ Rules for Response:
       let dbData: any = [];
       if (supabaseUrl && supabaseApiKey) {
         try {
-          const targetUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/${targetTable}?select=*`;
+          const targetUrl = buildSupabaseReadUrl(supabaseUrl, targetTable, "*", resolvedOrganizationId);
           const dbRes = await fetch(targetUrl, {
             headers: {
               "apikey": supabaseApiKey,
@@ -1187,7 +1213,7 @@ Rules for Response:
               status: 'success',
               details: `Read from table '${targetTable}' via PostgREST (${targetUrl}) HTTP ${dbRes.status}: ${dbError}`
             });
-            verificationStatus = getDatabaseVerificationStatus(dbRes.status);
+            verificationStatus = getDatabaseVerificationStatus(dbRes.status, dbData);
           } else {
             const failureMessage = `Supabase read failed for table '${targetTable}' with HTTP ${dbRes.status}: ${dbError}`;
             executionErrors.push(failureMessage);
@@ -1220,7 +1246,7 @@ Rules for Response:
       let dbData: any = [];
       if (supabaseUrl && supabaseApiKey) {
         try {
-          const targetUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/leads?select=*`;
+          const targetUrl = buildSupabaseReadUrl(supabaseUrl, "leads", "*", resolvedOrganizationId);
           const dbRes = await fetch(targetUrl, {
             headers: {
               "apikey": supabaseApiKey,
@@ -1228,7 +1254,7 @@ Rules for Response:
             }
           });
           dbData = await dbRes.json();
-          const verification = getDatabaseVerificationStatus(dbRes.status);
+          const verification = getDatabaseVerificationStatus(dbRes.status, dbData);
           actionsTakenList.push({
             tool: 'Supabase Read Verification Gateway',
             status: verification === "VERIFIED" ? 'success' : 'failed',

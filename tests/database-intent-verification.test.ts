@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 process.env.VERCEL = "1";
 
-const { classifyCommand, getReportingVerificationStatus, getSupabaseQueryActionStatus, getSupabaseReadApiKey, getDatabaseVerificationStatus } = await import("../server.ts");
+const { classifyCommand, getReportingVerificationStatus, getSupabaseQueryActionStatus, getSupabaseReadApiKey, getDatabaseVerificationStatus, buildSupabaseReadUrl } = await import("../server.ts");
 
 test("routes explicit Supabase leads reads to DATABASE", () => {
   assert.equal(
@@ -38,13 +38,32 @@ test("REPORTING may be VERIFIED when a real connector action produced evidence",
   );
 });
 
+test("tenant-scoped leads reads include the server-authorized organization filter", () => {
+  assert.equal(
+    buildSupabaseReadUrl(
+      "https://example.supabase.co",
+      "leads",
+      "*",
+      "5c3d0b58-f2dd-4677-be24-2bfc06da19cb",
+    ),
+    "https://example.supabase.co/rest/v1/leads?select=*&organization_id=eq.5c3d0b58-f2dd-4677-be24-2bfc06da19cb",
+  );
+});
+
+test("HTTP 200 Supabase error payload is FAILED", () => {
+  assert.equal(
+    getDatabaseVerificationStatus(200, { code: "42501", message: "permission denied for table leads" }),
+    "FAILED",
+  );
+  assert.equal(getDatabaseVerificationStatus(200, []), "VERIFIED");
+});
 
 test("successful DATABASE read is VERIFIED", () => {
-  assert.equal(getDatabaseVerificationStatus(200), "VERIFIED");
-  assert.equal(getDatabaseVerificationStatus(201), "VERIFIED");
+  assert.equal(getDatabaseVerificationStatus(200, []), "VERIFIED");
+  assert.equal(getDatabaseVerificationStatus(201, [{ id: "lead-1" }]), "VERIFIED");
 });
 
 test("failed DATABASE read is FAILED", () => {
-  assert.equal(getDatabaseVerificationStatus(403), "FAILED");
-  assert.equal(getDatabaseVerificationStatus(500), "FAILED");
+  assert.equal(getDatabaseVerificationStatus(403, { code: "42501", message: "permission denied" }), "FAILED");
+  assert.equal(getDatabaseVerificationStatus(500, { message: "server error" }), "FAILED");
 });
