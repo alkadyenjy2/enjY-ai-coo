@@ -320,6 +320,12 @@ export function getSupabaseQueryActionStatus(
   return httpStatus >= 200 && httpStatus < 300 ? "success" : "failed";
 }
 
+export function getDatabaseVerificationStatus(
+  httpStatus: number,
+): "VERIFIED" | "FAILED" {
+  return getSupabaseQueryActionStatus(httpStatus, null) === "success" ? "VERIFIED" : "FAILED";
+}
+
 // Durable worker step for provider-backed media jobs. One invocation performs one bounded provider step.
 app.post("/api/executions/worker", async (req, res) => {
   const executionId = String(req.body?.execution_id || "").trim();
@@ -1181,6 +1187,7 @@ Rules for Response:
               status: 'success',
               details: `Read from table '${targetTable}' via PostgREST (${targetUrl}) HTTP ${dbRes.status}: ${dbError}`
             });
+            verificationStatus = getDatabaseVerificationStatus(dbRes.status);
           } else {
             const failureMessage = `Supabase read failed for table '${targetTable}' with HTTP ${dbRes.status}: ${dbError}`;
             executionErrors.push(failureMessage);
@@ -1189,9 +1196,16 @@ Rules for Response:
               status: 'failed',
               details: failureMessage
             });
-            verificationStatus = "FAILED";
+            verificationStatus = getDatabaseVerificationStatus(dbRes.status);
           }
         } catch (dbErr: any) {
+          const failureMessage = `Supabase read failed for table '${targetTable}': ${dbErr?.message || String(dbErr)}`;
+          executionErrors.push(failureMessage);
+          actionsTakenList.push({
+            tool: 'Supabase Tool Gateway',
+            status: 'error',
+            details: failureMessage
+          });
           verificationStatus = "FAILED";
         }
       }
@@ -1214,12 +1228,24 @@ Rules for Response:
             }
           });
           dbData = await dbRes.json();
+          const verification = getDatabaseVerificationStatus(dbRes.status);
           actionsTakenList.push({
             tool: 'Supabase Read Verification Gateway',
-            status: 'success',
-            details: `Verified state for table 'leads': ${JSON.stringify(dbData)}`
+            status: verification === "VERIFIED" ? 'success' : 'failed',
+            details: `Verified state for table 'leads': HTTP ${dbRes.status}; ${JSON.stringify(dbData)}`
           });
+          verificationStatus = verification;
+          if (verification === "FAILED") {
+            executionErrors.push(`Supabase read verification failed for table 'leads' with HTTP ${dbRes.status}: ${JSON.stringify(dbData)}`);
+          }
         } catch (dbErr: any) {
+          const failureMessage = `Supabase read verification failed for table 'leads': ${dbErr?.message || String(dbErr)}`;
+          executionErrors.push(failureMessage);
+          actionsTakenList.push({
+            tool: 'Supabase Read Verification Gateway',
+            status: 'error',
+            details: failureMessage
+          });
           verificationStatus = "FAILED";
         }
       }
@@ -1296,7 +1322,7 @@ ${recentSummary || "لا توجد عمليات سابقة مسجلة بعيدا�
             ? "Execution was started or handed off to a real adapter; terminal completion awaits execution/verification."
             : "No external execution was started; the directive remains non-terminal.")
           : "Execution failed or was blocked before successful verification."),
-      errors: [],
+      errors: executionErrors,
       approvalStatus: "AUTO_APPROVED"
     };
 
