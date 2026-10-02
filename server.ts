@@ -246,12 +246,13 @@ export function classifyCommand(promptStr: string): CommandClass {
     return "SYSTEM_HEALTH";
   }
 
-  if (/تقرير|report|summary|ملخص|stats|احصائيات/i.test(p)) {
-    return "REPORTING";
-  }
-
+  // Explicit data-read language takes precedence over generic reporting words.
   if (/اقرأ|عدد|جدول|قاعدة بيانات|database|supabase|leads|posts|select|query|استعلام/i.test(p)) {
     return "DATABASE";
+  }
+
+  if (/تقرير|report|summary|ملخص|stats|احصائيات/i.test(p)) {
+    return "REPORTING";
   }
 
   if (isExecutionIntent) {
@@ -292,6 +293,12 @@ const INTENT_TOOL_POLICY: Record<string, string[]> = {
 function isToolAllowed(intent: string, toolName: string): boolean {
   const allowed = INTENT_TOOL_POLICY[intent] || [];
   return allowed.includes(toolName);
+}
+
+export function getReportingVerificationStatus(
+  actions: Array<{ tool: string; status: string }>
+): "VERIFIED" | "NOT_REQUIRED" {
+  return hasRealExecutionStarted(actions) ? "VERIFIED" : "NOT_REQUIRED";
 }
 
 // Durable worker step for provider-backed media jobs. One invocation performs one bounded provider step.
@@ -1187,7 +1194,7 @@ Rules for Response:
 * **Fallback cause:** \`${pipelineError}\`
 * **Command Router Status:** \`OPERATIONAL (Zero Unsafe Directives)\``;
     } else if (commandClass === "REPORTING") {
-      verificationStatus = "VERIFIED";
+      verificationStatus = getReportingVerificationStatus(actionsTakenList);
       const recordCount = operationalMemoryRecords.length;
       const recentSummary = operationalMemoryRecords.slice(0, 5).map((r, i) => `${i + 1}. [${r.intent}] "${r.command}" → State: ${r.state_history.join("→")} (${r.verificationStatus})`).join("\n");
       fallbackReport = `### 📜 تقرير ذاكرة التنفيذ والعمليات (Execution History Report)
