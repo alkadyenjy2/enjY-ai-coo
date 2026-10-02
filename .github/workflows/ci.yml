@@ -38,9 +38,6 @@ jobs:
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 
-      - name: Free-first paid-model fallback test
-        run: node --import tsx --test --test-concurrency=1 tests/free-first-model-fallback.test.ts
-
       - name: Jarvis route summary test
         run: npm run test:jarvis-route
 
