@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 process.env.VERCEL = "1";
 
-const { classifyCommand, getReportingVerificationStatus, getSupabaseQueryActionStatus, getSupabaseReadApiKey, getDatabaseVerificationStatus } = await import("../server.ts");
+const { classifyCommand, getReportingVerificationStatus, getSupabaseQueryActionStatus, getSupabaseReadApiKey, getDatabaseVerificationStatus, buildSupabaseReadUrl } = await import("../server.ts");
 
 test("routes explicit Supabase leads reads to DATABASE", () => {
   assert.equal(
@@ -39,7 +39,7 @@ test("REPORTING may be VERIFIED when a real connector action produced evidence",
 });
 
 
-test("successful DATABASE read is VERIFIED", () => {
+test("tenant-scoped leads reads include the server-authorized organization filter", () => {\n  assert.equal(\n    buildSupabaseReadUrl("https://example.supabase.co", "leads", "*", "5c3d0b58-f2dd-4677-be24-2bfc06da19cb"),\n    "https://example.supabase.co/rest/v1/leads?select=*&organization_id=eq.5c3d0b58-f2dd-4677-be24-2bfc06da19cb",\n  );\n});\n\ntest("successful DATABASE read is VERIFIED", () => {
   assert.equal(getDatabaseVerificationStatus(200), "VERIFIED");
   assert.equal(getDatabaseVerificationStatus(201), "VERIFIED");
 });
