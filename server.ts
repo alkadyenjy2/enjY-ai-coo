@@ -1085,6 +1085,7 @@ Rules for Response:
 
     let fallbackReport = "";
     let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "FAILED";
+    const executionErrors: string[] = [];
 
     if (commandClass === "PLANNING") {
       verificationStatus = "NOT_REQUIRED";
