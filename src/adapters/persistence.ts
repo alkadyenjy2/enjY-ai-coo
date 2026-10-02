@@ -50,8 +50,18 @@ function getSupabaseConfig(): SupabaseConfig | null {
 }
 
 function getAuthenticatedPersistenceHeaders(config: SupabaseConfig, accessToken: string): Record<string, string> {
+  // Personal Mode authenticates server-side with the Supabase secret/service-role key.
+  // Mirror the Supabase client behavior for that path instead of sending a publishable
+  // apikey alongside a secret bearer token (which the REST gateway rejects with 401).
+  const serverSecret = (
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    ''
+  ).trim();
+  const persistenceKey = serverSecret && accessToken === serverSecret ? serverSecret : config.key;
+
   return {
-    apikey: config.key,
+    apikey: persistenceKey,
     Authorization: `Bearer ${accessToken}`,
     'Content-Type': 'application/json',
   };
