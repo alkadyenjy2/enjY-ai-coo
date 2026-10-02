@@ -10,10 +10,10 @@ FUNCTIONAL AGENTS / ROLES
 Intent classifier; policy/risk gate; human approval; execution router; duplicate/idempotency guard; verification/evidence; memory/context; audit/operational record; monitoring/exception reporting. JARVIS is the single shared orchestrator for sensitive operations. Do not add another orchestrator.
 
 ARCHITECTURE — FROZEN
-Preserve the current JARVIS production architecture, Supabase durable execution/state, existing auth, Evidence Gate, Temporal orchestration where already canonical, Browser Use/BrowserSkill adapter, Gmail/Telegram/MCP adapters and Vercel deployment. Do not introduce Inngest, n8n, Make as JARVIS orchestrator, or a replacement execution framework. Reuse existing adapters.
+Preserve the current JARVIS production architecture, Supabase durable execution/state, existing auth, Evidence Gate, Browser Use/BrowserSkill adapter, Gmail/Telegram/MCP adapters and Vercel deployment. Do not introduce Temporal, Inngest, n8n, Make as JARVIS orchestrator, or a replacement execution framework. Reuse existing adapters.
 
 CURRENT VERIFIED BASELINE
-Production health path is live and protected command boundary is fail-closed. The local suite has 92 tests with 90 pass, 0 fail and 2 intentionally skipped for missing real positive-auth inputs. Existing production deployment must be treated as the source, not an old Lovable build.
+Production health path is live and protected command boundary is fail-closed. The repository contains multiple focused test suites and current main has continued security/persistence hardening. Do not copy historical test counts into the report; run the current suites and report fresh counts. Existing production deployment must be treated as the source, not an old Lovable build.
 
 MEDIA
 There is a provider-neutral media execution contract, but a real callable production media provider/credential is still an external gate. Do not fake media success. If no provider is configured, status must be NOT CONFIGURED/BLOCKED and execution must fail closed.
@@ -35,3 +35,17 @@ Paid managed automation/operations pilot is the commercial validation gate. No r
 
 FINAL REPORT
 Exact commit/deployment, test counts, auth E2E, command E2E, persistence/evidence, media provider state, Supabase state, integrations, blockers, changed files, and UNVERIFIED items.
+
+
+BUILDER LOCK — DO NOT WASTE CREDITS
+1. This is a canonical existing repository handoff, NOT a blank-app request.
+2. Import/inspect the named canonical repository first. Do not start from a template and do not create a duplicate application.
+3. Reuse the existing code, database, auth, integrations, agents, workflows and deployment boundaries described above. Do not migrate frameworks or databases unless this document explicitly says so.
+4. Work only on concrete remaining gaps. If a requirement is already implemented and verified, leave it unchanged.
+5. Never create fake users, leads, scholarships, webhooks, provider receipts, uploads, views, revenue, analytics or “demo” production evidence.
+6. Never spend builder credits on cosmetic rewrites, speculative refactors, or proof that can be obtained from existing repository/runtime evidence.
+7. Keep all missing external credentials/configuration explicitly NOT CONFIGURED/BLOCKED. Do not replace them with mocks.
+8. Required finish loop: AUDIT → REUSE → CONNECT → IMPLEMENT only where needed → VERIFY → FIX → VERIFY → FINAL AUDIT.
+9. Before finishing, produce: exact commit SHA, changed files, tests/build results, deployment/runtime result, configured vs unconfigured integrations, and every remaining external gate.
+10. If the code is already complete for the requested scope, STOP changing code and report code-side closure instead of consuming more credits.
+11. Preferred execution surface for these existing repos: Replit Agent with GitHub import/sync. Use Lovable only for a deliberately separate visual prototype/reference; never let it replace the canonical backend/runtime.
