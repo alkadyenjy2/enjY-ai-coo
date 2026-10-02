@@ -59,3 +59,14 @@ export function selectRoutes(
       fallbackToolIds: entry.fallbackToolIds,
     }));
 }
+
+
+const PAID_MODEL_IDS = new Set(['gpt-6-astra', 'muse-spark-1.3']);
+const FREE_DEFAULT_MODEL = 'gemini-3.6-flash';
+
+export function resolveJarvisModel(requestedModel: string | undefined, allowPaidModel = process.env.JARVIS_ALLOW_PAID_MODEL === 'true'): string {
+  const requested = requestedModel?.trim();
+  if (!requested) return FREE_DEFAULT_MODEL;
+  if (PAID_MODEL_IDS.has(requested) && !allowPaidModel) return FREE_DEFAULT_MODEL;
+  return requested;
+}

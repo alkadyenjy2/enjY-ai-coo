@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectRoutes } from '../src/ai-gateway/free-first-router';
+import { resolveJarvisModel, selectRoutes } from '../src/ai-gateway/free-first-router';
 import { FREE_AI_REGISTRY } from '../src/data/free-ai-registry';
 
 test('selects verified free providers before free-tier providers', () => {
@@ -59,4 +59,15 @@ test('does not select paid-only routes unless explicitly allowed', () => {
   });
 
   assert.equal(routes.length, 0);
+});
+
+
+test('defaults to the free Gemini model when no model is requested', () => {
+  assert.equal(resolveJarvisModel(undefined, false), 'gemini-3.6-flash');
+});
+
+test('reroutes paid models to Gemini unless paid execution is explicitly enabled', () => {
+  assert.equal(resolveJarvisModel('gpt-6-astra', false), 'gemini-3.6-flash');
+  assert.equal(resolveJarvisModel('muse-spark-1.3', false), 'gemini-3.6-flash');
+  assert.equal(resolveJarvisModel('gpt-6-astra', true), 'gpt-6-astra');
 });
