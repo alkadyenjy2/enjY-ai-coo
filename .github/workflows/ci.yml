@@ -50,6 +50,9 @@ jobs:
       - name: Persistence tenant context test
         run: npm run test:persistence-context
 
+      - name: OpenAI Responses adapter test
+        run: node --import tsx --test --test-concurrency=1 tests/openai.test.ts
+
       - name: Telegram transport test
         run: npm run test:telegram
 
