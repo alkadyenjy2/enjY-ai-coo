@@ -874,7 +874,8 @@ Rules for Response:
           }
 
           let followUpText = "";
-          try {
+          if (queryStatus === "success") {
+            try {
             if (isOpenAIModel) {
               const followUp = await callOpenAIResponses({
                 model: selectedModel,
@@ -926,8 +927,9 @@ Rules for Response:
                 followUpText = followUp.text || "";
               }
             }
-          } catch (followUpErr: any) {
-            console.log("FollowUp call note:", followUpErr?.message || followUpErr);
+            } catch (followUpErr: any) {
+              console.log("FollowUp call note:", followUpErr?.message || followUpErr);
+            }
           }
 
           if (followUpText) {
