@@ -27,7 +27,6 @@ test("REPORTING may be VERIFIED when a real connector action produced evidence",
       {
         tool: "Connector Health Tool",
         status: "success",
-        details: "Probed connector 'supabase': REAL_LIVE",
       },
     ]),
     "VERIFIED",
