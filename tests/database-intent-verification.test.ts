@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 process.env.VERCEL = "1";
 
-const { classifyCommand, getReportingVerificationStatus, getSupabaseQueryActionStatus } = await import("../server.ts");
+const { classifyCommand, getReportingVerificationStatus, getSupabaseQueryActionStatus, getSupabaseReadApiKey } = await import("../server.ts");
 
 test("routes explicit Supabase leads reads to DATABASE", () => {
   assert.equal(
@@ -15,6 +15,11 @@ test("routes explicit Supabase leads reads to DATABASE", () => {
 test("Supabase non-2xx responses are recorded as failed actions", () => {
   assert.equal(getSupabaseQueryActionStatus(403, { message: "permission denied" }), "failed");
   assert.equal(getSupabaseQueryActionStatus(200, [{ id: 1 }]), "success");
+});
+
+test("server-side Supabase secret is preferred for read access", () => {
+  assert.equal(getSupabaseReadApiKey({ SUPABASE_SECRET_KEY: "server-secret", SUPABASE_ANON_KEY: "anon-key" }), "server-secret");
+  assert.equal(getSupabaseReadApiKey({ SUPABASE_ANON_KEY: "anon-key" }), "anon-key");
 });
 
 test("REPORTING without live execution evidence is not VERIFIED", () => {
