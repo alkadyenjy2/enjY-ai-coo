@@ -579,7 +579,8 @@ Rules for Response:
     // Real Gemini Model Execution
     const selectedModel = model || "gemini-3.6-flash";
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const supabaseApiKey = getSupabaseReadApiKey();
+    const supabaseApiKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseReadApiKey = getSupabaseReadApiKey();
 
     const allowedFuncDecls: any[] = [];
     if (commandClass === "DATABASE") {
@@ -848,7 +849,7 @@ Rules for Response:
 * **Status:** \`QUEUED\`
 * **Worker:** \`Supabase durable execution worker\``;
         }
-      } else if (call.name === "query_supabase" && supabaseUrl && supabaseApiKey) {
+      } else if (call.name === "query_supabase" && supabaseUrl && supabaseReadApiKey) {
         const table = (call.args as any)?.table || (userPromptStr.toLowerCase().includes("posts") || userPromptStr.includes("المنشورات") ? "posts" : "leads");
         const select = (call.args as any)?.select || "*";
         const targetUrl = `${supabaseUrl.replace(/\/+$/, "")}/rest/v1/${table}?select=${select}`;
@@ -856,8 +857,8 @@ Rules for Response:
         try {
           const dbRes = await fetch(targetUrl, {
             headers: {
-              "apikey": supabaseApiKey,
-              "Authorization": `Bearer ${supabaseApiKey}`
+              "apikey": supabaseReadApiKey,
+              "Authorization": `Bearer ${supabaseReadApiKey}`
             }
           });
           const dbData = await dbRes.json();
