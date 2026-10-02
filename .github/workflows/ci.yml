@@ -53,6 +53,9 @@ jobs:
       - name: OpenAI Responses adapter test
         run: node --import tsx --test --test-concurrency=1 tests/openai.test.ts
 
+      - name: Database intent and verification truthfulness test
+        run: node --import tsx --test --test-concurrency=1 tests/database-intent-verification.test.ts
+
       - name: Telegram transport test
         run: npm run test:telegram
 
