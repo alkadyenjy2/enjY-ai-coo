@@ -379,7 +379,7 @@ app.post("/api/agent/command", async (req, res) => {
       evidence: "[Duplicate Guard]: Identical prompt received within 10s window.",
       verificationStatus: "NOT_REQUIRED",
       final_state_reason: "Duplicate command execution prevented within 10s deduplication window.",
-      errors: [pipelineError],
+      errors: [],
       approvalStatus: "AUTO_APPROVED"
     };
     await rememberOperationalRecord(dupRecord);
