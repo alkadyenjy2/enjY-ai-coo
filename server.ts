@@ -301,6 +301,18 @@ export function getReportingVerificationStatus(
   return hasRealExecutionStarted(actions) ? "VERIFIED" : "NOT_REQUIRED";
 }
 
+export function getSupabaseReadApiKey(env: NodeJS.ProcessEnv = process.env): string {
+  return (
+    env.SUPABASE_SECRET_KEY ||
+    env.SUPABASE_SERVICE_ROLE_KEY ||
+    env.SUPABASE_PUBLISHABLE_KEY ||
+    env.SUPABASE_ANON_KEY ||
+    env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    env.VITE_SUPABASE_ANON_KEY ||
+    ""
+  ).trim();
+}
+
 export function getSupabaseQueryActionStatus(
   httpStatus: number,
   payload: unknown,
@@ -567,7 +579,7 @@ Rules for Response:
     // Real Gemini Model Execution
     const selectedModel = model || "gemini-3.6-flash";
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const supabaseApiKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseApiKey = getSupabaseReadApiKey();
 
     const allowedFuncDecls: any[] = [];
     if (commandClass === "DATABASE") {
