@@ -58,6 +58,48 @@ test('persists operational records with authenticated tenant context', async () 
   }
 });
 
+test('uses the server secret as Supabase REST key in personal mode', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.SUPABASE_URL;
+  const originalPublishable = process.env.SUPABASE_PUBLISHABLE_KEY;
+  const originalSecret = process.env.SUPABASE_SECRET_KEY;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+
+  process.env.SUPABASE_URL = 'https://example.supabase.co';
+  process.env.SUPABASE_PUBLISHABLE_KEY = 'publishable-test-key';
+  process.env.SUPABASE_SECRET_KEY = 'server-secret-key';
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return new Response(JSON.stringify([{ id: 'audit-personal-1' }]), { status: 201 });
+  }) as typeof fetch;
+
+  try {
+    const result = await runPersistenceContext(
+      {
+        organizationId: '11111111-1111-1111-1111-111111111111',
+        userId: '22222222-2222-2222-2222-222222222222',
+        accessToken: 'server-secret-key',
+      },
+      () => persistOperationalRecord(record),
+    );
+
+    assert.equal(result.persisted, true);
+    assert.equal(requests.length, 1);
+    const headers = requests[0].init?.headers as Record<string, string>;
+    assert.equal(headers.Authorization, 'Bearer server-secret-key');
+    assert.equal(headers.apikey, 'server-secret-key');
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = originalUrl;
+    if (originalPublishable === undefined) delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    else process.env.SUPABASE_PUBLISHABLE_KEY = originalPublishable;
+    if (originalSecret === undefined) delete process.env.SUPABASE_SECRET_KEY;
+    else process.env.SUPABASE_SECRET_KEY = originalSecret;
+  }
+});
+
 test('refuses durable persistence without an authenticated tenant context', async () => {
   const originalFetch = globalThis.fetch;
   const originalUrl = process.env.SUPABASE_URL;

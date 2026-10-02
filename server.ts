@@ -1039,7 +1039,8 @@ Rules for Response:
     });
 
   } catch (error: any) {
-    console.error("Note in /api/agent/command pipeline:", error?.message || error);
+    const pipelineError = error?.message || String(error);
+    console.error("Note in /api/agent/command pipeline:", pipelineError);
 
     // Fallback Operational Reasoning Engine matched strictly to commandClass
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -1047,7 +1048,7 @@ Rules for Response:
 
     const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [
       { tool: 'Command Router', status: 'success', details: `Classified directive as '${commandClass}'` },
-      { tool: 'Core Operational Reasoning Engine', status: 'success', details: `Executed deterministic handler for ${commandClass}` },
+      { tool: 'Core Operational Reasoning Engine', status: 'fallback', details: `Live model/adapter path failed; deterministic handler used. Cause: ${pipelineError}` },
       { tool: 'Memory Sync', status: 'success', details: 'Scanned active memory layers' }
     ];
 
@@ -1170,12 +1171,20 @@ Rules for Response:
 * **حالة التحقق التابعة للقراءة (Follow-up Read Verification):** \`${verificationStatus}\`
 * **حالة الاعتماد:** \`AUTO_APPROVED\``;
     } else if (commandClass === "SYSTEM_HEALTH") {
-      verificationStatus = "VERIFIED";
+      verificationStatus = "NOT_REQUIRED";
       const isSupabaseLive = !!(supabaseUrl && supabaseApiKey);
+      const isGeminiConfigured = Boolean(process.env.GEMINI_API_KEY);
+      actionsTakenList.push({
+        tool: 'Connector Status Fallback Probe',
+        status: 'success',
+        details: `Supabase configured=${isSupabaseLive}; Gemini configured=${isGeminiConfigured}; live model execution was not completed.`
+      });
       fallbackReport = `### 🏥 تقرير حالة الموصلات والنظام (System Health)
-* **Supabase Database:** \`${isSupabaseLive ? "REAL_LIVE ✅" : "UNCONFIGURED ⚠️"}\`
-* **Gemini LLM Engine:** \`REAL_LIVE ✅\`
+* **Supabase Database:** \`${isSupabaseLive ? "CONFIGURED" : "UNCONFIGURED"}\`
+* **Gemini LLM Engine:** \`${isGeminiConfigured ? "CONFIGURED" : "UNCONFIGURED"}\`
 * **Execution Memory Store:** \`ACTIVE (${operationalMemoryRecords.length} records logged)\`
+* **Live model execution:** \`NOT VERIFIED — fallback handler used\`
+* **Fallback cause:** \`${pipelineError}\`
 * **Command Router Status:** \`OPERATIONAL (Zero Unsafe Directives)\``;
     } else if (commandClass === "REPORTING") {
       verificationStatus = "VERIFIED";

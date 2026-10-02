@@ -79,7 +79,11 @@ export async function callOpenAIResponses(options: {
   const body: Record<string, any> = {
     model: options.model,
     instructions: options.instructions,
-    input: options.input,
+    input: options.input.map((item) =>
+      typeof item === "string"
+        ? { role: "user", content: item }
+        : item
+    ),
     reasoning: { effort: "medium" },
   };
 
