@@ -301,6 +301,13 @@ export function getReportingVerificationStatus(
   return hasRealExecutionStarted(actions) ? "VERIFIED" : "NOT_REQUIRED";
 }
 
+export function getSupabaseQueryActionStatus(
+  httpStatus: number,
+  payload: unknown,
+): "success" | "failed" {
+  return httpStatus >= 200 && httpStatus < 300 ? "success" : "failed";
+}
+
 // Durable worker step for provider-backed media jobs. One invocation performs one bounded provider step.
 app.post("/api/executions/worker", async (req, res) => {
   const executionId = String(req.body?.execution_id || "").trim();
@@ -842,14 +849,29 @@ Rules for Response:
             }
           });
           const dbData = await dbRes.json();
+          const queryStatus = getSupabaseQueryActionStatus(dbRes.status, dbData);
 
-          actionsTakenList.push({
-            tool: 'Supabase Query Tool',
-            status: 'success',
-            details: `Read from table '${table}' via PostgREST (${targetUrl}): ${JSON.stringify(dbData)}`
-          });
-
-          verificationStatus = "VERIFIED";
+          if (queryStatus === "success") {
+            actionsTakenList.push({
+              tool: 'Supabase Query Tool',
+              status: 'success',
+              details: `Read from table '${table}' via PostgREST (${targetUrl}) HTTP ${dbRes.status}: ${JSON.stringify(dbData)}`
+            });
+            verificationStatus = "VERIFIED";
+          } else {
+            const dbError = typeof dbData === "object" && dbData !== null
+              ? JSON.stringify(dbData)
+              : String(dbData);
+            const failureMessage = `Supabase read failed for table '${table}' with HTTP ${dbRes.status}: ${dbError}`;
+            executionErrors.push(failureMessage);
+            actionsTakenList.push({
+              tool: 'Supabase Query Tool',
+              status: 'failed',
+              details: failureMessage
+            });
+            verificationStatus = "FAILED";
+            responseText = `### ⚠️ فشل استعلام قاعدة البيانات\\n* **الجدول:** \`${table}\`\\n* **HTTP:** \`${dbRes.status}\`\\n* **الخطأ:** \`${dbError}\`\\n* **حالة التحقق:** \`FAILED\``;
+          }
 
           let followUpText = "";
           try {
@@ -1132,11 +1154,27 @@ Rules for Response:
             }
           });
           dbData = await dbRes.json();
-          actionsTakenList.push({
-            tool: 'Supabase Tool Gateway',
-            status: 'success',
-            details: `Read from table '${targetTable}' via PostgREST (${targetUrl}): ${JSON.stringify(dbData)}`
-          });
+          const queryStatus = getSupabaseQueryActionStatus(dbRes.status, dbData);
+          const dbError = typeof dbData === "object" && dbData !== null
+            ? JSON.stringify(dbData)
+            : String(dbData);
+
+          if (queryStatus === "success") {
+            actionsTakenList.push({
+              tool: 'Supabase Tool Gateway',
+              status: 'success',
+              details: `Read from table '${targetTable}' via PostgREST (${targetUrl}) HTTP ${dbRes.status}: ${dbError}`
+            });
+          } else {
+            const failureMessage = `Supabase read failed for table '${targetTable}' with HTTP ${dbRes.status}: ${dbError}`;
+            executionErrors.push(failureMessage);
+            actionsTakenList.push({
+              tool: 'Supabase Tool Gateway',
+              status: 'failed',
+              details: failureMessage
+            });
+            verificationStatus = "FAILED";
+          }
         } catch (dbErr: any) {
           verificationStatus = "FAILED";
         }
