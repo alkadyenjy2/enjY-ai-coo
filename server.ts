@@ -1088,7 +1088,7 @@ Rules for Response:
 
     // Fallback Operational Reasoning Engine matched strictly to commandClass
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const supabaseApiKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseApiKey = getSupabaseReadApiKey();
 
     const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [
       { tool: 'Command Router', status: 'success', details: `Classified directive as '${commandClass}'` },
