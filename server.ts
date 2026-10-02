@@ -535,7 +535,8 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   try {
-    const isOpenAIRequested = model === "gpt-6-astra";
+    const selectedModel = resolveJarvisModel(model);
+    const isOpenAIRequested = selectedModel === "gpt-6-astra";
     const ai = isOpenAIRequested ? null : getGeminiClient();
     
     // System instruction detailing the Master Prompt Core AI Agent rules
@@ -610,7 +611,6 @@ Rules for Response:
     }
 
     // Real Gemini Model Execution
-    const selectedModel = resolveJarvisModel(model);
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseApiKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
     const supabaseReadApiKey = getSupabaseReadApiKey();
