@@ -11,6 +11,7 @@ import { clinicRouter } from "./src/clinic/routes";
 import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
+import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
@@ -34,7 +35,7 @@ app.locals.jarvisTelegramHandler = async ({ chatId, text }: { chatId: number; te
   const response = await fetch(`${baseUrl}/api/agent/command`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ prompt: text, userProfile: { source: "telegram", telegramChatId: chatId }, activeProject: "AI CORE COO", memoryContext: "", model: "gpt-6-astra" }),
+    body: JSON.stringify({ prompt: text, userProfile: { source: "telegram", telegramChatId: chatId }, activeProject: "AI CORE COO", memoryContext: "" }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || `JARVIS returned ${response.status}`);
@@ -609,7 +610,7 @@ Rules for Response:
     }
 
     // Real Gemini Model Execution
-    const selectedModel = model || "gemini-3.6-flash";
+    const selectedModel = resolveJarvisModel(model);
     const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
     const supabaseApiKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
     const supabaseReadApiKey = getSupabaseReadApiKey();
