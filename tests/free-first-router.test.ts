@@ -60,3 +60,16 @@ test('does not select paid-only routes unless explicitly allowed', () => {
 
   assert.equal(routes.length, 0);
 });
+
+
+test('defaults to the free Gemini model when no model is requested', async () => {
+  const { resolveJarvisModel } = await import('../src/ai-gateway/model-fallback');
+  assert.equal(resolveJarvisModel(undefined, false), 'gemini-3.6-flash');
+});
+
+test('reroutes paid models to Gemini unless paid execution is explicitly enabled', async () => {
+  const { resolveJarvisModel } = await import('../src/ai-gateway/model-fallback');
+  assert.equal(resolveJarvisModel('gpt-6-astra', false), 'gemini-3.6-flash');
+  assert.equal(resolveJarvisModel('muse-spark-1.3', false), 'gemini-3.6-flash');
+  assert.equal(resolveJarvisModel('gpt-6-astra', true), 'gpt-6-astra');
+});
