@@ -11,7 +11,7 @@ type PublicEnv = Record<string, string | undefined>;
 export function resolveSupabaseConfig(env: PublicEnv): SupabaseClientConfig {
   const url = String(env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || CANONICAL_SUPABASE_URL)
     .trim()
-    .replace(/\\/+$/, '');
+    .replace(/\/+$/, '');
   const publishableKey = String(
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
