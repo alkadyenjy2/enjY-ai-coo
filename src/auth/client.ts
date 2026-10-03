@@ -1,7 +1,13 @@
 import { createClient, type Session, type User } from '@supabase/supabase-js';
 
-const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || import.meta.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/\/+$/, '');
-const supabasePublishableKey = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '').trim();
+import { resolveSupabaseConfig } from './runtimeConfig';
+
+const { url: supabaseUrl, publishableKey: supabasePublishableKey } = resolveSupabaseConfig({
+  VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
+  NEXT_PUBLIC_SUPABASE_URL: import.meta.env.NEXT_PUBLIC_SUPABASE_URL,
+  VITE_SUPABASE_PUBLISHABLE_KEY: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+});
 
 export const supabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey && supabaseUrl.startsWith('http'));
 
