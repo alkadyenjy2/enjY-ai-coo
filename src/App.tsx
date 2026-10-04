@@ -16,6 +16,7 @@ import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkf
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 import { apiFetch } from './auth/client';
+import { buildOperationalHistoryUrl } from './utils/operationalHistory';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
@@ -65,7 +66,8 @@ export default function App() {
     let cancelled = false;
     const loadOperationalHistory = async () => {
       try {
-        const response = await fetch('/api/agent/history?limit=50');
+        if (!organizationId) throw new Error('Authorized organization context is unavailable.');
+        const response = await apiFetch(buildOperationalHistoryUrl(organizationId, 50));
         if (!response.ok) throw new Error(`Operational history request failed with HTTP ${response.status}.`);
         const data = await response.json();
         if (!cancelled) setLogs(mapOperationalRecordsToExecutionLogs(Array.isArray(data.records) ? data.records : []));
