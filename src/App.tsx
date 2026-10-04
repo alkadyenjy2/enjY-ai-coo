@@ -78,7 +78,7 @@ export default function App() {
     };
     if (authenticated) void loadOperationalHistory();
     return () => { cancelled = true; };
-  }, [authenticated]);
+  }, [authenticated, organizationId]);
 
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = { id: `msg-${Date.now()}`, sender: 'user', content: text, timestamp: new Date().toISOString() };
