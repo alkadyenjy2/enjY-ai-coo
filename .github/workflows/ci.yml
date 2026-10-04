@@ -47,6 +47,9 @@ jobs:
       - name: Operational log mapping test
         run: npm run test:operational-logs
 
+      - name: Operational history organization context test
+        run: npm run test:operational-history-context
+
       - name: Persistence tenant context test
         run: npm run test:persistence-context
 
