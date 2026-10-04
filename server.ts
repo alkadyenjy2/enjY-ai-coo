@@ -18,6 +18,7 @@ import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
 import { adminClient, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
+import { discoverScholarships, formatScholarshipResults, isScholarshipDiscoveryIntent } from "./src/agents/scholarship-discovery";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -213,6 +214,7 @@ export type CommandClass =
   | "EXECUTION"
   | "DIAGNOSIS"
   | "DATABASE"
+  | "SCHOLARSHIP_DISCOVERY"
   | "CODING"
   | "CONTENT"
   | "REPORTING"
@@ -242,6 +244,8 @@ export function classifyCommand(promptStr: string): CommandClass {
 
   if (hasUrl && isPlanning) return "RESEARCH_PLANNING";
   if (isPlanning) return "PLANNING";
+
+  if (isScholarshipDiscoveryIntent(promptStr)) return "SCHOLARSHIP_DISCOVERY";
 
   if (/تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
     return "SYSTEM_HEALTH";
@@ -279,6 +283,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
 const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
+  SCHOLARSHIP_DISCOVERY: ["discover_scholarships"],
   EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task", "execute_media"],
   SYSTEM_HEALTH: ["check_connector_status"],
   REPORTING: ["check_connector_status"],
@@ -494,7 +499,69 @@ app.post("/api/agent/command", async (req, res) => {
     });
   }
 
-  // 3. Sensitive Action Gate (NEEDS_APPROVAL)
+  // 3. Scholarship Discovery — deterministic verified read path; no LLM dependency.
+  if (commandClass === "SCHOLARSHIP_DISCOVERY") {
+    const startedAt = new Date().toISOString();
+    try {
+      const scholarships = await discoverScholarships(5);
+      const responseText = formatScholarshipResults(scholarships);
+      const scholarshipRecord: OperationalExecutionRecord = {
+        id: `exec-${Date.now()}`,
+        timestamp: startedAt,
+        command: userPromptStr,
+        project: projectNameStr,
+        intent: commandClass,
+        tool: "Scholarship Discovery",
+        selectedTools: ["Scholarship Discovery"],
+        actionsExecuted: [{ tool: "Scholarship Discovery", status: "success", details: `Returned ${scholarships.length} verified scholarship records from scholarship_os.` }],
+        results: { count: scholarships.length, scholarships },
+        state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "RUNNING", "VERIFYING", "VERIFIED", "COMPLETED"],
+        evidence: "Scholarship OS records filtered to source_status=VERIFIED and non-expired deadlines; official_source_url included for every result.",
+        verificationStatus: "VERIFIED",
+        final_state_reason: "Scholarship discovery completed from the canonical Scholarship OS database with source verification constraints.",
+        errors: [],
+        approvalStatus: "AUTO_APPROVED"
+      };
+      await rememberOperationalRecord(scholarshipRecord);
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: scholarshipRecord, content: responseText });
+      return res.json({
+        content: responseText,
+        response: responseText,
+        executionRecord: scholarshipRecord,
+        thoughtProcess: {
+          understand: "Detected Scholarship Discovery intent.",
+          inspect: "Queried canonical scholarship_os.scholarships records.",
+          decide: "Accepted only VERIFIED records with a live or unspecified deadline.",
+          execute: "Returned verified scholarship opportunities.",
+          verify: "Verified source_status and official source URLs.",
+          report: "Returned structured scholarship results."
+        },
+        actionsTaken: scholarshipRecord.actionsExecuted
+      });
+    } catch (error: any) {
+      const failureRecord: OperationalExecutionRecord = {
+        id: `exec-${Date.now()}`,
+        timestamp: startedAt,
+        command: userPromptStr,
+        project: projectNameStr,
+        intent: commandClass,
+        tool: "Scholarship Discovery",
+        selectedTools: ["Scholarship Discovery"],
+        actionsExecuted: [{ tool: "Scholarship Discovery", status: "failed", details: error?.message || "Scholarship discovery failed." }],
+        results: {},
+        state_history: ["RECEIVED", "ROUTED", "DISPATCHED", "FAILED"],
+        evidence: "Scholarship discovery did not return a verified result set.",
+        verificationStatus: "FAILED",
+        final_state_reason: "Canonical Scholarship OS query failed.",
+        errors: [error?.message || "Scholarship discovery failed."],
+        approvalStatus: "AUTO_APPROVED"
+      };
+      await rememberOperationalRecord(failureRecord);
+      return res.status(503).json({ content: "Scholarship Discovery is temporarily unavailable.", executionRecord: failureRecord, actionsTaken: failureRecord.actionsExecuted });
+    }
+  }
+
+  // 4. Sensitive Action Gate (NEEDS_APPROVAL)
   const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|browser.*(click|fill|press|upload|download)|\b(click|fill|press|upload|download)\b.*browser|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);
   const isEmailSendAction = /(send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail)/i.test(userPromptStr);
   const emailApprovalGranted = isEmailSendAction && gmailApprovalConfirmed === true;
