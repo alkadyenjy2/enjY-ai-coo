@@ -307,6 +307,21 @@ export function getReportingVerificationStatus(
   return hasRealExecutionStarted(actions) ? "VERIFIED" : "NOT_REQUIRED";
 }
 
+export function resolveCommandVerificationStatus(
+  commandClass: CommandClass,
+  actions: Array<{ tool: string; status: string }>,
+  currentStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED",
+): "VERIFIED" | "FAILED" | "NOT_REQUIRED" {
+  if (
+    (commandClass === "REPORTING" || commandClass === "SYSTEM_HEALTH") &&
+    currentStatus === "NOT_REQUIRED"
+  ) {
+    return getReportingVerificationStatus(actions);
+  }
+
+  return currentStatus;
+}
+
 export function getSupabaseReadApiKey(env: NodeJS.ProcessEnv = process.env): string {
   return (
     env.SUPABASE_SECRET_KEY ||
@@ -1134,6 +1149,7 @@ Rules for Response:
     // Model routing/reasoning is not execution. Only a real execution adapter action
     // (or a durable execution queue handoff) may advance the lifecycle past DISPATCHED.
     const executionStarted = hasRealExecutionStarted(actionsTakenList);
+    verificationStatus = resolveCommandVerificationStatus(commandClass, actionsTakenList, verificationStatus);
     const primaryToolUsed = actionsTakenList.find(a => a.tool.includes("Supabase") || a.tool.includes("Connector") || a.tool.includes("Gemini") || a.tool.includes("Astra"))?.tool || actionsTakenList[0]?.tool || "none";
     const primaryEvidence = actionsTakenList.map(a => `[${a.tool}]: ${a.details}`).join(" | ");
 
