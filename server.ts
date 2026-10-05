@@ -651,6 +651,7 @@ app.post("/api/agent/command", async (req, res) => {
     return res.json({
       content: `🔒 **[Human Approval Required]** تم اكتشاف إجراء حساس يتطلب موافقة بشرية صريحة قبل التنفيذ.\n\n- **الأمر المعطى:** "${userPromptStr}"\n- **تصنيف القصد:** \`${commandClass}\`\n- **الحالة الحالية:** \`NEEDS_APPROVAL\` (في انتظار التأكيد البشري الصريح)\n- **البوابة:** Human-in-the-Loop Governance Gate`,
       executionRecord: sensitiveRecord,
+      approvalJobId: approvalRecordId,
       thoughtProcess: {
         understand: `Classified sensitive directive as '${commandClass}': "${userPromptStr}"`,
         inspect: 'Intercepted destructive/external side-effect pattern.',
