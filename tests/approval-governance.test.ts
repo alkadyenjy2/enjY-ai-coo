@@ -20,7 +20,15 @@ test('approved retry bypasses only the transient duplicate cache, not approval v
   assert.match(server, /cached && \(Date\.now\(\) - cached\.timestamp < 10000\) && !approvalJobId/);
   assert.match(server, /approvalJob\.user_id === resolvedUserId/);
   assert.match(server, /approvalJob\.organization_id === resolvedOrganizationId/);
-  assert.match(server, /!approvalGranted/);
+  assert.match(server, /!approvalGranted/);\n  assert.match(server, /claimApprovedDurableJob/);
+});
+
+test('approved execution consumes the durable approval token atomically', async () => {
+  const jobs = await readFile(join(root, 'src/execution/durable-jobs.ts'), 'utf8');
+  assert.match(jobs, /claimApprovedDurableJob/);
+  assert.match(jobs, /\.eq\("status", "QUEUED"\)/);
+  assert.match(jobs, /\.eq\("approval_status", "APPROVED"\)/);
+  assert.match(jobs, /status: "RUNNING"/);
 });
 
 test('command center exposes an explicit approval action and replays the approved command with its approval id', async () => {
