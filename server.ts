@@ -890,7 +890,7 @@ Rules for Response:
     const executionErrors: string[] = [];
 
     // Sensitive command detection for Human Approval Gate
-    if (/(send_email|delete|drop_table|transfer_funds|change_credentials|post_external)/i.test(prompt)) {
+    if (/(send_email|delete|drop_table|transfer_funds|change_credentials|post_external)/i.test(prompt) && !approvalGranted) {
       approvalStatus = "REQUIRES_HUMAN_APPROVAL";
       actionsTakenList.push({
         tool: 'Human Approval Gate',
