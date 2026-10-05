@@ -462,7 +462,7 @@ app.post("/api/agent/command", async (req, res) => {
   const cached = recentCommandCache.get(cacheKey);
 
   // 1. Deduplication Protection (10-second deduplication window)
-  if (cached && (Date.now() - cached.timestamp < 10000)) {
+  if (cached && (Date.now() - cached.timestamp < 10000) && !approvalJobId) {
     const dupRecord: OperationalExecutionRecord = {
       id: `exec-${Date.now()}`,
       timestamp: new Date().toISOString(),
