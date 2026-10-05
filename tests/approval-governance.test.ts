@@ -20,7 +20,8 @@ test('approved retry bypasses only the transient duplicate cache, not approval v
   assert.match(server, /cached && \(Date\.now\(\) - cached\.timestamp < 10000\) && !approvalJobId/);
   assert.match(server, /approvalJob\.user_id === resolvedUserId/);
   assert.match(server, /approvalJob\.organization_id === resolvedOrganizationId/);
-  assert.match(server, /!approvalGranted/);\n  assert.match(server, /claimApprovedDurableJob/);
+  assert.match(server, /!approvalGranted/);
+  assert.match(server, /claimApprovedDurableJob/);
 });
 
 test('approved execution consumes the durable approval token atomically', async () => {
