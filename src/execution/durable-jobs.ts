@@ -69,6 +69,28 @@ export async function createDurableJob(input: DurableJobInput): Promise<DurableJ
   return data as DurableJob;
 }
 
+export async function claimApprovedDurableJob(id: string, organizationId: string, userId: string): Promise<DurableJob | null> {
+  const client = adminClient();
+  const { data, error } = await client
+    .from("ai_core_jobs")
+    .update({ status: "RUNNING", current_step: "APPROVED_EXECUTION", updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("command", "__HUMAN_APPROVAL__")
+    .eq("status", "QUEUED")
+    .eq("approval_status", "APPROVED")
+    .select("*")
+    .maybeSingle();
+  if (error) throw new Error(`DURABLE_APPROVAL_CLAIM_FAILED:${error.message}`);
+  if (!data) return null;
+  const job = data as DurableJob;
+  return updateDurableJob(job.id, {
+    current_step: "APPROVED_EXECUTION",
+    state_history: [...(job.state_history || []), "APPROVED_EXECUTION"],
+  });
+}
+
 export async function getDurableJob(id: string, organizationId: string): Promise<DurableJob | null> {
   const client = adminClient();
   const { data, error } = await client

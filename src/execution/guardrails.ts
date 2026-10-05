@@ -52,8 +52,8 @@ export async function verifyEvidence(
   const evidence = evidencePayload.evidence?.trim();
   const source = evidencePayload.source;
 
-  if (!executionResult || !source || !["activity-result", "independent-verification"].includes(source)) {
-    return { verified: false, proofRecord: "INVALID_OR_MISSING_EXECUTION_EVIDENCE", source };
+  if (!executionResult || !source || !["independent-verification"].includes(source)) {
+    return { verified: false, proofRecord: source === "activity-result" ? "INDEPENDENT_VERIFICATION_REQUIRED" : "INVALID_OR_MISSING_EXECUTION_EVIDENCE", source };
   }
   if (/\b(FAILED|ERROR|UNAVAILABLE|CANCELLED|TIMED_OUT)\b/i.test(executionResult)) {
     return { verified: false, proofRecord: "EXECUTION_RESULT_NOT_SUCCESSFUL", source };
@@ -64,7 +64,7 @@ export async function verifyEvidence(
 
   return {
     verified: true,
-    proofRecord: `PROOF_VERIFIED_ACTIVITY_RESULT_${Buffer.from(JSON.stringify({ executionResult, source })).toString("hex").slice(0, 16)}`,
+    proofRecord: `PROOF_VERIFIED_INDEPENDENT_VERIFICATION_${Buffer.from(JSON.stringify({ executionResult, source })).toString("hex").slice(0, 16)}`,
     source,
   };
 }
