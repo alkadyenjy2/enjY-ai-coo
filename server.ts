@@ -1,4 +1,5 @@
 import express from "express";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
@@ -178,6 +179,24 @@ app.use("/api/clinic", clinicRouter);
 // Protected API surfaces. Webhook routes remain signature-authenticated separately.
 app.use(["/api/agent", "/api/connectors", "/api/env-status"], requireAuth);
 app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard"], requireOrganizationAccess);
+
+app.post("/api/agent/approval", async (req, res) => {
+  const auth = getAuthContext(res);
+  const organizationId = getOrganizationAccess(res)?.organizationId || "";
+  const userId = String(auth?.user.id || "").trim();
+  const approvalJobId = String(req.body?.approvalJobId || "").trim();
+  if (!auth || !organizationId || !userId || !approvalJobId) return res.status(400).json({ success: false, error: "Authenticated organization context and approvalJobId are required." });
+  try {
+    const job = await getDurableJob(approvalJobId, organizationId);
+    if (!job || job.user_id !== userId || job.command !== "__HUMAN_APPROVAL__") return res.status(404).json({ success: false, error: "Approval request not found." });
+    if (job.approval_status === "APPROVED") return res.json({ success: true, approvalJobId: job.id, status: "APPROVED" });
+    if (job.approval_status !== "WAITING") return res.status(409).json({ success: false, error: "Approval request is not awaiting approval." });
+    const updated = await updateDurableJob(job.id, { status: "QUEUED", current_step: "APPROVED", approval_status: "APPROVED", state_history: [...(job.state_history || []), "APPROVED"] });
+    return res.json({ success: true, approvalJobId: updated.id, status: "APPROVED" });
+  } catch {
+    return res.status(503).json({ success: false, error: "Approval state could not be updated safely." });
+  }
+});
 
 async function rememberOperationalRecord(record: OperationalExecutionRecord) {
   operationalMemoryRecords.unshift(record);
@@ -431,7 +450,7 @@ app.post("/api/executions/worker", async (req, res) => {
 });
 // API Route: Agent Command Execution (Chat / Command Center)
 app.post("/api/agent/command", async (req, res) => {
-  const { prompt, userProfile, activeProject, memoryContext, model = "gpt-6-astra", gmailApprovalConfirmed = false } = req.body;
+  const { prompt, userProfile, activeProject, memoryContext, model = "gpt-6-astra", approvalJobId } = req.body;
   const userPromptStr = typeof prompt === "string" ? prompt : String(prompt || "");
   const projectNameStr = typeof activeProject?.name === "string" ? activeProject.name : "Core Operations HQ";
   const commandClass = classifyCommand(userPromptStr);
@@ -579,8 +598,14 @@ app.post("/api/agent/command", async (req, res) => {
   // 4. Sensitive Action Gate (NEEDS_APPROVAL)
   const isSensitiveAction = /(send_email|delete|drop_table|transfer_funds|change_credentials|post_external|browser.*(click|fill|press|upload|download)|\b(click|fill|press|upload|download)\b.*browser|حذف|مسح_جدول|إلغاء_دائم)/i.test(userPromptStr);
   const isEmailSendAction = /(send_email|send email|ابعت ايميل|ارسل ايميل|إرسال بريد|إرسال إيميل|send mail)/i.test(userPromptStr);
-  const emailApprovalGranted = isEmailSendAction && gmailApprovalConfirmed === true;
-  if (isSensitiveAction && !emailApprovalGranted) {
+  const requestedApprovalJobId = typeof approvalJobId === "string" ? approvalJobId.trim() : "";
+  let approvalGranted = false;
+  if (isSensitiveAction && requestedApprovalJobId && requestAuth && resolvedOrganizationId && resolvedUserId) {
+    const approvalJob = await getDurableJob(requestedApprovalJobId, resolvedOrganizationId);
+    approvalGranted = Boolean(approvalJob && approvalJob.user_id === resolvedUserId && approvalJob.organization_id === resolvedOrganizationId && approvalJob.command === "__HUMAN_APPROVAL__" && approvalJob.approval_status === "APPROVED" && approvalJob.input_payload?.promptHash === createHash("sha256").update(userPromptStr.trim().toLowerCase()).digest("hex"));
+  }
+  const emailApprovalGranted = isEmailSendAction && approvalGranted;
+  if (isSensitiveAction && !approvalGranted) {
     const sensitiveRecord: OperationalExecutionRecord = {
       id: `exec-${Date.now()}`,
       timestamp: new Date().toISOString(),
@@ -598,6 +623,28 @@ app.post("/api/agent/command", async (req, res) => {
       errors: [],
       approvalStatus: "REQUIRES_HUMAN_APPROVAL"
     };
+    let approvalRecordId: string | null = null;
+    if (!requestAuth || !resolvedOrganizationId || !resolvedUserId) {
+      return res.status(401).json({ content: "Human approval requires an authenticated organization and user context.", executionRecord: sensitiveRecord, actionsTaken: sensitiveRecord.actionsExecuted });
+    }
+    try {
+      const promptHash = createHash("sha256").update(userPromptStr.trim().toLowerCase()).digest("hex");
+      const approvalJob = await createDurableJob({
+        organizationId: resolvedOrganizationId,
+        userId: resolvedUserId,
+        command: "__HUMAN_APPROVAL__",
+        inputPayload: { kind: "human_approval", prompt: userPromptStr, promptHash, requestedAction: commandClass },
+        idempotencyKey: "approval:" + resolvedUserId + ":" + promptHash,
+      });
+      const updatedApprovalJob = await updateDurableJob(approvalJob.id, { status: "WAITING_FOR_APPROVAL", current_step: "WAITING_FOR_APPROVAL", approval_status: "WAITING", state_history: [...(approvalJob.state_history || []), "WAITING_FOR_APPROVAL"] });
+      approvalRecordId = updatedApprovalJob.id;
+    } catch (approvalError) {
+      sensitiveRecord.errors.push((approvalError as any)?.message || String(approvalError));
+      sensitiveRecord.verificationStatus = "FAILED";
+      sensitiveRecord.final_state_reason = "Human approval could not be durably recorded; fail-closed.";
+      await rememberOperationalRecord(sensitiveRecord);
+      return res.status(503).json({ content: "Approval request could not be durably recorded. No sensitive action was executed.", executionRecord: sensitiveRecord, actionsTaken: sensitiveRecord.actionsExecuted });
+    }
     await rememberOperationalRecord(sensitiveRecord);
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: sensitiveRecord, content: sensitiveRecord.results.responseSnippet });
 
@@ -612,7 +659,7 @@ app.post("/api/agent/command", async (req, res) => {
         verify: 'Verification Status: NOT_REQUIRED.',
         report: 'Awaiting human confirmation.'
       },
-      actionsTaken: [{ tool: "Human Approval Gate", status: "pending_approval", details: "Sensitive action gated" }]
+      actionsTaken: [{ tool: "Human Approval Gate", status: "pending_approval", details: "Sensitive action gated. Approval job: " + (approvalRecordId || "unavailable") }]
     });
   }
 
