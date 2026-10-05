@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateQualificationScore, executeDeterministicActivity, geminiGenerateContentActivity, recordMemoryActivity } from '../src/execution/guardrails.ts';
+import { calculateQualificationScore, executeDeterministicActivity, geminiGenerateContentActivity, recordMemoryActivity, verifyEvidence } from '../src/execution/guardrails.ts';
 
 const originalNodeEnv = process.env.NODE_ENV;
 const originalRequireLive = process.env.REQUIRE_LIVE_DEPENDENCIES;
@@ -72,4 +72,16 @@ test('memory activity fails closed instead of inventing durable persistence in p
     () => recordMemoryActivity({ testId: 'production-memory-test', finalState: 'COMPLETED', history: ['COMPLETED'] }),
     /DURABLE_MEMORY_UNAVAILABLE/,
   );
+});
+
+test('evidence gate rejects execution-result self-attestation without independent verification', async () => {
+  const result = await verifyEvidence({ executionResult: "Email sent successfully", source: "activity-result" });
+  assert.equal(result.verified, false);
+  assert.equal(result.proofRecord, "INDEPENDENT_VERIFICATION_REQUIRED");
+});
+
+test('evidence gate accepts only an explicit independent verification source', async () => {
+  const result = await verifyEvidence({ executionResult: "Email sent successfully", evidence: "Email sent successfully", source: "independent-verification" });
+  assert.equal(result.verified, true);
+  assert.match(result.proofRecord, /PROOF_VERIFIED_INDEPENDENT_VERIFICATION/);
 });
