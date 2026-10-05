@@ -15,28 +15,28 @@ test('canonical router separates planning from execution', async () => {
 });
 
 test('evidence gate rejects missing execution evidence', async () => {
-  const result = await verifyEvidence({ source: 'activity-result' });
+  const result = await verifyEvidence({ source: 'independent-verification' });
   assert.equal(result.verified, false);
   assert.equal(result.proofRecord, 'INVALID_OR_MISSING_EXECUTION_EVIDENCE');
 });
 
-test('evidence gate rejects arbitrary fake success text', async () => {
+test('evidence gate rejects activity-result self-attestation', async () => {
   const result = await verifyEvidence({
     executionResult: 'Executed action for directive: send email',
-    evidence: 'VERIFICATION_HASH_OK_9981',
     source: 'activity-result'
   });
   assert.equal(result.verified, false);
-  assert.equal(result.proofRecord, 'EVIDENCE_DOES_NOT_MATCH_EXECUTION_RESULT');
+  assert.equal(result.proofRecord, 'INDEPENDENT_VERIFICATION_REQUIRED');
 });
 
-test('evidence gate accepts the actual activity result and derives proof from it', async () => {
+test('evidence gate accepts an explicitly independent verification result', async () => {
   const executionResult = 'POSTIZ_PUBLISHED:post-123:PUBLISHED';
   const result = await verifyEvidence({
     executionResult,
-    source: 'activity-result'
+    evidence: executionResult,
+    source: 'independent-verification'
   });
   assert.equal(result.verified, true);
-  assert.match(result.proofRecord, /^PROOF_VERIFIED_ACTIVITY_RESULT_/);
-  assert.equal(result.source, 'activity-result');
+  assert.match(result.proofRecord, /^PROOF_VERIFIED_INDEPENDENT_VERIFICATION_/);
+  assert.equal(result.source, 'independent-verification');
 });
