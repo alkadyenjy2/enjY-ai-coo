@@ -37,6 +37,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<{ id: string; prompt: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +81,7 @@ export default function App() {
     return () => { cancelled = true; };
   }, [authenticated, organizationId]);
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, approvalJobId?: string) => {
     const userMsg: ChatMessage = { id: `msg-${Date.now()}`, sender: 'user', content: text, timestamp: new Date().toISOString() };
     setMessages(prev => [...prev, userMsg]);
     setIsAgentLoading(true);
@@ -89,11 +90,23 @@ export default function App() {
       const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organization_id: organizationId, prompt: text, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
+        body: JSON.stringify({ organization_id: organizationId, prompt: text, approvalJobId, userProfile, activeProject, memoryContext: memoryItems.slice(0, 5), model: activeModel.id }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(typeof data?.error === 'string' ? data.error : `Agent command failed with HTTP ${response.status}.`);
+      }
+
+      if (typeof data?.approvalJobId === 'string' && data.approvalJobId.trim()) {
+        setPendingApproval({ id: data.approvalJobId.trim(), prompt: text });
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          content: data.content || 'Human approval is required before this action can execute.',
+          timestamp: new Date().toISOString(),
+          actionsTaken: data.actionsTaken
+        }]);
+        return;
       }
 
       const executionRecord = data.executionRecord;
@@ -160,8 +173,49 @@ export default function App() {
 
   if (!authenticated) return <AuthScreen />;
 
+  const approvePendingAction = async () => {
+    if (!pendingApproval) return;
+    try {
+      const response = await apiFetch('/api/agent/approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approvalJobId: pendingApproval.id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.status !== 'APPROVED') throw new Error(data?.error || 'Approval failed');
+      const approved = pendingApproval;
+      setPendingApproval(null);
+      await handleSendMessage(approved.prompt, approved.id);
+    } catch (error) {
+      console.error('Approval failed:', error);
+      setMessages(prev => [...prev, {
+        id: `msg-${Date.now() + 1}`,
+        sender: 'agent',
+        content: 'Approval could not be recorded safely. No sensitive action was executed.',
+        timestamp: new Date().toISOString()
+      }]);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
+      {pendingApproval && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+            <div>
+              <strong>Human approval required.</strong>
+              <span className="ml-2 text-amber-200/80">No sensitive side-effect has been executed.</span>
+            </div>
+            <button
+              type="button"
+              onClick={approvePendingAction}
+              className="rounded-lg bg-amber-100 px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-white"
+            >
+              Approve & Execute
+            </button>
+          </div>
+        </div>
+      )}
       <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenOnboarding={() => setIsOnboardingOpen(true)} onOpenCommandCenter={() => setCurrentView('chat')} />
       <div className="mx-auto w-full max-w-7xl border-x border-b border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-emerald-200">FREE-FIRST AI ROUTING • VERIFY BEFORE DONE • PAID ROUTES REQUIRE EXPLICIT APPROVAL</div>
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
