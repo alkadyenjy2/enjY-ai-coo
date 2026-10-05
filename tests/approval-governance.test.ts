@@ -20,6 +20,7 @@ test('approved retry bypasses only the transient duplicate cache, not approval v
   assert.match(server, /cached && \(Date\.now\(\) - cached\.timestamp < 10000\) && !approvalJobId/);
   assert.match(server, /approvalJob\.user_id === resolvedUserId/);
   assert.match(server, /approvalJob\.organization_id === resolvedOrganizationId/);
+  assert.match(server, /post_external\\)\\/i\\.test\\(prompt\\) && !approvalGranted/);
 });
 
 test('command center exposes an explicit approval action and replays the approved command with its approval id', async () => {
