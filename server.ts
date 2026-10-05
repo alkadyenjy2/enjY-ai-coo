@@ -18,7 +18,7 @@ import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
-import { adminClient, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
+import { adminClient, claimApprovedDurableJob, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 import { discoverScholarships, formatScholarshipResults, isScholarshipDiscoveryIntent } from "./src/agents/scholarship-discovery";
 
 // Global Process Crash Prevention Guard
@@ -602,7 +602,11 @@ app.post("/api/agent/command", async (req, res) => {
   let approvalGranted = false;
   if (isSensitiveAction && requestedApprovalJobId && requestAuth && resolvedOrganizationId && resolvedUserId) {
     const approvalJob = await getDurableJob(requestedApprovalJobId, resolvedOrganizationId);
-    approvalGranted = Boolean(approvalJob && approvalJob.user_id === resolvedUserId && approvalJob.organization_id === resolvedOrganizationId && approvalJob.command === "__HUMAN_APPROVAL__" && approvalJob.approval_status === "APPROVED" && approvalJob.input_payload?.promptHash === createHash("sha256").update(userPromptStr.trim().toLowerCase()).digest("hex"));
+    const approvalMatches = Boolean(approvalJob && approvalJob.user_id === resolvedUserId && approvalJob.organization_id === resolvedOrganizationId && approvalJob.command === "__HUMAN_APPROVAL__" && approvalJob.approval_status === "APPROVED" && approvalJob.status === "QUEUED" && approvalJob.input_payload?.promptHash === createHash("sha256").update(userPromptStr.trim().toLowerCase()).digest("hex"));
+    if (approvalMatches) {
+      const claimedApproval = await claimApprovedDurableJob(requestedApprovalJobId, resolvedOrganizationId, resolvedUserId);
+      approvalGranted = Boolean(claimedApproval);
+    }
   }
   const emailApprovalGranted = isEmailSendAction && approvalGranted;
   if (isSensitiveAction && !approvalGranted) {
