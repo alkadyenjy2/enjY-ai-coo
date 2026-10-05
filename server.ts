@@ -913,9 +913,9 @@ Rules for Response:
       } else if (call.name === "send_email") {
         if (!emailApprovalGranted) {
           executionErrors.push("Explicit human approval is required before sending email.");
-          verificationStatus = "FAILED";
-          responseText = "🔒 **[Human Approval Required]** إرسال الإيميل متوقف حتى يتم تأكيد الموافقة البشرية صراحةً.";
-          actionsTakenList.push({ tool: 'Human Approval Gate', status: 'blocked', details: 'send_email requires gmailApprovalConfirmed=true.' });
+        verificationStatus = "FAILED";
+        responseText = "🔒 **[Human Approval Required]** إرسال الإيميل متوقف حتى يتم تأكيد الموافقة البشرية صراحةً.";
+        actionsTakenList.push({ tool: 'Human Approval Gate', status: 'blocked', details: 'send_email requires a durable authenticated approval job.' });
         } else {
           const args = (call.args || {}) as any;
           try {
