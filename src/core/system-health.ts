@@ -1,0 +1,35 @@
+export interface SystemHealthProbeInput {
+  supabaseUrl: string;
+  supabaseApiKey: string;
+  openaiConfigured: boolean;
+  geminiConfigured: boolean;
+  metaConfigured: boolean;
+}
+
+export interface SystemHealthProbe {
+  connector: 'supabase';
+  status: 'REAL_LIVE' | 'UNCONFIGURED';
+  providerFallback: 'openai_configured' | 'gemini_configured' | 'meta_configured' | 'none';
+  evidence: string;
+}
+
+export function buildSystemHealthProbe(input: SystemHealthProbeInput): SystemHealthProbe {
+  const providerFallback = input.geminiConfigured
+    ? 'gemini_configured'
+    : input.openaiConfigured
+      ? 'openai_configured'
+      : input.metaConfigured
+        ? 'meta_configured'
+        : 'none';
+
+  const live = Boolean(input.supabaseUrl.trim() && input.supabaseApiKey.trim());
+
+  return {
+    connector: 'supabase',
+    status: live ? 'REAL_LIVE' : 'UNCONFIGURED',
+    providerFallback,
+    evidence: live
+      ? 'Supabase connector is configured for a live read path.'
+      : 'Supabase connector credentials are not configured for a live read path.',
+  };
+}

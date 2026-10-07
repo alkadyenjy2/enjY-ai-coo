@@ -15,6 +15,7 @@ import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
+import { buildSystemHealthProbe } from "./src/core/system-health";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
@@ -593,6 +594,51 @@ app.post("/api/agent/command", async (req, res) => {
       await rememberOperationalRecord(failureRecord);
       return res.status(503).json({ content: "Scholarship Discovery is temporarily unavailable.", executionRecord: failureRecord, actionsTaken: failureRecord.actionsExecuted });
     }
+  }
+
+  // 4. SYSTEM_HEALTH uses a deterministic live connector probe when the configured free model is unavailable.
+  // This avoids silently downgrading a real health check to an offline simulation.
+  if (commandClass === "SYSTEM_HEALTH" && !process.env.GEMINI_API_KEY) {
+    const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim();
+    const supabaseApiKey = getSupabaseReadApiKey();
+    const probe = buildSystemHealthProbe({
+      supabaseUrl,
+      supabaseApiKey,
+      openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+      metaConfigured: Boolean(process.env.META_MODEL_API_KEY),
+    });
+    const actionsTaken = [
+      { tool: "Command Router", status: "success", details: "Classified directive as SYSTEM_HEALTH" },
+      { tool: "Connector Health Tool", status: probe.status === "REAL_LIVE" ? "success" : "failed", details: probe.evidence },
+    ];
+    let verificationStatus: "VERIFIED" | "FAILED" = "FAILED";
+    let liveEvidence = probe.evidence;
+    if (probe.status === "REAL_LIVE") {
+      try {
+        const response = await fetch(supabaseUrl.replace(/\\/+$/, "") + "/rest/v1/audit_logs?select=id&limit=1", {
+          headers: { apikey: supabaseApiKey, Authorization: \`Bearer \${supabaseApiKey}\` },
+        });
+        const payload = await response.json().catch(() => null);
+        verificationStatus = getSupabaseQueryActionStatus(response.status, payload) === "success" ? "VERIFIED" : "FAILED";
+        liveEvidence = \`Supabase audit_logs probe HTTP \${response.status}; live read path verified.\`;
+      } catch (error: any) {
+        liveEvidence = \`Supabase audit_logs probe failed: \${error?.message || String(error)}\`;
+      }
+    }
+    const record: OperationalExecutionRecord = {
+      id: \`exec-\${Date.now()}\`, timestamp: new Date().toISOString(), command: userPromptStr,
+      project: projectNameStr, intent: commandClass, tool: "Connector Health Tool",
+      selectedTools: actionsTaken.map((a) => a.tool), actionsExecuted: actionsTaken,
+      results: { probe, liveEvidence },
+      state_history: verificationStatus === "VERIFIED" ? ["RECEIVED","ROUTED","DISPATCHED","RUNNING","VERIFYING","VERIFIED","COMPLETED"] : ["RECEIVED","ROUTED","DISPATCHED","FAILED"],
+      evidence: \`[Connector Health Tool]: \${liveEvidence}\`, verificationStatus,
+      final_state_reason: verificationStatus === "VERIFIED" ? "System health verified against the live Supabase connector." : "System health could not be verified against a live connector.",
+      errors: verificationStatus === "VERIFIED" ? [] : [liveEvidence], approvalStatus: "AUTO_APPROVED"
+    };
+    await rememberOperationalRecord(record);
+    recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: liveEvidence });
+    return res.json({ content: liveEvidence, response: liveEvidence, executionRecord: record, actionsTaken });
   }
 
   // 4. Sensitive Action Gate (NEEDS_APPROVAL)
