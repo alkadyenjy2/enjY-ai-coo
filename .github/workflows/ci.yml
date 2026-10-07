@@ -58,6 +58,8 @@ jobs:
 
       - name: Database intent and verification truthfulness test
         run: node --import tsx --test --test-concurrency=1 tests/database-intent-verification.test.ts
+      - name: Deterministic system health fallback test
+        run: node --import tsx --test --test-concurrency=1 tests/system-health.test.ts
       - name: Scholarship discovery intent and evidence test
         run: node --import tsx --test --test-concurrency=1 tests/scholarship-discovery.test.ts
 
