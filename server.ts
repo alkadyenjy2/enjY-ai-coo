@@ -623,16 +623,16 @@ app.post("/api/agent/command", async (req, res) => {
         verificationStatus = getSupabaseQueryActionStatus(response.status, payload) === "success" ? "VERIFIED" : "FAILED";
         liveEvidence = "Supabase audit_logs probe HTTP " + response.status + "; live read path verified.";
       } catch (error: any) {
-        liveEvidence = \`Supabase audit_logs probe failed: \${error?.message || String(error)}\`;
+        liveEvidence = `Supabase audit_logs probe failed: ${error?.message || String(error)}`;
       }
     }
     const record: OperationalExecutionRecord = {
-      id: \`exec-\${Date.now()}\`, timestamp: new Date().toISOString(), command: userPromptStr,
+      id: `exec-${Date.now()}`, timestamp: new Date().toISOString(), command: userPromptStr,
       project: projectNameStr, intent: commandClass, tool: "Connector Health Tool",
       selectedTools: actionsTaken.map((a) => a.tool), actionsExecuted: actionsTaken,
       results: { probe, liveEvidence },
       state_history: verificationStatus === "VERIFIED" ? ["RECEIVED","ROUTED","DISPATCHED","RUNNING","VERIFYING","VERIFIED","COMPLETED"] : ["RECEIVED","ROUTED","DISPATCHED","FAILED"],
-      evidence: \`[Connector Health Tool]: \${liveEvidence}\`, verificationStatus,
+      evidence: `[Connector Health Tool]: ${liveEvidence}`, verificationStatus,
       final_state_reason: verificationStatus === "VERIFIED" ? "System health verified against the live Supabase connector." : "System health could not be verified against a live connector.",
       errors: verificationStatus === "VERIFIED" ? [] : [liveEvidence], approvalStatus: "AUTO_APPROVED"
     };
