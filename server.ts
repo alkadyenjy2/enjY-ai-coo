@@ -617,11 +617,11 @@ app.post("/api/agent/command", async (req, res) => {
     if (probe.status === "REAL_LIVE") {
       try {
         const response = await fetch(supabaseUrl.replace(/\/+$/, "") + "/rest/v1/audit_logs?select=id&limit=1", {
-          headers: { apikey: supabaseApiKey, Authorization: \`Bearer \${supabaseApiKey}\` },
+          headers: { apikey: supabaseApiKey, Authorization: "Bearer " + supabaseApiKey },
         });
         const payload = await response.json().catch(() => null);
         verificationStatus = getSupabaseQueryActionStatus(response.status, payload) === "success" ? "VERIFIED" : "FAILED";
-        liveEvidence = \`Supabase audit_logs probe HTTP \${response.status}; live read path verified.\`;
+        liveEvidence = "Supabase audit_logs probe HTTP " + response.status + "; live read path verified.";
       } catch (error: any) {
         liveEvidence = \`Supabase audit_logs probe failed: \${error?.message || String(error)}\`;
       }
