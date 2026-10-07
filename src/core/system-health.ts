@@ -33,3 +33,7 @@ export function buildSystemHealthProbe(input: SystemHealthProbeInput): SystemHea
       : 'UNCONFIGURED: Supabase connector credentials are not configured for a live read path.',
   };
 }
+
+export function isSystemHealthCommand(prompt: string): boolean {
+  return /^(system_health|system health)$/i.test(prompt.trim());
+}
