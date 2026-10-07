@@ -323,8 +323,11 @@ function isToolAllowed(intent: string, toolName: string): boolean {
 
 export function getReportingVerificationStatus(
   actions: Array<{ tool: string; status: string }>
-): "VERIFIED" | "NOT_REQUIRED" {
-  return hasRealExecutionStarted(actions) ? "VERIFIED" : "NOT_REQUIRED";
+): "VERIFIED" | "FAILED" | "NOT_REQUIRED" {
+  const relevant = actions.filter((action) => /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health/i.test(action.tool));
+  if (relevant.some((action) => ["error", "failed"].includes(action.status))) return "FAILED";
+  if (relevant.some((action) => ["success", "queued"].includes(action.status))) return "VERIFIED";
+  return "NOT_REQUIRED";
 }
 
 export function resolveCommandVerificationStatus(
