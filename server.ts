@@ -15,7 +15,7 @@ import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
-import { buildSystemHealthProbe } from "./src/core/system-health";
+import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
@@ -267,7 +267,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
   if (isScholarshipDiscoveryIntent(promptStr)) return "SCHOLARSHIP_DISCOVERY";
 
-  if (/تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
+  if (isSystemHealthCommand(p) || /تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
     return "SYSTEM_HEALTH";
   }
 
