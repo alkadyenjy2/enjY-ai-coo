@@ -29,7 +29,7 @@ export function buildSystemHealthProbe(input: SystemHealthProbeInput): SystemHea
     status: live ? 'REAL_LIVE' : 'UNCONFIGURED',
     providerFallback,
     evidence: live
-      ? 'Supabase connector is configured for a live read path.'
-      : 'Supabase connector credentials are not configured for a live read path.',
+      ? 'REAL_LIVE: Supabase connector is configured for a live read path.'
+      : 'UNCONFIGURED: Supabase connector credentials are not configured for a live read path.',
   };
 }
