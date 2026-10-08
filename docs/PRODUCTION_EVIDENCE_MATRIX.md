@@ -1,9 +1,8 @@
 # JARVIS / ENJY AI COO — Production Evidence Matrix
 
-Generated: 2026-09-27
-Evidence snapshot application commit: `9b5b09bef1cbbe1a7b21d1bcf402d80323dddfd6`
-Evidence snapshot production deployment: `dpl_Ch4YHV9EAyBGrWepeki4N7TBUJF7`
-Current production alias: `https://enj-y-ai-coo.vercel.app`
+Generated: 2026-10-08
+Evidence snapshot application commit: `4369b56be8d609d1bce2b9a25ef801d0bc5570dc`
+Current production deployment remains: `dpl_BMJTkguiSx1SSpu7YKDJzLFPKYbP` (READY, production, commit `7844662...`). A new deployment of the current head is currently blocked by the Vercel Hobby daily deployment quota; no paid upgrade is being used.
 
 ## Evidence policy
 
@@ -31,6 +30,13 @@ Static/spec evidence is kept separate from behavioral execution evidence. No cre
 | Prompt optimization | NOT VERIFIED | No fresh benchmark/evaluation evidence establishes a production optimization delta. |
 | Handoff/context-rot protection | NOT VERIFIED | Existing planner/recovery/context components are present, but no fresh behavioral benchmark proving context-rot protection was run in this audit. |
 | Required human inputs | BLOCKED | Production Telegram secrets/identity: `TELEGRAM_WEBHOOK_SECRET`, `JARVIS_TELEGRAM_REFRESH_TOKEN`, `JARVIS_TELEGRAM_ORGANIZATION_ID`, `JARVIS_TELEGRAM_ALLOWED_CHAT_IDS`; plus any voice/browser provider credentials required for behavioral E2E. |
+
+## Current release gate
+
+- **Repository head:** CI and Architecture Freeze both pass on commit `4369b56...`.
+- **Production:** READY deployment is serving the previous production commit `7844662...`; the security hardening commit is verified in GitHub Actions but not yet deployed to Vercel because the free deployment quota is exhausted.
+- **Zero-cost policy:** no paid Vercel upgrade or new paid provider was introduced.
+- **Customer-facing readiness:** the public portfolio/case-study material is recruiter-safe; the production operator remains an authenticated application, not a public anonymous command surface.
 
 ## Important non-claims
 
