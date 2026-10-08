@@ -22,7 +22,7 @@ I build AI-powered operational systems that turn natural-language business reque
 ## AI CORE COO — resume bullets
 
 - Designed and built an AI operations command center that routes natural-language business requests into governed execution workflows.
-- Implemented durable Temporal orchestration with explicit workflow states, retries, human-approval signaling, failure handling, and verification gates.
+- Implemented durable execution with explicit workflow states, retries, human-approval signaling, failure handling, and verification gates.
 - Integrated external capabilities behind application-owned execution adapters, including Browser Use Cloud, research, publishing, payments, leads, CRM, and operational audit paths.
 - Connected backend operational records to the command-center execution history so UI status reflects real execution records instead of dashboard-only mock counters.
 - Added automated CI coverage for build/type correctness, operational-log mapping, Browser Use adapter behavior, and Browser Use execution through Temporal.
@@ -32,7 +32,7 @@ I build AI-powered operational systems that turn natural-language business reque
 
 ### Architecture
 
-Voice/Text → AI CORE COO → Intent/Tool Selection → Temporal → Approval/Execute/Verify → Provider Adapters → Audit/Execution History/Memory.
+Voice/Text → AI CORE COO → Intent/Tool Selection → Approval/Execute/Verify → Provider Adapters → Audit/Execution History/Memory.
 
 ### Reliability
 
