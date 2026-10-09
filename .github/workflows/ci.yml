@@ -35,6 +35,9 @@ jobs:
       - name: Lint / typecheck
         run: npm run lint
 
+      - name: Personal-mode authentication fail-closed test
+        run: npm run test:auth-personal-mode
+
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 
