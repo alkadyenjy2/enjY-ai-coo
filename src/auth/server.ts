@@ -44,8 +44,12 @@ function getServerSecretKey(): string | null {
   return secret || null;
 }
 
+export function isPersonalModeEnabled(): boolean {
+  return process.env.JARVIS_PERSONAL_MODE === "true";
+}
+
 async function authenticatePersonalModeRequest(): Promise<AuthContext | null> {
-  if (process.env.JARVIS_PERSONAL_MODE === "false") return null;
+  if (!isPersonalModeEnabled()) return null;
 
   const config = getRuntimeConfig();
   const serverSecret = getServerSecretKey();
