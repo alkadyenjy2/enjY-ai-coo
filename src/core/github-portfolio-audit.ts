@@ -78,7 +78,18 @@ export async function auditPortfolioRepositories(options: {
 
       const metadata = await repoResponse.json() as { default_branch?: string; private?: boolean; html_url?: string };
       const evidence = [`GitHub repository metadata returned HTTP ${repoResponse.status}.`];
-      const workflowResponse = await fetchImpl(`${apiBase}/actions/runs?per_page=1`, { headers, signal: AbortSignal.timeout(8000) });
+      const defaultBranch = typeof metadata.default_branch === "string" ? metadata.default_branch.trim() : "";
+      if (!defaultBranch) {
+        return {
+          project: project.name,
+          repository: `${owner}/${repo}`,
+          status: "partial",
+          visibility: metadata.private ? "private" : "public",
+          evidence,
+          reason: "Repository is reachable, but GitHub did not return a default branch; no workflow status is inferred.",
+        };
+      }
+      const workflowResponse = await fetchImpl(`${apiBase}/actions/runs?branch=${encodeURIComponent(defaultBranch)}&per_page=1`, { headers, signal: AbortSignal.timeout(8000) });
 
       if (!workflowResponse.ok) {
         return {
