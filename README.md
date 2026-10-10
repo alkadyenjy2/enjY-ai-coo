@@ -2,11 +2,16 @@
 
 > AI automation systems that turn business conversations and operational events into qualified leads, CRM records, booked appointments, follow-ups, and verifiable execution.
 
+## Canonical Operating Context
+
+- [JARVIS Master Portfolio Context](docs/MASTER_PORTFOLIO_CONTEXT.md) — project purposes, canonical stacks, integrations, goals, known blockers, and portfolio execution guardrails.
+- [Portfolio readiness audit](docs/PORTFOLIO_READINESS_AUDIT.md)
+- [Portfolio fallback and quota policy](PORTFOLIO_FALLBACK_POLICY.md)
+
 ## Career / ATS Documents
 
 - [Canonical AI Operations & Automation resume](docs/ENJY_ALKADY_AI_OPERATIONS_RESUME.md)
 - [Final ATS audit and verification record](docs/ATS_FINAL_AUDIT.md)
-- [Portfolio readiness audit](docs/PORTFOLIO_READINESS_AUDIT.md)
 
 ## Portfolio Case Study — Clinic Lead-to-Booking Automation
 
