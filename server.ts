@@ -22,6 +22,7 @@ import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
 import { adminClient, claimApprovedDurableJob, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 import { discoverScholarships, formatScholarshipResults, isScholarshipDiscoveryIntent } from "./src/agents/scholarship-discovery";
+import { createOfflineFallbackResult } from "./src/execution/offline-fallback.ts";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -757,43 +758,28 @@ Rules for Response:
     `.trim();
 
     if (!ai && !isOpenAIRequested) {
-      const fallbackContent = `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock the configured Gemini fallback engine.`;
-      const fallbackActions = [
-        { tool: 'Memory System', status: 'success', details: 'Retrieved 3 memory items' },
-        { tool: 'Connector Hub', status: 'success', details: 'Verified configured connector state without external side effects' }
-      ];
-      const fallbackRecord: OperationalExecutionRecord = {
-        id: `exec-${Date.now()}`,
-        timestamp: new Date().toISOString(),
+      const blockedResult = createOfflineFallbackResult({
         command: userPromptStr,
         project: projectNameStr,
         intent: commandClass,
-        tool: 'Offline Fallback Engine',
-        selectedTools: fallbackActions.map((action) => action.tool),
-        actionsExecuted: fallbackActions,
-        results: { responseSnippet: fallbackContent.slice(0, 150), mode: 'offline_fallback' },
-        state_history: ['RECEIVED', 'ROUTED', 'DISPATCHED', 'EXECUTED', 'COMPLETED'],
-        evidence: '[Offline Fallback Engine]: No Gemini credential was available; no external side effect was attempted.',
-        verificationStatus: 'NOT_REQUIRED',
-        final_state_reason: 'Offline fallback response generated without external side effects.',
-        errors: [],
-        approvalStatus: 'AUTO_APPROVED'
-      };
-      await rememberOperationalRecord(fallbackRecord);
-      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: fallbackRecord, content: fallbackContent });
+        missingDependency: 'GEMINI_LIVE_DEPENDENCY_UNAVAILABLE; verified free-first routing is not connected to this execution path'
+      });
+      const blockedRecord: OperationalExecutionRecord = blockedResult.executionRecord;
+      await rememberOperationalRecord(blockedRecord);
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: blockedRecord, content: blockedResult.content });
 
-      return res.json({
-        content: fallbackContent,
-        executionRecord: fallbackRecord,
+      return res.status(503).json({
+        content: blockedResult.content,
+        executionRecord: blockedRecord,
         thoughtProcess: {
-          understand: `User requested: "${prompt}".`,
-          inspect: 'Verified offline fallback state.',
-          decide: 'Construct structured operational report.',
-          execute: 'Simulate workflow step completion without external side effects.',
-          verify: 'Verification Status: NOT_REQUIRED; live AI execution was not claimed.',
-          report: 'Delivered fallback report and recorded the execution event.'
+          understand: 'User requested: "' + prompt + '".',
+          inspect: 'The configured live provider is unavailable.',
+          decide: 'Stop safely instead of simulating execution.',
+          execute: 'No project, database, deployment, or external action was attempted.',
+          verify: 'Verification failed because the command did not execute.',
+          report: 'Recorded a BLOCKED execution with the dependency reason.'
         },
-        actionsTaken: fallbackActions
+        actionsTaken: []
       });
     }
 
