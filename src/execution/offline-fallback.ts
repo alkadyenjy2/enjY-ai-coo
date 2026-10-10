@@ -20,7 +20,7 @@ export interface OfflineFallbackRecord {
   verificationStatus: "FAILED";
   final_state_reason: string;
   errors: string[];
-  approvalStatus: "NOT_VERIFIED";
+  approvalStatus: "REQUIRES_HUMAN_APPROVAL";
 }
 
 export function createOfflineFallbackResult(input: OfflineFallbackInput): {
@@ -59,8 +59,9 @@ export function createOfflineFallbackResult(input: OfflineFallbackInput): {
     verificationStatus: "FAILED",
     final_state_reason: `Execution stopped safely because ${reason}.`,
     errors: [reason],
-    // A blocked fallback cannot assert that a human approved the command.
-    approvalStatus: "NOT_VERIFIED",
+    // A blocked fallback cannot claim automatic approval; preserve the existing
+    // operational contract by requiring human approval before any later retry.
+    approvalStatus: "REQUIRES_HUMAN_APPROVAL",
   };
 
   return { content, executionRecord };
