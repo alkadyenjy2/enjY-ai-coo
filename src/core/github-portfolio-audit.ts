@@ -101,7 +101,7 @@ export async function auditPortfolioRepositories(options: {
       return {
         project: project.name,
         repository: `${owner}/${repo}`,
-        status: latest ? "verified" : "partial",
+        status: latest?.status === "completed" && latest.conclusion === "success" ? "verified" : "partial",
         defaultBranch: metadata.default_branch,
         visibility: metadata.private ? "private" : "public",
         latestWorkflow: latest ? {
@@ -111,7 +111,7 @@ export async function auditPortfolioRepositories(options: {
           url: latest.html_url || metadata.html_url || `https://github.com/${owner}/${repo}/actions`,
         } : null,
         evidence,
-        ...(latest ? {} : { reason: "Repository metadata is verified, but no workflow run was returned; CI health remains unverified." }),
+        ...((latest?.status === "completed" && latest.conclusion === "success") ? {} : { reason: latest ? `Repository metadata is verified, but latest workflow is not successful (status=${latest.status || "unknown"}, conclusion=${latest.conclusion ?? "none"}); CI health remains unverified.` : "Repository metadata is verified, but no workflow run was returned; CI health remains unverified." }),
       };
     } catch (error) {
       return {
