@@ -187,7 +187,7 @@ export default function App() {
       const response = await apiFetch('/api/agent/approval', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approvalJobId: pendingApproval.id }),
+        body: JSON.stringify({ organization_id: organizationId, approvalJobId: pendingApproval.id }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== 'APPROVED') throw new Error(data?.error || 'Approval failed');
