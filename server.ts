@@ -16,6 +16,7 @@ import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
+import { getPortfolioContext } from "./src/core/portfolio-context";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
@@ -740,6 +741,9 @@ Active Project Context:
 - Name: ${activeProject?.name || 'Core Operations HQ'}
 - Objective: ${activeProject?.objective || 'Central Operations'}
 - Rules: ${(activeProject?.projectRules || []).join('; ')}
+
+Canonical Portfolio Context:
+${getPortfolioContext()}
 
 Relevant Memory Context:
 ${(memoryContext || []).map((m: any) => `[${m.layer.toUpperCase()}] ${m.title}: ${m.content}`).join('\n')}
