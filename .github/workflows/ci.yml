@@ -35,6 +35,9 @@ jobs:
       - name: Lint / typecheck
         run: npm run lint
 
+      - name: Workflow Studio must not fabricate live success
+        run: node --test tests/workflow-studio-no-fake-success.test.mjs
+
       - name: Personal-mode authentication fail-closed test
         run: npm run test:auth-personal-mode
 
