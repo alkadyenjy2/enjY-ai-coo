@@ -17,6 +17,8 @@ import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
 import { getPortfolioContext } from "./src/core/portfolio-context";
+import { auditPortfolioRepositories } from "./src/core/github-portfolio-audit";
+import { isPortfolioAuditCommand, isPortfolioAuditFullyVerified } from "./src/core/portfolio-audit-policy";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
@@ -248,8 +250,8 @@ const recentCommandCache = new Map<string, { timestamp: number; record: Operatio
 
 function hasRealExecutionStarted(actions: Array<{ tool: string; status: string }>): boolean {
   return actions.some((action) =>
-    /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health/i.test(action.tool)
-    && ["success", "queued", "error", "failed"].includes(action.status)
+    /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health|Portfolio Repository Audit/i.test(action.tool)
+    && ["success", "queued", "warning", "error", "failed"].includes(action.status)
   );
 }
 
@@ -269,7 +271,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
   if (isScholarshipDiscoveryIntent(promptStr)) return "SCHOLARSHIP_DISCOVERY";
 
-  if (isSystemHealthCommand(p) || /تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
+  if (isSystemHealthCommand(p) || isPortfolioAuditCommand(p) || /تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
     return "SYSTEM_HEALTH";
   }
 
@@ -307,8 +309,8 @@ const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
   SCHOLARSHIP_DISCOVERY: ["discover_scholarships"],
   EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task", "execute_media"],
-  SYSTEM_HEALTH: ["check_connector_status"],
-  REPORTING: ["check_connector_status"],
+  SYSTEM_HEALTH: ["check_connector_status", "audit_portfolio_projects"],
+  REPORTING: ["check_connector_status", "audit_portfolio_projects"],
   RESEARCH: [],
   RESEARCH_PLANNING: [],
   PLANNING: [],
@@ -326,8 +328,8 @@ function isToolAllowed(intent: string, toolName: string): boolean {
 export function getReportingVerificationStatus(
   actions: Array<{ tool: string; status: string }>
 ): "VERIFIED" | "FAILED" | "NOT_REQUIRED" {
-  const relevant = actions.filter((action) => /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health/i.test(action.tool));
-  if (relevant.some((action) => ["error", "failed"].includes(action.status))) return "FAILED";
+  const relevant = actions.filter((action) => /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health|Portfolio Repository Audit/i.test(action.tool));
+  if (relevant.some((action) => ["error", "failed", "warning"].includes(action.status))) return "FAILED";
   if (relevant.some((action) => ["success", "queued"].includes(action.status))) return "VERIFIED";
   return "NOT_REQUIRED";
 }
@@ -872,15 +874,27 @@ Rules for Response:
         }
       );
     } else if (commandClass === "SYSTEM_HEALTH" || commandClass === "REPORTING") {
-      allowedFuncDecls.push({
-        name: "check_connector_status",
-        description: "Checks real status of external connectors.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: { connectorId: { type: Type.STRING } },
-          required: ["connectorId"]
+      allowedFuncDecls.push(
+        {
+          name: "check_connector_status",
+          description: "Checks real status of external connectors.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: { connectorId: { type: Type.STRING } },
+            required: ["connectorId"]
+          }
+        },
+        {
+          name: "audit_portfolio_projects",
+          description: "Read-only audit of canonical GitHub repositories and latest GitHub Actions runs. Reports private/unavailable repositories as not checked; never changes code or deployment state.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              projectNames: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Optional exact project names to audit. Omit to audit every repository with a verified canonical URL." }
+            }
+          }
         }
-      });
+      );
     }
     const tools = allowedFuncDecls.length > 0 ? [{ functionDeclarations: allowedFuncDecls }] : undefined;
 
@@ -921,11 +935,9 @@ Rules for Response:
           }))
         };
 
-    const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [
-      { tool: 'Command Router', status: 'success', details: `Classified directive as '${commandClass}'` },
-      { tool: isOpenAIModel ? 'OpenAI Astra Engine' : isMetaModel ? 'Meta Muse Spark Engine' : 'Gemini Engine', status: 'success', details: `Executed via ${selectedModel}` },
-      { tool: 'Memory Sync', status: 'success', details: 'Scanned 6 active memory items' }
-    ];
+    // Only append actions after the corresponding adapter actually runs.
+    // Classification, model selection, and reading in-memory context are not external executions.
+    const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [];
 
     let responseText = modelResponse.text;
     let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "NOT_REQUIRED";
@@ -1221,19 +1233,74 @@ Rules for Response:
         }
       } else if (call.name === "check_connector_status") {
         const connectorId = (call.args as any)?.connectorId || "supabase";
-        const isSupabase = connectorId === "supabase";
-        const statusStr = isSupabase && supabaseUrl && supabaseApiKey ? "REAL_LIVE" : "UNCONFIGURED";
+        let statusStr = "UNCONFIGURED";
+        let probeStatus: number | null = null;
 
+        if (connectorId === "supabase" && supabaseUrl && supabaseApiKey) {
+          try {
+            const probe = await fetch(new URL("/auth/v1/health", supabaseUrl), {
+              headers: { apikey: supabaseApiKey },
+              signal: AbortSignal.timeout(8000),
+            });
+            probeStatus = probe.status;
+            statusStr = probe.ok ? `REAL_LIVE_HTTP_${probe.status}` : `UNHEALTHY_HTTP_${probe.status}`;
+          } catch {
+            statusStr = "UNREACHABLE";
+          }
+        }
+
+        const verified = statusStr.startsWith("REAL_LIVE_HTTP_");
         actionsTakenList.push({
           tool: 'Connector Health Tool',
-          status: 'success',
-          details: `Probed connector '${connectorId}': ${statusStr}`
+          status: verified ? 'success' : 'failed',
+          details: `Live probe for connector '${connectorId}': ${statusStr}${probeStatus === null ? "" : ` (HTTP ${probeStatus})`}`
         });
+        if (!verified) {
+          verificationStatus = "FAILED";
+          executionErrors.push(`CONNECTOR_PROBE_${connectorId.toUpperCase()}_${statusStr}`);
+        } else {
+          verificationStatus = "VERIFIED";
+        }
 
         responseText = `### 🔌 حالة الموصل المطلوب (${connectorId})
 * **الحالة:** \`${statusStr}\`
-* **المصادقة:** ${statusStr === 'REAL_LIVE' ? 'مفعلة وتدعم الاتصال المباشر' : 'غير متوفرة في بيئة الأسرار (UNCONFIGURED)'}`;
+* **دليل الاتصال:** ${verified ? `تم فحص نقطة الصحة فعليًا (HTTP ${probeStatus}).` : 'لم يثبت الاتصال الفعلي؛ لا يُعد وجود إعدادات وحده دليل نجاح.'}`;
+      } else if (call.name === "audit_portfolio_projects") {
+        const requestedNames = Array.isArray((call.args as any)?.projectNames)
+          ? (call.args as any).projectNames.filter((name: unknown): name is string => typeof name === "string")
+          : undefined;
+        const audit = await auditPortfolioRepositories({
+          token: process.env.GITHUB_TOKEN,
+          projectNames: requestedNames,
+        });
+        const verifiedCount = audit.results.filter((result) => result.status === "verified").length;
+        const partialCount = audit.results.filter((result) => result.status === "partial").length;
+        const allVerified = isPortfolioAuditFullyVerified(audit.results);
+        const anyEvidence = verifiedCount > 0 || partialCount > 0;
+
+        actionsTakenList.push({
+          tool: "Portfolio Repository Audit",
+          status: allVerified ? "success" : anyEvidence ? "warning" : "error",
+          details: `Read-only GitHub audit at ${audit.auditedAt}: ${verifiedCount}/${audit.results.length} repositories fully verified, ${partialCount} partial, ${audit.results.length - verifiedCount - partialCount} blocked/not checked. No code or deployment was changed.`,
+        });
+        verificationStatus = allVerified ? "VERIFIED" : "FAILED";
+        if (!allVerified) executionErrors.push("PORTFOLIO_AUDIT_PARTIAL: at least one repository or latest workflow run lacks verifiable evidence.");
+        responseText = `### Portfolio Repository Audit
+- **Checked:** ${audit.results.length}
+- **Fully verified:** ${verifiedCount}
+- **Partial:** ${partialCount}
+- **Not checked / blocked:** ${audit.results.length - verifiedCount - partialCount}
+- **Source:** GitHub REST API
+- **Timestamp:** ${audit.auditedAt}
+
+${JSON.stringify(audit.results, null, 2)}`;
       }
+    }
+
+    if (!responseText) {
+      responseText = "No model response was generated; no external action was executed.";
+      verificationStatus = "FAILED";
+      executionErrors.push("MODEL_RETURNED_EMPTY_RESPONSE");
     }
 
     // Save Execution Record into Operational Memory.
@@ -1270,10 +1337,6 @@ Rules for Response:
 
     await rememberOperationalRecord(execRecord);
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: execRecord, content: responseText });
-
-    if (!responseText) {
-      responseText = "Execution complete with no text output.";
-    }
 
     return res.json({
       content: responseText,

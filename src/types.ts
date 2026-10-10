@@ -94,7 +94,7 @@ export interface Project {
   name: string;
   objective: string;
   targetUsers: string;
-  status: 'active' | 'planning' | 'paused' | 'completed';
+  status: 'active' | 'planning' | 'paused' | 'completed' | 'blocked';
   inheritedCoreCapabilities: string[];
   projectWorkflows: string[];
   projectTools: string[];
@@ -105,6 +105,11 @@ export interface Project {
     automationsActive: number;
     lessonsRecorded: number;
   };
+  repositoryUrl?: string;
+  sourceNotes?: string;
+  blockers?: string[];
+  evidenceStatus?: 'verified' | 'blocked' | 'not_checked';
+  kpisVerified?: boolean;
 }
 
 export interface LessonLearned {

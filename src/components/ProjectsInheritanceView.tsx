@@ -150,6 +150,14 @@ export const ProjectsInheritanceView: React.FC<ProjectsInheritanceViewProps> = (
 
                 <p className="text-xs text-zinc-300 leading-relaxed mb-3 font-sans">{proj.objective}</p>
 
+                <div className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-2">
+                  <div className="text-[10px] font-bold uppercase text-amber-300">Evidence: {proj.evidenceStatus === 'verified' ? 'Verified' : proj.evidenceStatus === 'blocked' ? 'Blocked' : 'Not checked'}</div>
+                  {proj.blockers?.slice(0, 2).map((blocker, index) => (
+                    <p key={index} className="mt-1 text-[10px] leading-relaxed text-zinc-300">• {blocker}</p>
+                  ))}
+                  {proj.sourceNotes && <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">{proj.sourceNotes}</p>}
+                </div>
+
                 {/* Inherited Capabilities List */}
                 <div className="space-y-1 mb-3 font-mono">
                   <div className="text-[10px] font-bold uppercase text-zinc-500">Inherited Core Capabilities:</div>
@@ -176,7 +184,7 @@ export const ProjectsInheritanceView: React.FC<ProjectsInheritanceViewProps> = (
               </div>
 
               <div className="pt-2 border-t border-zinc-800 flex items-center justify-between font-mono">
-                <span className="text-[10px] text-zinc-500">KPI: {proj.kpis.tasksCompleted} Tasks</span>
+                <span className="text-[10px] text-zinc-500">KPI: {proj.kpisVerified ? `${proj.kpis.tasksCompleted} Tasks` : 'Not verified'}</span>
                 {!isSelected && (
                   <button
                     onClick={() => onSelectProject(proj)}

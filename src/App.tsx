@@ -12,7 +12,8 @@ import { ProjectsInheritanceView } from './components/ProjectsInheritanceView';
 import { LessonsLearnedView } from './components/LessonsLearnedView';
 import { ClinicDemoView } from './components/clinic/ClinicDemoView';
 import { AuthScreen } from './components/AuthScreen';
-import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
+import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
+import { canonicalPortfolioProjects as initialProjects } from './data/canonicalPortfolio';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 import { apiFetch } from './auth/client';
@@ -117,15 +118,22 @@ export default function App() {
       const hasValidVerification = verificationStatus === 'VERIFIED' || verificationStatus === 'NOT_REQUIRED';
       const hasErrors = Array.isArray(executionRecord?.errors) && executionRecord.errors.length > 0;
       const executionVerified = hasExecutedState && hasEvidence && hasValidVerification && !hasErrors;
+      const answerOnly = !hasExecutedState
+        && verificationStatus === 'NOT_REQUIRED'
+        && !hasErrors
+        && typeof data.content === 'string'
+        && data.content.trim().length > 0;
 
-      if (!executionVerified) {
+      if (!executionVerified && !answerOnly) {
         throw new Error('JARVIS command completed without sufficient execution evidence. Verification is pending.');
       }
 
       const agentMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'agent',
-        content: data.content || 'Command completed with recorded execution evidence.',
+        content: answerOnly
+          ? `${data.content}\n\nℹ️ No external action was executed; this is a response only, not a verified project change.`
+          : data.content || 'Command completed with recorded execution evidence.',
         timestamp: new Date().toISOString(),
         thoughtProcess: data.thoughtProcess,
         actionsTaken: data.actionsTaken
