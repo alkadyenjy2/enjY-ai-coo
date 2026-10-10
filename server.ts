@@ -185,7 +185,7 @@ app.use("/api/clinic", clinicRouter);
 app.use(["/api/agent", "/api/connectors", "/api/env-status"], requireAuth);
 app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard"], requireOrganizationAccess);
 
-app.post("/api/agent/approval", async (req, res) => {
+app.post("/api/agent/approval", requireOrganizationAccess, async (req, res) => {
   const auth = getAuthContext(res);
   const organizationId = getOrganizationAccess(res)?.organizationId || "";
   const userId = String(auth?.user.id || "").trim();
