@@ -85,14 +85,24 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 shrink-0 font-mono">
-          <a
-            href="https://zeoutsourse.app.n8n.cloud/assistant/d3e4813d-7342-4a62-8a54-8ae705734554"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm"
-          >
-            <Globe className="w-3.5 h-3.5" /> Open JARVIS Agent in n8n <ArrowRight className="w-3.5 h-3.5" />
-          </a>
+          <div className="flex flex-col items-start gap-1">
+            <a
+              href="https://zeoutsourse.app.n8n.cloud/projects/ys8AmzHPCzQWPTBZ/agents/mxCjUpZ8Qh7rwvD7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm"
+            >
+              <Globe className="w-3.5 h-3.5" /> Open canonical JARVIS AI COO Agent <ArrowRight className="w-3.5 h-3.5" />
+            </a>
+            <a
+              href="https://zeoutsourse.app.n8n.cloud/assistant/d3e4813d-7342-4a62-8a54-8ae705734554"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-1 text-[10px] text-zinc-400 underline underline-offset-2 hover:text-zinc-200"
+            >
+              Open the supplied assistant view
+            </a>
+          </div>
           <button
             type="button"
             onClick={handleExecute}
