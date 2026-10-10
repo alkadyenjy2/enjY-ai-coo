@@ -62,3 +62,22 @@ test("project-name filter audits only explicitly requested projects", async () =
   assert.equal(audit.results[0].project, "Another Project");
   assert.equal(calls, 2);
 });
+
+test("a failed or in-progress latest workflow is not reported as fully verified", async () => {
+  for (const latest of [
+    { status: "completed", conclusion: "failure", created_at: "2026-10-10T00:00:00Z", html_url: "https://github.com/example/project/actions/runs/124" },
+    { status: "in_progress", conclusion: null, created_at: "2026-10-10T00:00:00Z", html_url: "https://github.com/example/project/actions/runs/125" },
+  ]) {
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/actions/runs?per_page=1")) {
+        return new Response(JSON.stringify({ workflow_runs: [latest] }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ default_branch: "main", private: false, html_url: "https://github.com/example/project" }), { status: 200 });
+    }) as typeof fetch;
+
+    const audit = await auditPortfolioRepositories({ fetchImpl, projects: [project] });
+    assert.equal(audit.results[0].status, "partial");
+    assert.match(audit.results[0].reason || "", /latest workflow is not successful/i);
+    assert.equal(audit.results[0].latestWorkflow?.conclusion, latest.conclusion);
+  }
+});
