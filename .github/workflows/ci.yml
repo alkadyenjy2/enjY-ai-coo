@@ -63,6 +63,8 @@ jobs:
         run: node --import tsx --test --test-concurrency=1 tests/database-intent-verification.test.ts
       - name: Deterministic system health fallback test
         run: node --import tsx --test --test-concurrency=1 tests/system-health.test.ts
+      - name: Canonical portfolio context test
+        run: node --import tsx --test --test-concurrency=1 tests/portfolio-context.test.ts
       - name: Scholarship discovery intent and evidence test
         run: node --import tsx --test --test-concurrency=1 tests/scholarship-discovery.test.ts
 
