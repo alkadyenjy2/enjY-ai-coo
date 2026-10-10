@@ -127,7 +127,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   return (
-    <aside className="w-full md:w-64 bg-zinc-950 border-r border-zinc-800 text-zinc-300 flex flex-col justify-between p-3 shrink-0">
+    <aside className="jarvis-glass w-full md:w-64 border-r text-zinc-300 flex flex-col justify-between p-3 shrink-0">
       <div className="space-y-1">
         <div className="px-3 py-2 text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-500">
           Core AI OS Architecture
@@ -141,8 +141,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => onSelectView(item.id)}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
                 isActive
-                  ? 'bg-zinc-800/90 text-white border border-zinc-700 shadow-sm'
-                  : 'hover:bg-zinc-900/80 text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-emerald-300/[0.09] text-white border border-emerald-300/20 shadow-[0_10px_30px_rgba(0,0,0,0.14)]'
+                    : 'hover:bg-white/[0.035] text-zinc-400 hover:text-zinc-200'
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">

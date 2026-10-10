@@ -198,7 +198,8 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
+    <div className="jarvis-shell relative min-h-screen text-zinc-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-zinc-950">
+      <div className="jarvis-grid absolute inset-x-0 top-0 h-[38rem]" aria-hidden="true" />
       {pendingApproval && (
         <div className="border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
@@ -217,7 +218,7 @@ export default function App() {
         </div>
       )}
       <Navbar activeModel={activeModel} models={models} onSelectModel={setActiveModel} activeProject={activeProject} projects={projects} onSelectProject={setActiveProject} onOpenOnboarding={() => setIsOnboardingOpen(true)} onOpenCommandCenter={() => setCurrentView('chat')} />
-      <div className="mx-auto w-full max-w-7xl border-x border-b border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-center text-[11px] font-medium tracking-wide text-emerald-200">FREE-FIRST AI ROUTING • VERIFY BEFORE DONE • PAID ROUTES REQUIRE EXPLICIT APPROVAL</div>
+      <div className="relative mx-auto w-full max-w-7xl border-x border-b border-emerald-300/15 bg-emerald-300/[0.045] px-4 py-2 text-center text-[11px] font-medium tracking-[0.08em] text-emerald-100/80">FREE-FIRST AI ROUTING <span className="mx-2 text-emerald-300/40">•</span> VERIFY BEFORE DONE <span className="mx-2 text-emerald-300/40">•</span> PAID ROUTES REQUIRE EXPLICIT APPROVAL</div>
       <div className="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row">
         <Sidebar currentView={currentView} onSelectView={setCurrentView} memoryCount={memoryItems.length} connectorsCount={connectors.length} workflowsCount={workflows.length} lessonsCount={lessons.length} />
         <main className="flex-1 p-4 md:p-6 overflow-y-auto">
