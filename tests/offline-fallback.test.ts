@@ -19,6 +19,8 @@ test('offline fallback reports BLOCKED and never fabricates successful actions',
   assert.equal(result.executionRecord.verificationStatus, 'FAILED');
   assert.equal(result.executionRecord.results.status, 'BLOCKED');
   assert.match(result.executionRecord.evidence, /No external action was attempted/);
+  assert.equal(result.executionRecord.approvalStatus, 'NOT_VERIFIED');
+  assert.notEqual(result.executionRecord.approvalStatus, 'AUTO_APPROVED');
 });
 
 test('offline fallback preserves the real command and project in the audit record', () => {
