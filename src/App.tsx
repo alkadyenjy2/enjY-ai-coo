@@ -12,7 +12,8 @@ import { ProjectsInheritanceView } from './components/ProjectsInheritanceView';
 import { LessonsLearnedView } from './components/LessonsLearnedView';
 import { ClinicDemoView } from './components/clinic/ClinicDemoView';
 import { AuthScreen } from './components/AuthScreen';
-import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialProjects, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
+import { initialUserProfile, initialMemoryItems, initialConnectors, initialWorkflows, initialLessonsLearned, initialAIModels, initialChatMessages, initialCommandTemplates } from './data/mockInitialData';
+import { canonicalPortfolioProjects as initialProjects } from './data/canonicalPortfolio';
 import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, AIModelOption, ExecutionLog, ChatMessage, CommandTemplate } from './types';
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 import { apiFetch } from './auth/client';
@@ -87,6 +88,29 @@ export default function App() {
     setIsAgentLoading(true);
     try {
       if (!authenticated || !organizationId) throw new Error('Your account is not linked to an authorized organization.');
+      if (!approvalJobId) {
+        const n8nResponse = await apiFetch('/api/agent/n8n-command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organization_id: organizationId, prompt: text }),
+        });
+        const n8nData = await n8nResponse.json().catch(() => ({}));
+        if (n8nResponse.status === 202 && n8nData?.status === 'WAITING_FOR_APPROVAL') {
+          const approvalLink = typeof n8nData.approvalUrl === 'string' && n8nData.approvalUrl.startsWith('https://')
+            ? '\n\n[Review and approve in n8n](' + n8nData.approvalUrl + ')'
+            : '';
+          setMessages(prev => [...prev, {
+            id: `msg-${Date.now() + 1}`,
+            sender: 'agent',
+            content: (n8nData.message || 'JARVIS sent the command to n8n.') + '\n\nStatus: WAITING_FOR_APPROVAL' + approvalLink,
+            timestamp: new Date().toISOString(),
+          }]);
+          return;
+        }
+        if (!(n8nResponse.status === 503 && n8nData?.status === 'UNCONFIGURED')) {
+          throw new Error(typeof n8nData?.error === 'string' ? n8nData.error : 'n8n command bridge failed with HTTP ' + n8nResponse.status + '.');
+        }
+      }
       const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -117,15 +141,22 @@ export default function App() {
       const hasValidVerification = verificationStatus === 'VERIFIED' || verificationStatus === 'NOT_REQUIRED';
       const hasErrors = Array.isArray(executionRecord?.errors) && executionRecord.errors.length > 0;
       const executionVerified = hasExecutedState && hasEvidence && hasValidVerification && !hasErrors;
+      const answerOnly = !hasExecutedState
+        && verificationStatus === 'NOT_REQUIRED'
+        && !hasErrors
+        && typeof data.content === 'string'
+        && data.content.trim().length > 0;
 
-      if (!executionVerified) {
+      if (!executionVerified && !answerOnly) {
         throw new Error('JARVIS command completed without sufficient execution evidence. Verification is pending.');
       }
 
       const agentMsg: ChatMessage = {
         id: `msg-${Date.now() + 1}`,
         sender: 'agent',
-        content: data.content || 'Command completed with recorded execution evidence.',
+        content: answerOnly
+          ? `${data.content}\n\nℹ️ No external action was executed; this is a response only, not a verified project change.`
+          : data.content || 'Command completed with recorded execution evidence.',
         timestamp: new Date().toISOString(),
         thoughtProcess: data.thoughtProcess,
         actionsTaken: data.actionsTaken
@@ -179,7 +210,7 @@ export default function App() {
       const response = await apiFetch('/api/agent/approval', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approvalJobId: pendingApproval.id }),
+        body: JSON.stringify({ organization_id: organizationId, approvalJobId: pendingApproval.id }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data?.status !== 'APPROVED') throw new Error(data?.error || 'Approval failed');

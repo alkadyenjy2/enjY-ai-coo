@@ -72,9 +72,12 @@ export async function callOpenAIResponses(options: {
   tools?: any[];
   previousResponseId?: string;
   textFormat?: any;
+  apiKey?: string;
+  baseUrl?: string;
 }): Promise<OpenAIResponseResult> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not configured.");
+  const apiKey = options.apiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) throw new Error(options.baseUrl ? "Configured Responses API provider key is not available." : "OPENAI_API_KEY is not configured.");
+  const baseUrl = (options.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
 
   const body: Record<string, any> = {
     model: options.model,
@@ -91,7 +94,7 @@ export async function callOpenAIResponses(options: {
   if (options.previousResponseId) body.previous_response_id = options.previousResponseId;
   if (options.textFormat) body.text = { format: options.textFormat };
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch(`${baseUrl}/responses`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,

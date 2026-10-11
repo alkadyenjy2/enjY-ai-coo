@@ -31,44 +31,27 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
   onToggleActive,
 }) => {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>(workflows[0]?.id || '');
-  const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [engineMode, setEngineMode] = useState<'gemini_direct' | 'n8n_cloud'>('gemini_direct');
   const [executionLogs, setExecutionLogs] = useState<string[]>([]);
 
   const selectedWf = workflows.find(w => w.id === selectedWorkflowId) || workflows[0];
 
-  const handleExecute = async () => {
-    if (!selectedWf || isRunning) return;
-
-    setIsRunning(true);
+  // This UI catalog is not connected to an authenticated n8n execution endpoint.
+  // Never simulate node progress, increment run counters, or report success without a
+  // real execution receipt. Open the owner's actual n8n Agent as the current handoff.
+  const handleExecute = () => {
+    if (!selectedWf) return;
     setExecutionLogs([
-      `[${engineMode === 'gemini_direct' ? 'GEMINI NATIVE ENGINE' : 'N8N CLOUD WEBHOOK'}] Initializing execution for: "${selectedWf.name}"...`
+      `[BLOCKED] "${selectedWf.name}" is a local catalog entry, not a live n8n workflow binding.`,
+      '[NOT EXECUTED] No workflow nodes ran, no run counter changed, and no success is claimed.',
+      'Reason: this Vercel app has no configured authenticated n8n Agent/API bridge.',
+      'Next step: open the canonical JARVIS Agent in n8n and continue there.'
     ]);
-
-    if (engineMode === 'gemini_direct') {
-      setExecutionLogs(prev => [
-        ...prev,
-        `[Fallback Mode Active] Direct execution using internal Gemini 3.6 Flash API (Unlimited, no n8n credits required).`
-      ]);
-    }
-
-    for (let i = 0; i < selectedWf.nodes.length; i++) {
-      const node = selectedWf.nodes[i];
-      await new Promise(r => setTimeout(r, 500));
-      setExecutionLogs(prev => [
-        ...prev,
-        `[Node ${i + 1}/${selectedWf.nodes.length}] Executing "${node.label}" (${node.type}) via ${engineMode === 'gemini_direct' ? 'Server AI Route' : 'n8n Webhook'}... OK`
-      ]);
-    }
-
-    await new Promise(r => setTimeout(r, 400));
-    setExecutionLogs(prev => [
-      ...prev,
-      `[Success] Workflow "${selectedWf.name}" executed successfully. Processed 0 errors.`
-    ]);
-    setIsRunning(false);
-    onRunWorkflow(selectedWf.id);
   };
+
+  // Keep callback compatibility with the parent until a real authenticated adapter is configured.
+  void onRunWorkflow;
+  void onToggleActive;
+  void onAddWorkflow;
 
   const getNodeIcon = (type: WorkflowNode['type']) => {
     switch (type) {
@@ -92,50 +75,41 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
             <h2 className="text-sm font-bold text-white uppercase tracking-wider">
               N8N AUTOMATION ENGINE & WORKFLOW STUDIO
             </h2>
-            <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              ORCHESTRATOR ACTIVE
+            <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">
+              LIVE API NOT CONNECTED
             </span>
           </div>
           <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-            Modular n8n orchestration coordinating APIs, AI agents, databases, webhooks, cron jobs, and error diagnostic loops.
+            Workflow entries below are a local catalog. Live execution requires an authenticated n8n bridge; the UI will not simulate successful runs.
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 shrink-0 font-mono">
-          {/* Engine Selector */}
-          <div className="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs">
-            <button
-              onClick={() => setEngineMode('gemini_direct')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
-                engineMode === 'gemini_direct' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
+          <div className="flex flex-col items-start gap-1">
+            <a
+              href="https://zeoutsourse.app.n8n.cloud/projects/ys8AmzHPCzQWPTBZ/agents/mxCjUpZ8Qh7rwvD7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm"
             >
-              <Sparkles className="w-3 h-3 text-emerald-400" /> Gemini Direct (Free)
-            </button>
-            <button
-              onClick={() => setEngineMode('n8n_cloud')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
-                engineMode === 'n8n_cloud' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'text-zinc-500 hover:text-zinc-300'
-              }`}
+              <Globe className="w-3.5 h-3.5" /> Open canonical JARVIS AI COO Agent <ArrowRight className="w-3.5 h-3.5" />
+            </a>
+            <a
+              href="https://zeoutsourse.app.n8n.cloud/assistant/d3e4813d-7342-4a62-8a54-8ae705734554"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-1 text-[10px] text-zinc-400 underline underline-offset-2 hover:text-zinc-200"
             >
-              <Zap className="w-3 h-3 text-amber-400" /> n8n Cloud
-            </button>
+              Open the supplied assistant view
+            </a>
           </div>
-
           <button
+            type="button"
             onClick={handleExecute}
-            disabled={isRunning || !selectedWf}
-            className="flex items-center gap-1.5 bg-zinc-100 hover:bg-white disabled:opacity-50 text-zinc-950 text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm active:scale-95"
+            disabled={!selectedWf}
+            className="flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 text-xs font-bold px-4 py-2 rounded-xl transition-all border border-zinc-700"
           >
-            {isRunning ? (
-              <>
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Running Pipeline...
-              </>
-            ) : (
-              <>
-                <Play className="w-3.5 h-3.5 fill-current" /> Execute Workflow
-              </>
-            )}
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-300" /> Check live execution
           </button>
         </div>
       </div>
@@ -144,8 +118,8 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
         {/* Workflows Sidebar List */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 space-y-2 text-xs font-mono">
           <div className="flex items-center justify-between px-2 py-1 text-zinc-500 font-bold uppercase text-[10px] border-b border-zinc-800 pb-2">
-            <span>Automated Pipelines ({workflows.length})</span>
-            <span className="text-amber-400">n8n Engine</span>
+            <span>Local Workflow Catalog ({workflows.length})</span>
+            <span className="text-rose-300">Not Live</span>
           </div>
 
           {workflows.map((wf) => (
@@ -160,16 +134,14 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="font-bold text-xs truncate font-sans">{wf.name}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                  wf.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
-                }`}>
-                  {wf.active ? 'ACTIVE' : 'PAUSED'}
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-zinc-800 text-zinc-300">
+                  {wf.active ? 'REGISTERED' : 'UNVERIFIED'}
                 </span>
               </div>
               <p className="text-[11px] text-zinc-400 line-clamp-2 font-sans">{wf.description}</p>
               <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-500">
-                <span>{wf.nodes.length} Nodes</span>
-                <span>Runs: {wf.runCount}</span>
+                <span>{wf.nodes.length} Catalog Steps</span>
+                <span>Live runs: NOT VERIFIED</span>
               </div>
             </div>
           ))}
@@ -186,23 +158,16 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 font-mono">
-                  <button
-                    onClick={() => onToggleActive(selectedWf.id)}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition-colors ${
-                      selectedWf.active
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                    }`}
-                  >
-                    {selectedWf.active ? 'Active' : 'Paused'}
-                  </button>
+                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
+                    Live activation state: NOT VERIFIED
+                  </span>
                 </div>
               </div>
 
               {/* Node Sequence Diagram */}
               <div className="space-y-3">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-2 font-mono">
-                  Modular Node Execution Chain ({selectedWf.nodes.length} Steps)
+                  Catalog step list — NOT EXECUTED ({selectedWf.nodes.length} Steps)
                 </div>
 
                 <div className="space-y-2">
@@ -226,8 +191,8 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
                             </div>
                           </div>
 
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
-                            READY
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700 font-mono">
+                            NOT VERIFIED
                           </span>
                         </div>
 
@@ -246,8 +211,8 @@ export const WorkflowStudioView: React.FC<WorkflowStudioViewProps> = ({
             {/* Execution Log Terminal */}
             {executionLogs.length > 0 && (
               <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 font-mono text-[11px] text-zinc-300 space-y-1">
-                <div className="text-amber-400 font-bold uppercase text-[10px] mb-1 flex items-center gap-1.5">
-                  <Terminal className="w-3.5 h-3.5" /> n8n Real-time Execution Logs
+                <div className="text-amber-300 font-bold uppercase text-[10px] mb-1 flex items-center gap-1.5">
+                  <Terminal className="w-3.5 h-3.5" /> Execution status / connection check
                 </div>
                 {executionLogs.map((log, i) => (
                   <div key={i} className="text-zinc-300">

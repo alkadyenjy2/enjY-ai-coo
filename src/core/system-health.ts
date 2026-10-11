@@ -8,7 +8,7 @@ export interface SystemHealthProbeInput {
 
 export interface SystemHealthProbe {
   connector: 'supabase';
-  status: 'REAL_LIVE' | 'UNCONFIGURED';
+  status: 'CONFIGURED' | 'UNCONFIGURED';
   providerFallback: 'openai_configured' | 'gemini_configured' | 'meta_configured' | 'none';
   evidence: string;
 }
@@ -26,12 +26,16 @@ export function buildSystemHealthProbe(input: SystemHealthProbeInput): SystemHea
 
   return {
     connector: 'supabase',
-    status: live ? 'REAL_LIVE' : 'UNCONFIGURED',
+    status: live ? 'CONFIGURED' : 'UNCONFIGURED',
     providerFallback,
     evidence: live
-      ? 'REAL_LIVE: Supabase connector is configured for a live read path.'
+      ? 'CONFIGURED: Supabase credentials are present; a live read has not been verified yet.'
       : 'UNCONFIGURED: Supabase connector credentials are not configured for a live read path.',
   };
+}
+
+export function shouldUseDeterministicSystemHealth(commandClass: string): boolean {
+  return commandClass === "SYSTEM_HEALTH";
 }
 
 export function isSystemHealthCommand(prompt: string): boolean {

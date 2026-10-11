@@ -131,3 +131,24 @@ test(
     });
   }
 );
+
+
+test(
+  'approval endpoint validates organization membership before looking up an approval job',
+  { skip: !positiveConfigReady ? 'Set the live Auth E2E variables to run the approval authorization test.' : false },
+  async () => {
+    await withAuthenticatedServer(async ({ baseUrl, accessToken }) => {
+      const response = await fetch(`${baseUrl}/api/agent/approval`, {
+        method: 'POST',
+        headers: { ...authHeaders(accessToken), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id: e2eConfig.memberOrganizationId,
+          approvalJobId: 'nonexistent-approval-job-for-auth-e2e',
+        }),
+      });
+      assert.equal(response.status, 404, 'an authorized organization request should reach job lookup, not fail due to missing organization context');
+      const body = await response.json();
+      assert.match(body.error, /approval request not found/i);
+    });
+  }
+);
