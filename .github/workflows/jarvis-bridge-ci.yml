@@ -39,6 +39,9 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Production build (creates dist/server.cjs required by routing test)
+        run: npm run build
+
       - name: n8n bridge and MCP health contracts
         run: npm run test:n8n-bridge
 
@@ -53,6 +56,3 @@ jobs:
 
       - name: TypeScript check
         run: npm run lint
-
-      - name: Production build
-        run: npm run build
