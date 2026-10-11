@@ -60,6 +60,9 @@ jobs:
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 
+      - name: Live free-first provider route fails closed without credentials
+        run: npm run test:free-first-live-route
+
       - name: Jarvis route summary test
         run: npm run test:jarvis-route
 
