@@ -1,41 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseReadOnlyN8nResponse } from "../src/utils/n8nReadOnlyResponse";
+import { parseReadOnlyStatusResult } from "../src/utils/n8nReadOnlyResponse";
 
-test("renders a successful read-only response with its result and status", () => {
-  assert.deepEqual(parseReadOnlyN8nResponse(200, {
-    status: "READ_ONLY_COMPLETED",
-    approvalRequired: false,
-    result: "JARVIS: PARTIAL",
-  }), {
+const response = (status: string, content = "Portfolio status evidence") => ({
+  content,
+  executionRecord: { tool: "n8n Model-Free Status", results: { status } },
+});
+
+test("renders a persisted read-only portfolio result", () => {
+  assert.deepEqual(parseReadOnlyStatusResult(response("READ_ONLY_COMPLETED", "JARVIS: PARTIAL")), {
     content: "JARVIS: PARTIAL\n\nStatus: READ_ONLY_COMPLETED",
     status: "READ_ONLY_COMPLETED",
   });
 });
 
-test("renders an explicitly blocked read-only response without claiming success", () => {
-  assert.deepEqual(parseReadOnlyN8nResponse(200, {
-    status: "READ_ONLY_BLOCKED",
-    approvalRequired: false,
-    message: "Evidence gate blocked completion.",
-  }), {
+test("renders a blocked read-only result without claiming success", () => {
+  assert.deepEqual(parseReadOnlyStatusResult(response("READ_ONLY_BLOCKED", "Evidence gate blocked completion.")), {
     content: "Evidence gate blocked completion.\n\nStatus: READ_ONLY_BLOCKED",
     status: "READ_ONLY_BLOCKED",
   });
 });
 
-test("rejects responses that are not HTTP 200 read-only outcomes", () => {
-  assert.equal(parseReadOnlyN8nResponse(202, {
-    status: "READ_ONLY_COMPLETED", approvalRequired: false, result: "fake",
-  }), null);
-  assert.equal(parseReadOnlyN8nResponse(200, {
-    status: "WAITING_FOR_APPROVAL", approvalRequired: false, result: "fake",
-  }), null);
-  assert.equal(parseReadOnlyN8nResponse(200, {
-    status: "READ_ONLY_COMPLETED", approvalRequired: true, result: "fake",
-  }), null);
-  assert.equal(parseReadOnlyN8nResponse(200, {
-    status: "READ_ONLY_COMPLETED", approvalRequired: false, result: "",
-  }), null);
-  assert.equal(parseReadOnlyN8nResponse(200, null), null);
+test("rejects unrelated, malformed, or unverified response shapes", () => {
+  assert.equal(parseReadOnlyStatusResult({ ...response("READ_ONLY_COMPLETED"), executionRecord: { tool: "other", results: { status: "READ_ONLY_COMPLETED" } } }), null);
+  assert.equal(parseReadOnlyStatusResult(response("COMPLETED")), null);
+  assert.equal(parseReadOnlyStatusResult(response("READ_ONLY_COMPLETED", "   ")), null);
+  assert.equal(parseReadOnlyStatusResult({ content: "text", executionRecord: { tool: "n8n Model-Free Status", results: null } }), null);
+  assert.equal(parseReadOnlyStatusResult(null), null);
 });
