@@ -1,33 +1,25 @@
-export type ReadOnlyN8nStatus = "READ_ONLY_COMPLETED" | "READ_ONLY_BLOCKED";
+export type ReadOnlyStatus = "READ_ONLY_COMPLETED" | "READ_ONLY_BLOCKED";
 
-export interface ReadOnlyN8nResponse {
+export interface ReadOnlyStatusResult {
   content: string;
-  status: ReadOnlyN8nStatus;
+  status: ReadOnlyStatus;
 }
 
-export function parseReadOnlyN8nResponse(
-  httpStatus: number,
-  payload: unknown,
-): ReadOnlyN8nResponse | null {
-  if (httpStatus !== 200 || payload === null || typeof payload !== "object" || Array.isArray(payload)) {
-    return null;
-  }
-
+/** Recognizes a persisted read-only portfolio result returned by /api/agent/command. */
+export function parseReadOnlyStatusResult(payload: unknown): ReadOnlyStatusResult | null {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
   const data = payload as Record<string, unknown>;
-  if (
-    data.approvalRequired !== false ||
-    (data.status !== "READ_ONLY_COMPLETED" && data.status !== "READ_ONLY_BLOCKED")
-  ) {
-    return null;
-  }
-
-  const result = typeof data.result === "string" ? data.result.trim() : "";
-  const message = typeof data.message === "string" ? data.message.trim() : "";
-  const content = result || message;
-  if (!content) return null;
-
+  const record = data.executionRecord;
+  if (record === null || typeof record !== "object" || Array.isArray(record)) return null;
+  const executionRecord = record as Record<string, unknown>;
+  if (executionRecord.tool !== "n8n Model-Free Status") return null;
+  const results = executionRecord.results;
+  if (results === null || typeof results !== "object" || Array.isArray(results)) return null;
+  const resultStatus = (results as Record<string, unknown>).status;
+  if (resultStatus !== "READ_ONLY_COMPLETED" && resultStatus !== "READ_ONLY_BLOCKED") return null;
+  if (typeof data.content !== "string" || !data.content.trim()) return null;
   return {
-    content: `${content}\n\nStatus: ${data.status}`,
-    status: data.status,
+    content: `${data.content.trim()}\n\nStatus: ${resultStatus}`,
+    status: resultStatus,
   };
 }
