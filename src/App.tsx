@@ -87,6 +87,30 @@ export default function App() {
     setIsAgentLoading(true);
     try {
       if (!authenticated || !organizationId) throw new Error('Your account is not linked to an authorized organization.');
+      if (!approvalJobId) {
+      const n8nResponse = await apiFetch('/api/agent/n8n-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organization_id: organizationId, prompt: text }),
+      });
+      const n8nData = await n8nResponse.json().catch(() => ({}));
+      if (n8nResponse.status === 202 && n8nData?.status === 'WAITING_FOR_APPROVAL') {
+        const approvalLink = typeof n8nData.approvalUrl === 'string' && n8nData.approvalUrl.startsWith('https://')
+          ? `\n\n[Review and approve in n8n](${n8nData.approvalUrl})`
+          : '';
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          content: `${n8nData.message || 'JARVIS sent the command to n8n.'}\n\nStatus: WAITING_FOR_APPROVAL${approvalLink}`,
+          timestamp: new Date().toISOString(),
+        }]);
+        return;
+      }
+      if (!(n8nResponse.status === 503 && n8nData?.status === 'UNCONFIGURED')) {
+        throw new Error(typeof n8nData?.error === 'string' ? n8nData.error : `n8n command bridge failed with HTTP ${n8nResponse.status}.`);
+      }
+      }
+
       const response = await apiFetch('/api/agent/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
