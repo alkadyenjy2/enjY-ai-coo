@@ -106,6 +106,19 @@ export default function App() {
         }]);
         return;
       }
+      if (
+        n8nResponse.status === 200 &&
+        (n8nData?.status === 'READ_ONLY_COMPLETED' || n8nData?.status === 'READ_ONLY_BLOCKED') &&
+        n8nData?.approvalRequired === false
+      ) {
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          content: `${typeof n8nData?.result === 'string' ? n8nData.result : n8nData?.message || 'Read-only status returned.'}\n\nStatus: ${n8nData.status}`,
+          timestamp: new Date().toISOString(),
+        }]);
+        return;
+      }
       if (!(n8nResponse.status === 503 && n8nData?.status === 'UNCONFIGURED')) {
         throw new Error(typeof n8nData?.error === 'string' ? n8nData.error : `n8n command bridge failed with HTTP ${n8nResponse.status}.`);
       }
