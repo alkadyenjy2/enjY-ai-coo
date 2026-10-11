@@ -122,3 +122,24 @@ test("n8n command bridge rejects non-default HTTPS ports", async () => {
   assert.equal(result.status, "BLOCKED");
   assert.equal(called, false);
 });
+
+
+test("n8n command bridge returns persisted model-free status without requiring approval", async () => {
+  const result = await submitN8nCommand("SYSTEM_HEALTH", {
+    webhookUrl: "https://zeoutsourse.app.n8n.cloud/webhook/secret-test-path",
+  }, async () => ok({
+    accepted: true,
+    status: "READ_ONLY_BLOCKED",
+    commandHash: "job-status-257",
+    approvalRequired: false,
+    result: "JARVIS — portfolio status (read-only)\\nStatus: BLOCKED",
+    projectRowsRead: 9,
+    message: "Read-only status result was saved to n8n job and audit tables.",
+  }));
+  assert.equal(result.status, "READ_ONLY_RESULT");
+  if (result.status !== "READ_ONLY_RESULT") throw new Error("Expected read-only result");
+  assert.equal(result.resultStatus, "READ_ONLY_BLOCKED");
+  assert.equal(result.commandHash, "job-status-257");
+  assert.equal(result.projectRowsRead, 9);
+  assert.match(result.result, /Status: BLOCKED/);
+});
