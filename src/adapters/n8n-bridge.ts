@@ -1,12 +1,14 @@
 export type N8nCommandResult =
   | { status: "WAITING_FOR_APPROVAL"; commandHash?: string; approvalUrl?: string; message?: string; httpStatus: number }
+  | { status: "READ_ONLY_COMPLETED" | "READ_ONLY_BLOCKED"; commandHash?: string; result?: string; projectRowsRead?: number; message?: string; httpStatus: number }
   | { status: "UNCONFIGURED" | "BLOCKED"; message: string; httpStatus?: number };
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 /**
  * Sends a command to the secret, server-side n8n webhook.
- * A command is accepted only when n8n explicitly confirms it is waiting for owner approval.
+ * A command is accepted only when n8n explicitly confirms approval is pending,
+ * or when the exact SYSTEM_HEALTH command returns an explicit model-free read-only result.
  * The app never treats a generic HTTP 200 as proof of execution.
  */
 export async function submitN8nCommand(
@@ -45,7 +47,42 @@ export async function submitN8nCommand(
       signal: AbortSignal.timeout(10000),
     });
     const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
-    const approvalUrl = typeof payload?.approvalUrl === "string" ? payload.approvalUrl : undefined;
+
+    if (!response.ok || payload?.accepted !== true) {
+      return {
+        status: "BLOCKED",
+        message: `n8n did not confirm acceptance (HTTP ${response.status}).`,
+        httpStatus: response.status,
+      };
+    }
+
+    const responseStatus = payload.status;
+    if (
+      normalizedCommand.toUpperCase() === "SYSTEM_HEALTH" &&
+      (responseStatus === "READ_ONLY_COMPLETED" || responseStatus === "READ_ONLY_BLOCKED") &&
+      payload.approvalRequired === false
+    ) {
+      return {
+        status: responseStatus,
+        commandHash: typeof payload.commandHash === "string" ? payload.commandHash : undefined,
+        result: typeof payload.result === "string" ? payload.result : undefined,
+        projectRowsRead: typeof payload.projectRowsRead === "number" && Number.isFinite(payload.projectRowsRead)
+          ? payload.projectRowsRead
+          : undefined,
+        message: typeof payload.message === "string" ? payload.message : undefined,
+        httpStatus: response.status,
+      };
+    }
+
+    if (responseStatus !== "WAITING_FOR_APPROVAL") {
+      return {
+        status: "BLOCKED",
+        message: `n8n did not confirm an approval-queued command (HTTP ${response.status}).`,
+        httpStatus: response.status,
+      };
+    }
+
+    const approvalUrl = typeof payload.approvalUrl === "string" ? payload.approvalUrl : undefined;
     const validApprovalUrl = (() => {
       if (!approvalUrl) return undefined;
       try {
@@ -55,14 +92,6 @@ export async function submitN8nCommand(
         return undefined;
       }
     })();
-
-    if (!response.ok || payload?.accepted !== true || payload?.status !== "WAITING_FOR_APPROVAL") {
-      return {
-        status: "BLOCKED",
-        message: `n8n did not confirm an approval-queued command (HTTP ${response.status}).`,
-        httpStatus: response.status,
-      };
-    }
 
     return {
       status: "WAITING_FOR_APPROVAL",
