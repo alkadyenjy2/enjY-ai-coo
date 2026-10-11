@@ -18,11 +18,16 @@ test('Express API exposes health and readiness routes in Vercel mode', async () 
     assert.equal((await health.json()).status, 'ok');
 
     const readiness = await fetch(`${base}/api/readiness`);
+    const readinessBody = await readiness.json();
     assert.ok([200, 503].includes(readiness.status));
-    assert.ok(['ready', 'degraded'].includes((await readiness.json()).status));
+    assert.ok(['ready', 'degraded'].includes(readinessBody.status));
 
     const legacyReadiness = await fetch(`${base}/api/ready`);
     assert.equal(legacyReadiness.status, readiness.status);
+
+    const healthz = await fetch(`${base}/api/healthz`);
+    assert.equal(healthz.status, readiness.status);
+    assert.equal((await healthz.json()).status, readinessBody.status);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }

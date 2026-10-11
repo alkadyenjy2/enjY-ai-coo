@@ -1,1 +1,74 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-ink-950: #070b12;
+  --color-ink-900: #0b111c;
+  --color-aurora: #58f0bd;
+  --color-signal: #63d8ff;
+}
+
+:root {
+  color-scheme: dark;
+  font-family: var(--font-sans);
+  background: #070b12;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+
+html { min-width: 320px; background: #070b12; }
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: #e7eef7;
+  background:
+    radial-gradient(circle at 12% -8%, rgba(88, 240, 189, 0.13), transparent 30rem),
+    radial-gradient(circle at 92% 4%, rgba(99, 216, 255, 0.11), transparent 28rem),
+    linear-gradient(135deg, #070b12 0%, #0a101b 48%, #080d16 100%);
+}
+
+button, select, input, textarea { font: inherit; }
+button { cursor: pointer; }
+
+::selection { background: rgba(88, 240, 189, 0.35); color: #f8fffc; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: rgba(7, 11, 18, 0.72); }
+::-webkit-scrollbar-thumb { background: #243244; border: 2px solid #070b12; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #3b526a; }
+
+.jarvis-shell {
+  background:
+    linear-gradient(180deg, rgba(11, 17, 28, 0.72), rgba(7, 11, 18, 0.88)),
+    radial-gradient(circle at 55% 0%, rgba(88, 240, 189, 0.04), transparent 34rem);
+}
+
+.jarvis-glass {
+  background: rgba(13, 21, 33, 0.76);
+  border-color: rgba(117, 145, 174, 0.18);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  backdrop-filter: blur(18px);
+}
+
+.jarvis-grid {
+  background-image: linear-gradient(rgba(121, 151, 180, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(121, 151, 180, 0.045) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+  pointer-events: none;
+}
+
+.jarvis-pulse { animation: jarvis-pulse 2.8s ease-in-out infinite; }
+
+@keyframes jarvis-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(88, 240, 189, 0.28); }
+  50% { box-shadow: 0 0 0 7px rgba(88, 240, 189, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+}

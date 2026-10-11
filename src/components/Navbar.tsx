@@ -30,19 +30,22 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCommandCenter,
 }) => {
   return (
-    <header className="bg-zinc-950 border-b border-zinc-800 text-zinc-300 px-4 py-3 sticky top-0 z-40">
+    <header className="jarvis-glass border-b text-zinc-300 px-4 py-3 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Brand & Identity - Bento Grid Style */}
         <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] shrink-0"></div>
+          <div className="jarvis-pulse relative flex h-10 w-10 items-center justify-center rounded-2xl border border-emerald-300/30 bg-emerald-300/10 shrink-0">
+            <div className="h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(88,240,189,0.95)]"></div>
+            <div className="absolute inset-1 rounded-xl border border-emerald-300/10"></div>
+          </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-bold text-base md:text-lg tracking-tight text-white font-sans">
-                CORE AGENT <span className="text-zinc-500 font-mono text-xs ml-1.5 font-normal">v4.0.2-STABLE</span>
+              <h1 className="font-bold text-base md:text-lg tracking-[0.18em] text-white font-sans">
+                JARVIS <span className="text-emerald-300/80 font-mono text-[10px] ml-1.5 font-normal tracking-wider">AI OPERATIONS</span>
               </h1>
             </div>
-            <p className="text-[11px] text-zinc-500 font-mono">
-              Reusable Operations OS &bull; Adaptive Memory &bull; n8n Orchestrator
+            <p className="text-[11px] text-slate-400 font-mono">
+              Evidence-first command layer <span className="text-slate-600">•</span> Adaptive memory <span className="text-slate-600">•</span> n8n orchestration
             </p>
           </div>
         </div>
@@ -112,4 +115,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
-
