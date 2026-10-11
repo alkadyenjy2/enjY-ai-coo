@@ -18,6 +18,7 @@ import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, A
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 import { apiFetch } from './auth/client';
 import { buildOperationalHistoryUrl } from './utils/operationalHistory';
+import { parseReadOnlyStatusResult } from './utils/n8nReadOnlyResponse';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
@@ -107,7 +108,8 @@ export default function App() {
           }]);
           return;
         }
-        if (!(n8nResponse.status === 503 && n8nData?.status === 'UNCONFIGURED')) {
+        const shouldUseMainCommandRoute = n8nResponse.status === 409 && n8nData?.status === 'NOT_ROUTED';
+        if (!(shouldUseMainCommandRoute || (n8nResponse.status === 503 && n8nData?.status === 'UNCONFIGURED'))) {
           throw new Error(typeof n8nData?.error === 'string' ? n8nData.error : 'n8n command bridge failed with HTTP ' + n8nResponse.status + '.');
         }
       }
@@ -130,6 +132,18 @@ export default function App() {
           timestamp: new Date().toISOString(),
           actionsTaken: data.actionsTaken
         }]);
+        return;
+      }
+
+      const readOnlyStatusResult = parseReadOnlyStatusResult(data);
+      if (readOnlyStatusResult) {
+        setMessages(prev => [...prev, {
+          id: `msg-${Date.now() + 1}`,
+          sender: 'agent',
+          content: readOnlyStatusResult.content,
+          timestamp: new Date().toISOString(),
+        }]);
+        if (data.executionRecord) setLogs(prev => [...mapOperationalRecordsToExecutionLogs([data.executionRecord]), ...prev.filter(log => log.id !== data.executionRecord.id)]);
         return;
       }
 
