@@ -113,3 +113,12 @@ test("n8n command bridge rejects untrusted hosts and non-webhook paths", async (
   assert.equal(path.status, "BLOCKED");
   assert.equal(calls, 0);
 });
+
+test("n8n command bridge rejects non-default HTTPS ports", async () => {
+  let called = false;
+  const result = await submitN8nCommand("Read status", {
+    webhookUrl: "https://zeoutsourse.app.n8n.cloud:444/webhook/secret",
+  }, async () => { called = true; return ok(); });
+  assert.equal(result.status, "BLOCKED");
+  assert.equal(called, false);
+});

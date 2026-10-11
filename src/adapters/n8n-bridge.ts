@@ -31,6 +31,7 @@ export async function submitN8nCommand(
     if (
       target.protocol !== "https:"
       || target.hostname !== TRUSTED_N8N_HOST
+      || target.port
       || !target.pathname.startsWith("/webhook/")
       || target.username
       || target.password
