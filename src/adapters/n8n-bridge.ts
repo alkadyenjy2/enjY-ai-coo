@@ -87,7 +87,14 @@ export async function submitN8nCommand(
       if (!approvalUrl) return undefined;
       try {
         const parsed = new URL(approvalUrl);
-        return parsed.protocol === "https:" ? parsed.toString() : undefined;
+        return parsed.protocol === "https:" &&
+          parsed.origin === target.origin &&
+          parsed.pathname.startsWith("/form-waiting/") &&
+          !parsed.username &&
+          !parsed.password &&
+          !parsed.hash
+          ? parsed.toString()
+          : undefined;
       } catch {
         return undefined;
       }
