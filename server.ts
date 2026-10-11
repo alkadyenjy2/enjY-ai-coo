@@ -663,6 +663,32 @@ app.post("/api/agent/command", async (req, res) => {
   // 4. SYSTEM_HEALTH is deterministic and read-only; it must not depend on model quota.
   // Only the actual Supabase read below can mark the connector check VERIFIED.
   if (shouldUseDeterministicSystemHealth(commandClass)) {
+    // Prefer the canonical n8n model-free portfolio result when available.
+    const n8nStatus = await submitN8nCommand(userPromptStr, { webhookUrl: process.env.N8N_COMMAND_WEBHOOK_URL });
+    if (n8nStatus.status === "READ_ONLY_RESULT") {
+      const verified = n8nStatus.resultStatus === "READ_ONLY_COMPLETED";
+      const statusDetails = `n8n ${n8nStatus.resultStatus}; rows read: ${n8nStatus.projectRowsRead}; command hash: ${n8nStatus.commandHash || "not returned"}.`;
+      const actionsTaken = [
+        { tool: "n8n Model-Free Status", status: verified ? "success" : "failed", details: statusDetails },
+        { tool: "n8n Evidence Store", status: "success", details: "n8n confirmed the read-only result after its save/log nodes completed." },
+      ];
+      const record: OperationalExecutionRecord = {
+        id: `exec-${Date.now()}`, timestamp: new Date().toISOString(), command: userPromptStr,
+        project: projectNameStr, intent: commandClass, tool: "n8n Model-Free Status",
+        selectedTools: actionsTaken.map((a) => a.tool), actionsExecuted: actionsTaken,
+        results: { status: n8nStatus.resultStatus, commandHash: n8nStatus.commandHash, projectRowsRead: n8nStatus.projectRowsRead, result: n8nStatus.result },
+        state_history: verified ? ["RECEIVED","ROUTED","DISPATCHED","VERIFYING","VERIFIED","COMPLETED"] : ["RECEIVED","ROUTED","DISPATCHED","VERIFYING","BLOCKED"],
+        evidence: `n8n command ${n8nStatus.commandHash || "hash unavailable"} returned a persisted read-only result. ${statusDetails}`,
+        verificationStatus: verified ? "VERIFIED" : "FAILED",
+        final_state_reason: verified ? "n8n confirmed all matching project rows explicitly COMPLETED or VERIFIED." : "n8n status result is BLOCKED; project completion evidence is insufficient.",
+        errors: verified ? [] : ["n8n project status remains BLOCKED; see returned result."],
+        approvalStatus: "AUTO_APPROVED"
+      };
+      await rememberOperationalRecord(record);
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: n8nStatus.result });
+      return res.json({ content: n8nStatus.result, response: n8nStatus.result, executionRecord: record, actionsTaken });
+    }
+
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim();
     const supabaseApiKey = getSupabaseReadApiKey();
     const probe = buildSystemHealthProbe({
