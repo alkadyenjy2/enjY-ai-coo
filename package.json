@@ -37,7 +37,7 @@
     "test:n8n-health": "node --import tsx --test --test-concurrency=1 tests/n8n-health.test.ts",
     "test:n8n-bridge": "node --import tsx --test --test-concurrency=1 tests/n8n-bridge.test.ts",
     "test:n8n-command-policy": "node --import tsx --test --test-concurrency=1 tests/n8n-command-policy.test.ts",
-    "test:n8n-readonly-response": "node --import tsx --test --test-concurrency=1 tests/n8n-readonly-response.test.ts"
+    "test:read-only-status-result": "node --import tsx --test --test-concurrency=1 tests/n8n-readonly-response.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
