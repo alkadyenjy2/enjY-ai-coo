@@ -18,6 +18,7 @@ import { UserProfile, MemoryItem, Connector, Workflow, Project, LessonLearned, A
 import { mapOperationalRecordsToExecutionLogs } from './utils/operationalLogs';
 import { apiFetch } from './auth/client';
 import { buildOperationalHistoryUrl } from './utils/operationalHistory';
+import { parseReadOnlyN8nResponse } from './utils/n8nReadOnlyResponse';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
@@ -103,6 +104,16 @@ export default function App() {
             id: `msg-${Date.now() + 1}`,
             sender: 'agent',
             content: (n8nData.message || 'JARVIS sent the command to n8n.') + '\n\nStatus: WAITING_FOR_APPROVAL' + approvalLink,
+            timestamp: new Date().toISOString(),
+          }]);
+          return;
+        }
+        const readOnlyResponse = parseReadOnlyN8nResponse(n8nResponse.status, n8nData);
+        if (readOnlyResponse) {
+          setMessages(prev => [...prev, {
+            id: `msg-${Date.now() + 1}`,
+            sender: 'agent',
+            content: readOnlyResponse.content,
             timestamp: new Date().toISOString(),
           }]);
           return;
