@@ -14,6 +14,7 @@ import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
 import { isLiveModelRouteConfigured, resolveLiveModelRoute } from "./src/ai-gateway/live-model-route";
+import { probeN8nHealth } from "./src/adapters/n8n-health";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
@@ -2015,15 +2016,13 @@ app.post("/api/connectors/test", async (req, res) => {
   }
   
   if (connLower.includes("n8n")) {
-    const hasN8n = Boolean(process.env.N8N_URL || process.env.N8N_API_KEY);
+    const probe = await probeN8nHealth(process.env);
     return res.json({
-      status: hasN8n ? "REAL_LIVE" : "UNCONFIGURED",
+      ...probe,
       connectorId: "n8n",
-      message: hasN8n ? "n8n Webhook Workflow Engine verified." : "n8n credentials (N8N_URL / N8N_API_KEY) missing from environment secrets.",
-      authPresent: hasN8n,
-      actualCall: hasN8n,
-      latencyMs: 12,
-      evidence: hasN8n ? "N8N_URL active." : "Missing N8N_URL / N8N_API_KEY environment variables."
+      capabilitiesDiscovered: probe.status === "REAL_LIVE"
+        ? ["workflow_list_read", "authenticated_api_probe"]
+        : [],
     });
   }
 
