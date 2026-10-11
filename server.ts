@@ -13,6 +13,7 @@ import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
+import { resolveLiveModelRoute } from "./src/ai-gateway/live-model-route";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
@@ -722,9 +723,15 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   try {
-    const selectedModel = resolveJarvisModel(model);
+    const requestedModel = typeof model === "string" ? model.trim() : "";
+    const liveRoute = process.env.JARVIS_ALLOW_PAID_MODEL === "true" ||
+      !["gpt-6-astra", "muse-spark-1.3"].includes(requestedModel)
+      ? null
+      : resolveLiveModelRoute();
+    const selectedModel = liveRoute?.model || resolveJarvisModel(model);
+    const isOpenRouterModel = liveRoute?.providerId === "openrouter" && selectedModel === liveRoute.model;
     const isOpenAIRequested = selectedModel === "gpt-6-astra";
-    const ai = isOpenAIRequested ? null : getGeminiClient();
+    const ai = isOpenAIRequested || isOpenRouterModel ? null : getGeminiClient();
     
     // System instruction detailing the Master Prompt Core AI Agent rules
     const systemInstruction = `
@@ -759,7 +766,7 @@ Rules for Response:
 5. Never return generic Master COO Briefing unless command is SYSTEM_HEALTH or REPORTING.
     `.trim();
 
-    if (!ai && !isOpenAIRequested) {
+    if (!ai && !isOpenAIRequested && !isOpenRouterModel) {
       const blockedResult = createOfflineFallbackResult({
         command: userPromptStr,
         project: projectNameStr,
@@ -900,7 +907,7 @@ Rules for Response:
 
     const isOpenAIModel = selectedModel === "gpt-6-astra";
     const isMetaModel = selectedModel === "muse-spark-1.3";
-    const response = isOpenAIModel || isMetaModel
+    const response = isOpenAIModel || isMetaModel || isOpenRouterModel
       ? null
       : await ai!.models.generateContent({
           model: selectedModel,
@@ -911,12 +918,13 @@ Rules for Response:
             tools
           }
         });
-    const modelResponse = isOpenAIModel
+    const modelResponse = isOpenAIModel || isOpenRouterModel
       ? await callOpenAIResponses({
           model: selectedModel,
           instructions: systemInstruction,
           input: [prompt],
-          tools: toOpenAITools(allowedFuncDecls)
+          tools: toOpenAITools(allowedFuncDecls),
+          ...(isOpenRouterModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {})
         })
       : isMetaModel
       ? await callMetaModelResponses({
@@ -1107,11 +1115,12 @@ Rules for Response:
           let followUpText = "";
           if (queryStatus === "success") {
             try {
-            if (isOpenAIModel) {
+            if (isOpenAIModel || isOpenRouterModel) {
               const followUp = await callOpenAIResponses({
                 model: selectedModel,
                 instructions: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`,
                 previousResponseId: modelResponse.id,
+                ...(isOpenRouterModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {}),
                 input: [{
                   type: "function_call_output",
                   call_id: call.callId,
