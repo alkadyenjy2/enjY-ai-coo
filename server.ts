@@ -5,7 +5,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { createServer as createViteServer } from "vite";
 import { stripeAdapter } from "./src/adapters/stripe";
 import { operationsManager } from "./src/adapters/operations";
-import { persistOperationalRecord, fetchPersistedOperationalRecords } from "./src/adapters/persistence";
+import { persistOperationalRecord, fetchPersistedOperationalRecords, persistApprovalAuditEvent } from "./src/adapters/persistence";
 import { getAuthContext, getAuthorizedOrganizations, getOrganizationAccess, requireAuth, requireOrganizationAccess } from "./src/auth/server";
 import { verifyHighLevelWebhook, verifyWhopWebhook } from "./src/adapters/webhooks";
 import { clinicRouter } from "./src/clinic/routes";
@@ -195,10 +195,27 @@ app.post("/api/agent/approval", requireOrganizationAccess, async (req, res) => {
   try {
     const job = await getDurableJob(approvalJobId, organizationId);
     if (!job || job.user_id !== userId || job.command !== "__HUMAN_APPROVAL__") return res.status(404).json({ success: false, error: "Approval request not found." });
-    if (job.approval_status === "APPROVED") return res.json({ success: true, approvalJobId: job.id, status: "APPROVED" });
+    if (job.approval_status === "APPROVED") {
+      const audit = await persistApprovalAuditEvent({ approvalJobId: job.id, decision: "APPROVED", phase: "state_transition_completed" });
+      if (!audit.persisted) return res.status(503).json({ success: false, error: "Approval exists, but its independent audit record could not be verified.", auditError: audit.error });
+      return res.json({ success: true, approvalJobId: job.id, status: "APPROVED", audit: { persisted: true, recordId: audit.recordId } });
+    }
     if (job.approval_status !== "WAITING") return res.status(409).json({ success: false, error: "Approval request is not awaiting approval." });
+
+    // Record the authenticated human decision independently before changing the durable job state.
+    const decisionAudit = await persistApprovalAuditEvent({ approvalJobId: job.id, decision: "APPROVED", phase: "decision_authorized_before_state_transition" });
+    if (!decisionAudit.persisted) return res.status(503).json({ success: false, error: "Approval was not applied because its independent audit record could not be persisted.", auditError: decisionAudit.error });
+
     const updated = await updateDurableJob(job.id, { status: "QUEUED", current_step: "APPROVED", approval_status: "APPROVED", state_history: [...(job.state_history || []), "APPROVED"] });
-    return res.json({ success: true, approvalJobId: updated.id, status: "APPROVED" });
+    const completionAudit = await persistApprovalAuditEvent({ approvalJobId: updated.id, decision: "APPROVED", phase: "state_transition_completed" });
+    if (!completionAudit.persisted) {
+      // The decision event was durably written before the state transition. Report the
+      // actual approved state and surface the missing follow-up event without inviting
+      // a retry that could duplicate an already-queued operation.
+      console.warn(`[Approval Audit] Approval state transitioned for job ${updated.id}; pre-transition decision audit exists, but completion audit write failed: ${completionAudit.error || "unknown error"}`);
+      return res.json({ success: true, approvalJobId: updated.id, status: "APPROVED", audit: { persisted: true, recordId: decisionAudit.recordId, completionEventPersisted: false, warning: completionAudit.error || "Completion event unavailable." } });
+    }
+    return res.json({ success: true, approvalJobId: updated.id, status: "APPROVED", audit: { persisted: true, recordId: completionAudit.recordId } });
   } catch {
     return res.status(503).json({ success: false, error: "Approval state could not be updated safely." });
   }

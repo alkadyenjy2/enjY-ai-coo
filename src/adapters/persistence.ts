@@ -91,6 +91,61 @@ function auditStatus(record: OperationalRecordLike): 'success' | 'warning' | 'fa
   return 'success';
 }
 
+export interface ApprovalAuditEventInput {
+  approvalJobId: string;
+  decision: 'APPROVED';
+  phase: 'decision_authorized_before_state_transition' | 'state_transition_completed';
+}
+
+/** Persist a separate, tenant-scoped audit event for human approval decisions. */
+export async function persistApprovalAuditEvent(input: ApprovalAuditEventInput): Promise<PersistenceResult> {
+  const config = getSupabaseConfig();
+  if (!config) return { persisted: false, source: 'memory', error: 'Supabase runtime credentials are not configured.' };
+
+  const context = getPersistenceContext();
+  if (!context) return { persisted: false, source: 'memory', error: 'Authenticated tenant persistence context is unavailable.' };
+
+  const timestamp = new Date().toISOString();
+  const metadata = {
+    event: 'human_approval_decision',
+    approvalJobId: input.approvalJobId,
+    decision: input.decision,
+    phase: input.phase,
+    actorUserId: context.userId,
+    organizationId: context.organizationId,
+  };
+  const body = {
+    organization_id: context.organizationId,
+    user_id: context.userId,
+    title: `HUMAN APPROVAL ${input.decision}`,
+    description: `Approval decision recorded at phase ${input.phase}.`,
+    type: 'human_approval_decision',
+    status: input.phase === 'state_transition_completed' ? 'success' : 'warning',
+    event_metadata: metadata,
+    workflow_name: 'JARVIS Approval Gate',
+    execution_id: input.approvalJobId,
+    provider: 'ai_core_runtime',
+    payload_hash: createHash('sha256').update(JSON.stringify(metadata)).digest('hex'),
+    completed_at: timestamp,
+  };
+
+  try {
+    const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
+      method: 'POST',
+      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      return { persisted: false, source: 'memory', error: `Supabase approval audit write returned HTTP ${response.status}.` };
+    }
+    const data = await response.json().catch(() => []);
+    const recordId = Array.isArray(data) && data[0]?.id ? String(data[0].id) : undefined;
+    return { persisted: true, source: 'supabase', recordId };
+  } catch (error: any) {
+    return { persisted: false, source: 'memory', error: `Supabase approval audit write failed: ${error?.message || 'unknown error'}` };
+  }
+}
+
 export async function persistOperationalRecord(record: OperationalRecordLike): Promise<PersistenceResult> {
   const config = getSupabaseConfig();
   if (!config) return { persisted: false, source: 'memory', error: 'Supabase runtime credentials are not configured.' };
