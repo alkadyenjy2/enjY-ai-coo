@@ -1,0 +1,58 @@
+name: JARVIS n8n bridge verification
+
+on:
+  push:
+    branches:
+      - fix/n8n-bridge-live-check-2026-10-10
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/jarvis-bridge-ci.yml
+      - package.json
+      - package-lock.json
+      - server.ts
+      - src/App.tsx
+      - src/adapters/n8n-bridge.ts
+      - src/adapters/n8n-mcp-health.ts
+      - tests/n8n-bridge.test.ts
+      - tests/n8n-mcp-health.test.ts
+
+permissions:
+  contents: read
+
+jobs:
+  bridge-contract:
+    name: Bridge, security guards, typecheck, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: n8n bridge and MCP health contracts
+        run: npm run test:n8n-bridge
+
+      - name: Vercel route regression
+        run: npm run test:vercel-routing
+
+      - name: Production guardrails
+        run: npm run test:production-guardrails
+
+      - name: Personal-mode auth guard
+        run: npm run test:auth-personal-mode
+
+      - name: TypeScript check
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
