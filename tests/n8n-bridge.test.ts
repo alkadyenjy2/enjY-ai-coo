@@ -88,3 +88,17 @@ test("n8n command bridge preserves model-free read-only status results", async (
   assert.equal(result.projectRowsRead, 9);
   assert.match(result.result || "", /PARTIAL/);
 });
+
+test("n8n command bridge rejects approval URLs on a different HTTPS origin", async () => {
+  const result = await submitN8nCommand("Read status", {
+    webhookUrl: "https://zeoutsourse.app.n8n.cloud/webhook/secret",
+  }, async () => ok({
+    accepted: true,
+    status: "WAITING_FOR_APPROVAL",
+    commandHash: "job-test-external-https",
+    approvalUrl: "https://attacker.example/form-waiting/opaque",
+  }));
+  assert.equal(result.status, "WAITING_FOR_APPROVAL");
+  assert.equal(result.approvalUrl, undefined);
+});
+
