@@ -44,8 +44,8 @@ jobs:
       - name: n8n command bridge contract test
         run: npm run test:n8n-bridge
 
-      - name: n8n read-only response rendering test
-        run: npm run test:n8n-readonly-response
+      - name: read-only status result rendering test
+        run: npm run test:read-only-status-result
 
       - name: n8n approval routing policy test
         run: npm run test:n8n-command-policy
