@@ -723,9 +723,9 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   try {
-    const requestedModel = typeof model === "string" ? model.trim() : "";
-    const liveRoute = process.env.JARVIS_ALLOW_PAID_MODEL === "true" ||
-      !["gpt-6-astra", "muse-spark-1.3"].includes(requestedModel)
+    // Free-first routing must also apply when the caller omits a model (e.g. Telegram).
+    // Paid model routing remains opt-in; never let the request's default bypass free-first.
+    const liveRoute = process.env.JARVIS_ALLOW_PAID_MODEL === "true"
       ? null
       : resolveLiveModelRoute();
     let selectedModel = liveRoute?.model || resolveJarvisModel(model);
@@ -924,6 +924,12 @@ Rules for Response:
         // Provider access is only considered usable after a real request succeeds.
         // If OpenRouter fails, try the already-integrated Gemini adapter only when
         // its credential is configured; otherwise preserve the fail-closed error.
+        const providerErrorText = String((openRouterError as any)?.message || openRouterError);
+        // Quota, rate-limit, billing, and auth failures must stop here. Do not
+        // rotate providers to evade a provider's access or quota restrictions.
+        if (/(\\b401\\b|\\b402\\b|\\b403\\b|\\b429\\b|quota|rate.?limit|unauthori[sz]ed|forbidden|billing|insufficient credit)/i.test(providerErrorText)) {
+          throw openRouterError;
+        }
         const fallbackAi = getGeminiClient();
         if (!fallbackAi) throw openRouterError;
         const fallbackModel = resolveJarvisModel(undefined, false);
