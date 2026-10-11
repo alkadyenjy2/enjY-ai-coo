@@ -60,6 +60,9 @@ jobs:
             echo "::notice title=Live Auth E2E skipped::Required AUTH_E2E test secrets are not configured; live authentication and approval authorization remain unverified."
           fi
 
+      - name: Live free-first model route readiness test
+        run: npm run test:live-model-route
+
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
 

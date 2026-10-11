@@ -13,7 +13,7 @@ import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
-import { resolveLiveModelRoute } from "./src/ai-gateway/live-model-route";
+import { isLiveModelRouteConfigured, resolveLiveModelRoute } from "./src/ai-gateway/live-model-route";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
@@ -125,7 +125,7 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) &&
     (process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
   );
-  const hasModelProvider = hasOpenAI || hasGemini || hasMetaModel;
+  const hasModelProvider = isLiveModelRouteConfigured(process.env);
   const requireLiveDependencies = process.env.NODE_ENV === "production" || process.env.REQUIRE_LIVE_DEPENDENCIES === "true";
   const checks = {
     process: true,
