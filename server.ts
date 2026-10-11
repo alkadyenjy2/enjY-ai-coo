@@ -193,6 +193,17 @@ app.post("/api/agent/n8n-command", async (req, res) => {
   if (result.status === "WAITING_FOR_APPROVAL") {
     return res.status(202).json({ success: true, status: result.status, commandHash: result.commandHash, approvalUrl: result.approvalUrl, message: result.message || "Command was accepted by n8n and is waiting for owner approval." });
   }
+  if (result.status === "READ_ONLY_COMPLETED" || result.status === "READ_ONLY_BLOCKED") {
+    return res.status(200).json({
+      success: true,
+      status: result.status,
+      commandHash: result.commandHash,
+      approvalRequired: false,
+      result: result.result || result.message || "Read-only status response returned.",
+      projectRowsRead: result.projectRowsRead,
+      message: result.message || "Read-only status returned; project completion remains separately evidence-gated.",
+    });
+  }
   if (result.status === "UNCONFIGURED") {
     return res.status(503).json({ success: false, status: result.status, error: result.message });
   }
