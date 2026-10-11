@@ -70,3 +70,21 @@ test("n8n command bridge does not expose an unsafe approval URL", async () => {
   assert.equal(result.status, "WAITING_FOR_APPROVAL");
   assert.equal(result.approvalUrl, undefined);
 });
+
+test("n8n command bridge preserves model-free read-only status results", async () => {
+  const result = await submitN8nCommand("SYSTEM_HEALTH", {
+    webhookUrl: "https://zeoutsourse.app.n8n.cloud/webhook/secret",
+  }, async () => ok({
+    accepted: true,
+    status: "READ_ONLY_BLOCKED",
+    commandHash: "job-health-1",
+    approvalRequired: false,
+    result: "Read-only status returned; some portfolio rows remain PARTIAL.",
+    projectRowsRead: 9,
+    message: "Read-only status result was saved.",
+  }));
+  assert.equal(result.status, "READ_ONLY_BLOCKED");
+  assert.equal(result.commandHash, "job-health-1");
+  assert.equal(result.projectRowsRead, 9);
+  assert.match(result.result || "", /PARTIAL/);
+});
