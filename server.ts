@@ -927,7 +927,7 @@ Rules for Response:
         const providerErrorText = String((openRouterError as any)?.message || openRouterError);
         // Quota, rate-limit, billing, and auth failures must stop here. Do not
         // rotate providers to evade a provider's access or quota restrictions.
-        if (/(\\b401\\b|\\b402\\b|\\b403\\b|\\b429\\b|quota|rate.?limit|unauthori[sz]ed|forbidden|billing|insufficient credit)/i.test(providerErrorText)) {
+        if (/(\b401\b|\b402\b|\b403\b|\b429\b|quota|rate.?limit|unauthori[sz]ed|forbidden|billing|insufficient credit)/i.test(providerErrorText)) {
           throw openRouterError;
         }
         const fallbackAi = getGeminiClient();
