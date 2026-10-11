@@ -1,5 +1,6 @@
 export type N8nCommandResult =
   | { status: "WAITING_FOR_APPROVAL"; commandHash?: string; approvalUrl?: string; message?: string; httpStatus: number }
+  | { status: "READ_ONLY_RESULT"; resultStatus: "READ_ONLY_COMPLETED" | "READ_ONLY_BLOCKED"; commandHash?: string; result: string; projectRowsRead: number; message?: string; httpStatus: number }
   | { status: "UNCONFIGURED" | "BLOCKED"; message: string; httpStatus?: number };
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
@@ -73,12 +74,31 @@ export async function submitN8nCommand(
       }
     })();
 
-    if (!response.ok || payload?.accepted !== true || payload?.status !== "WAITING_FOR_APPROVAL") {
+    if (!response.ok || payload?.accepted !== true) {
       return {
         status: "BLOCKED",
-        message: `n8n did not confirm an approval-queued command (HTTP ${response.status}).`,
+        message: `n8n did not confirm an accepted command (HTTP ${response.status}).`,
         httpStatus: response.status,
       };
+    }
+
+    if (payload.status === "READ_ONLY_COMPLETED" || payload.status === "READ_ONLY_BLOCKED") {
+      if (typeof payload.result !== "string" || !payload.result.trim()) {
+        return { status: "BLOCKED", message: "n8n accepted a read-only status command but returned no result.", httpStatus: response.status };
+      }
+      return {
+        status: "READ_ONLY_RESULT",
+        resultStatus: payload.status,
+        commandHash: typeof payload.commandHash === "string" ? payload.commandHash : undefined,
+        result: payload.result,
+        projectRowsRead: typeof payload.projectRowsRead === "number" && Number.isFinite(payload.projectRowsRead) ? payload.projectRowsRead : 0,
+        message: typeof payload.message === "string" ? payload.message : undefined,
+        httpStatus: response.status,
+      };
+    }
+
+    if (payload.status !== "WAITING_FOR_APPROVAL") {
+      return { status: "BLOCKED", message: `n8n returned an unrecognized command status (HTTP ${response.status}).`, httpStatus: response.status };
     }
 
     return {
