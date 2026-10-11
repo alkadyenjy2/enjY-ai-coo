@@ -728,10 +728,10 @@ app.post("/api/agent/command", async (req, res) => {
       !["gpt-6-astra", "muse-spark-1.3"].includes(requestedModel)
       ? null
       : resolveLiveModelRoute();
-    const selectedModel = liveRoute?.model || resolveJarvisModel(model);
-    const isOpenRouterModel = liveRoute?.providerId === "openrouter" && selectedModel === liveRoute.model;
+    let selectedModel = liveRoute?.model || resolveJarvisModel(model);
+    let isOpenRouterModel = liveRoute?.providerId === "openrouter" && selectedModel === liveRoute.model;
     const isOpenAIRequested = selectedModel === "gpt-6-astra";
-    const ai = isOpenAIRequested || isOpenRouterModel ? null : getGeminiClient();
+    let ai = isOpenAIRequested || isOpenRouterModel ? null : getGeminiClient();
     
     // System instruction detailing the Master Prompt Core AI Agent rules
     const systemInstruction = `
@@ -907,33 +907,35 @@ Rules for Response:
 
     const isOpenAIModel = selectedModel === "gpt-6-astra";
     const isMetaModel = selectedModel === "muse-spark-1.3";
-    const response = isOpenAIModel || isMetaModel || isOpenRouterModel
-      ? null
-      : await ai!.models.generateContent({
-          model: selectedModel,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            temperature: 0.7,
-            tools
-          }
-        });
-    const modelResponse = isOpenAIModel || isOpenRouterModel
-      ? await callOpenAIResponses({
+    let response: any = null;
+    let modelResponse: { id: string; text: string; functionCalls: Array<{ name: string; args: Record<string, any>; callId: string }> };
+
+    if (isOpenRouterModel) {
+      try {
+        modelResponse = await callOpenAIResponses({
           model: selectedModel,
           instructions: systemInstruction,
           input: [prompt],
           tools: toOpenAITools(allowedFuncDecls),
-          ...(isOpenRouterModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {})
-        })
-      : isMetaModel
-      ? await callMetaModelResponses({
-          model: selectedModel,
-          instructions: systemInstruction,
-          input: [prompt],
-          tools: toOpenAITools(allowedFuncDecls)
-        })
-      : {
+          apiKey: liveRoute!.apiKey,
+          baseUrl: liveRoute!.baseUrl || undefined
+        });
+      } catch (openRouterError) {
+        // Provider access is only considered usable after a real request succeeds.
+        // If OpenRouter fails, try the already-integrated Gemini adapter only when
+        // its credential is configured; otherwise preserve the fail-closed error.
+        const fallbackAi = getGeminiClient();
+        if (!fallbackAi) throw openRouterError;
+        const fallbackModel = resolveJarvisModel(undefined, false);
+        response = await fallbackAi.models.generateContent({
+          model: fallbackModel,
+          contents: prompt,
+          config: { systemInstruction, temperature: 0.7, tools }
+        });
+        selectedModel = fallbackModel;
+        isOpenRouterModel = false;
+        ai = fallbackAi;
+        modelResponse = {
           id: "",
           text: response?.text || "",
           functionCalls: (response?.functionCalls || []).map((call: any) => ({
@@ -942,6 +944,37 @@ Rules for Response:
             callId: ""
           }))
         };
+      }
+    } else if (isOpenAIModel) {
+      modelResponse = await callOpenAIResponses({
+        model: selectedModel,
+        instructions: systemInstruction,
+        input: [prompt],
+        tools: toOpenAITools(allowedFuncDecls)
+      });
+    } else if (isMetaModel) {
+      modelResponse = await callMetaModelResponses({
+        model: selectedModel,
+        instructions: systemInstruction,
+        input: [prompt],
+        tools: toOpenAITools(allowedFuncDecls)
+      });
+    } else {
+      response = await ai!.models.generateContent({
+        model: selectedModel,
+        contents: prompt,
+        config: { systemInstruction, temperature: 0.7, tools }
+      });
+      modelResponse = {
+        id: "",
+        text: response?.text || "",
+        functionCalls: (response?.functionCalls || []).map((call: any) => ({
+          name: call.name,
+          args: call.args || {},
+          callId: ""
+        }))
+      };
+    }
 
     // Only append actions after the corresponding adapter actually runs.
     // Classification, model selection, and reading in-memory context are not external executions.
