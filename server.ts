@@ -15,6 +15,7 @@ import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
 import { isLiveModelRouteConfigured, resolveLiveModelRoute } from "./src/ai-gateway/live-model-route";
 import { probeN8nHealth } from "./src/adapters/n8n-health";
+import { submitN8nCommand } from "./src/adapters/n8n-bridge";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
@@ -185,7 +186,34 @@ app.use("/api/clinic", clinicRouter);
 
 // Protected API surfaces. Webhook routes remain signature-authenticated separately.
 app.use(["/api/agent", "/api/connectors", "/api/env-status"], requireAuth);
-app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard"], requireOrganizationAccess);
+app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard", "/api/agent/n8n-command"], requireOrganizationAccess);
+
+app.post("/api/agent/n8n-command", async (req, res) => {
+  const command = typeof req.body?.prompt === "string"
+    ? req.body.prompt
+    : typeof req.body?.command === "string"
+      ? req.body.command
+      : "";
+  if (!command.trim() || command.trim().length > 5000) {
+    return res.status(400).json({ success: false, status: "BLOCKED", error: "A command of 1 to 5000 characters is required." });
+  }
+  const result = await submitN8nCommand(command, { webhookUrl: process.env.N8N_COMMAND_WEBHOOK_URL });
+  if (result.status === "WAITING_FOR_APPROVAL") {
+    return res.status(202).json({
+      success: true,
+      status: result.status,
+      commandHash: result.commandHash,
+      approvalUrl: result.approvalUrl,
+      message: result.message || "Command was accepted by n8n and is waiting for owner approval.",
+    });
+  }
+  if (result.status === "UNCONFIGURED") {
+    return res.status(503).json({ success: false, status: result.status, error: result.message });
+  }
+  return res.status(result.httpStatus && result.httpStatus >= 400 ? 502 : 503)
+    .json({ success: false, status: result.status, error: result.message });
+});
+
 
 app.post("/api/agent/approval", requireOrganizationAccess, async (req, res) => {
   const auth = getAuthContext(res);
