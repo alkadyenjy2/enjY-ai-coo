@@ -13,15 +13,19 @@ import { gmailRouter } from "./src/api/agent/tools/gmail-router";
 import { createTelegramRouter, sendTelegramMessage } from "./src/api/telegram";
 import { callOpenAIResponses, toOpenAITools } from "./src/adapters/openai";
 import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
+import { resolveLiveModelRoute } from "./src/ai-gateway/live-model-route";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
 import { getPortfolioContext } from "./src/core/portfolio-context";
+import { auditPortfolioRepositories } from "./src/core/github-portfolio-audit";
+import { isPortfolioAuditCommand, isPortfolioAuditFullyVerified } from "./src/core/portfolio-audit-policy";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
 import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, verifyKolboArtifact } from "./src/execution/kolbo-provider.ts";
 import { adminClient, claimApprovedDurableJob, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 import { discoverScholarships, formatScholarshipResults, isScholarshipDiscoveryIntent } from "./src/agents/scholarship-discovery";
+import { createOfflineFallbackResult } from "./src/execution/offline-fallback.ts";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -182,7 +186,7 @@ app.use("/api/clinic", clinicRouter);
 app.use(["/api/agent", "/api/connectors", "/api/env-status"], requireAuth);
 app.use(["/api/agent/command", "/api/agent/history", "/api/agent/onboard"], requireOrganizationAccess);
 
-app.post("/api/agent/approval", async (req, res) => {
+app.post("/api/agent/approval", requireOrganizationAccess, async (req, res) => {
   const auth = getAuthContext(res);
   const organizationId = getOrganizationAccess(res)?.organizationId || "";
   const userId = String(auth?.user.id || "").trim();
@@ -247,8 +251,8 @@ const recentCommandCache = new Map<string, { timestamp: number; record: Operatio
 
 function hasRealExecutionStarted(actions: Array<{ tool: string; status: string }>): boolean {
   return actions.some((action) =>
-    /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health/i.test(action.tool)
-    && ["success", "queued", "error", "failed"].includes(action.status)
+    /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health|Portfolio Repository Audit/i.test(action.tool)
+    && ["success", "queued", "warning", "error", "failed"].includes(action.status)
   );
 }
 
@@ -268,7 +272,7 @@ export function classifyCommand(promptStr: string): CommandClass {
 
   if (isScholarshipDiscoveryIntent(promptStr)) return "SCHOLARSHIP_DISCOVERY";
 
-  if (isSystemHealthCommand(p) || /تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
+  if (isSystemHealthCommand(p) || isPortfolioAuditCommand(p) || /تقرير حالة النظام|master coo|حالة النظام|coo briefing|executive briefing|تقرير تشغيلي|تقرير النظام|master coo operating briefing/i.test(p)) {
     return "SYSTEM_HEALTH";
   }
 
@@ -306,8 +310,8 @@ const INTENT_TOOL_POLICY: Record<string, string[]> = {
   DATABASE: ["query_supabase", "update_supabase", "check_connector_status"],
   SCHOLARSHIP_DISCOVERY: ["discover_scholarships"],
   EXECUTION: ["query_supabase", "update_supabase", "check_connector_status", "send_email", "browser_task", "execute_media"],
-  SYSTEM_HEALTH: ["check_connector_status"],
-  REPORTING: ["check_connector_status"],
+  SYSTEM_HEALTH: ["check_connector_status", "audit_portfolio_projects"],
+  REPORTING: ["check_connector_status", "audit_portfolio_projects"],
   RESEARCH: [],
   RESEARCH_PLANNING: [],
   PLANNING: [],
@@ -325,8 +329,8 @@ function isToolAllowed(intent: string, toolName: string): boolean {
 export function getReportingVerificationStatus(
   actions: Array<{ tool: string; status: string }>
 ): "VERIFIED" | "FAILED" | "NOT_REQUIRED" {
-  const relevant = actions.filter((action) => /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health/i.test(action.tool));
-  if (relevant.some((action) => ["error", "failed"].includes(action.status))) return "FAILED";
+  const relevant = actions.filter((action) => /Supabase|Gmail|BrowserSkill|Kolbo|Connector Health|Portfolio Repository Audit/i.test(action.tool));
+  if (relevant.some((action) => ["error", "failed", "warning"].includes(action.status))) return "FAILED";
   if (relevant.some((action) => ["success", "queued"].includes(action.status))) return "VERIFIED";
   return "NOT_REQUIRED";
 }
@@ -719,9 +723,15 @@ app.post("/api/agent/command", async (req, res) => {
   }
 
   try {
-    const selectedModel = resolveJarvisModel(model);
+    // Free-first routing must also apply when the caller omits a model (e.g. Telegram).
+    // Paid model routing remains opt-in; never let the request's default bypass free-first.
+    const liveRoute = process.env.JARVIS_ALLOW_PAID_MODEL === "true"
+      ? null
+      : resolveLiveModelRoute();
+    let selectedModel = liveRoute?.model || resolveJarvisModel(model);
+    let isOpenRouterModel = liveRoute?.providerId === "openrouter" && selectedModel === liveRoute.model;
     const isOpenAIRequested = selectedModel === "gpt-6-astra";
-    const ai = isOpenAIRequested ? null : getGeminiClient();
+    let ai = isOpenAIRequested || isOpenRouterModel ? null : getGeminiClient();
     
     // System instruction detailing the Master Prompt Core AI Agent rules
     const systemInstruction = `
@@ -756,44 +766,29 @@ Rules for Response:
 5. Never return generic Master COO Briefing unless command is SYSTEM_HEALTH or REPORTING.
     `.trim();
 
-    if (!ai && !isOpenAIRequested) {
-      const fallbackContent = `**[Core Agent Standby]** Processed prompt: "${prompt}".\n\n- **Status**: Executed in offline fallback mode.\n- **Action**: Connected to active project context **${activeProject?.name || 'Core HQ'}**.\n- **Recommendation**: Set GEMINI_API_KEY in secrets to unlock the configured Gemini fallback engine.`;
-      const fallbackActions = [
-        { tool: 'Memory System', status: 'success', details: 'Retrieved 3 memory items' },
-        { tool: 'Connector Hub', status: 'success', details: 'Verified configured connector state without external side effects' }
-      ];
-      const fallbackRecord: OperationalExecutionRecord = {
-        id: `exec-${Date.now()}`,
-        timestamp: new Date().toISOString(),
+    if (!ai && !isOpenAIRequested && !isOpenRouterModel) {
+      const blockedResult = createOfflineFallbackResult({
         command: userPromptStr,
         project: projectNameStr,
         intent: commandClass,
-        tool: 'Offline Fallback Engine',
-        selectedTools: fallbackActions.map((action) => action.tool),
-        actionsExecuted: fallbackActions,
-        results: { responseSnippet: fallbackContent.slice(0, 150), mode: 'offline_fallback' },
-        state_history: ['RECEIVED', 'ROUTED', 'DISPATCHED', 'EXECUTED', 'COMPLETED'],
-        evidence: '[Offline Fallback Engine]: No Gemini credential was available; no external side effect was attempted.',
-        verificationStatus: 'NOT_REQUIRED',
-        final_state_reason: 'Offline fallback response generated without external side effects.',
-        errors: [],
-        approvalStatus: 'AUTO_APPROVED'
-      };
-      await rememberOperationalRecord(fallbackRecord);
-      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: fallbackRecord, content: fallbackContent });
+        missingDependency: 'GEMINI_LIVE_DEPENDENCY_UNAVAILABLE; verified free-first routing is not connected to this execution path'
+      });
+      const blockedRecord: OperationalExecutionRecord = blockedResult.executionRecord;
+      await rememberOperationalRecord(blockedRecord);
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: blockedRecord, content: blockedResult.content });
 
-      return res.json({
-        content: fallbackContent,
-        executionRecord: fallbackRecord,
+      return res.status(503).json({
+        content: blockedResult.content,
+        executionRecord: blockedRecord,
         thoughtProcess: {
-          understand: `User requested: "${prompt}".`,
-          inspect: 'Verified offline fallback state.',
-          decide: 'Construct structured operational report.',
-          execute: 'Simulate workflow step completion without external side effects.',
-          verify: 'Verification Status: NOT_REQUIRED; live AI execution was not claimed.',
-          report: 'Delivered fallback report and recorded the execution event.'
+          understand: 'User requested: "' + prompt + '".',
+          inspect: 'The configured live provider is unavailable.',
+          decide: 'Stop safely instead of simulating execution.',
+          execute: 'No project, database, deployment, or external action was attempted.',
+          verify: 'Verification failed because the command did not execute.',
+          report: 'Recorded a BLOCKED execution with the dependency reason.'
         },
-        actionsTaken: fallbackActions
+        actionsTaken: []
       });
     }
 
@@ -886,46 +881,67 @@ Rules for Response:
         }
       );
     } else if (commandClass === "SYSTEM_HEALTH" || commandClass === "REPORTING") {
-      allowedFuncDecls.push({
-        name: "check_connector_status",
-        description: "Checks real status of external connectors.",
-        parameters: {
-          type: Type.OBJECT,
-          properties: { connectorId: { type: Type.STRING } },
-          required: ["connectorId"]
+      allowedFuncDecls.push(
+        {
+          name: "check_connector_status",
+          description: "Checks real status of external connectors.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: { connectorId: { type: Type.STRING } },
+            required: ["connectorId"]
+          }
+        },
+        {
+          name: "audit_portfolio_projects",
+          description: "Read-only audit of canonical GitHub repositories and latest GitHub Actions runs. Reports private/unavailable repositories as not checked; never changes code or deployment state.",
+          parameters: {
+            type: Type.OBJECT,
+            properties: {
+              projectNames: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Optional exact project names to audit. Omit to audit every repository with a verified canonical URL." }
+            }
+          }
         }
-      });
+      );
     }
     const tools = allowedFuncDecls.length > 0 ? [{ functionDeclarations: allowedFuncDecls }] : undefined;
 
     const isOpenAIModel = selectedModel === "gpt-6-astra";
     const isMetaModel = selectedModel === "muse-spark-1.3";
-    const response = isOpenAIModel || isMetaModel
-      ? null
-      : await ai!.models.generateContent({
+    let response: any = null;
+    let modelResponse: { id: string; text: string; functionCalls: Array<{ name: string; args: Record<string, any>; callId: string }> };
+
+    if (isOpenRouterModel) {
+      try {
+        modelResponse = await callOpenAIResponses({
           model: selectedModel,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            temperature: 0.7,
-            tools
-          }
+          instructions: systemInstruction,
+          input: [prompt],
+          tools: toOpenAITools(allowedFuncDecls),
+          apiKey: liveRoute!.apiKey,
+          baseUrl: liveRoute!.baseUrl || undefined
         });
-    const modelResponse = isOpenAIModel
-      ? await callOpenAIResponses({
-          model: selectedModel,
-          instructions: systemInstruction,
-          input: [prompt],
-          tools: toOpenAITools(allowedFuncDecls)
-        })
-      : isMetaModel
-      ? await callMetaModelResponses({
-          model: selectedModel,
-          instructions: systemInstruction,
-          input: [prompt],
-          tools: toOpenAITools(allowedFuncDecls)
-        })
-      : {
+      } catch (openRouterError) {
+        // Provider access is only considered usable after a real request succeeds.
+        // If OpenRouter fails, try the already-integrated Gemini adapter only when
+        // its credential is configured; otherwise preserve the fail-closed error.
+        const providerErrorText = String((openRouterError as any)?.message || openRouterError);
+        // Quota, rate-limit, billing, and auth failures must stop here. Do not
+        // rotate providers to evade a provider's access or quota restrictions.
+        if (/(\b401\b|\b402\b|\b403\b|\b429\b|quota|rate.?limit|unauthori[sz]ed|forbidden|billing|insufficient credit)/i.test(providerErrorText)) {
+          throw openRouterError;
+        }
+        const fallbackAi = getGeminiClient();
+        if (!fallbackAi) throw openRouterError;
+        const fallbackModel = resolveJarvisModel(undefined, false);
+        response = await fallbackAi.models.generateContent({
+          model: fallbackModel,
+          contents: prompt,
+          config: { systemInstruction, temperature: 0.7, tools }
+        });
+        selectedModel = fallbackModel;
+        isOpenRouterModel = false;
+        ai = fallbackAi;
+        modelResponse = {
           id: "",
           text: response?.text || "",
           functionCalls: (response?.functionCalls || []).map((call: any) => ({
@@ -934,12 +950,41 @@ Rules for Response:
             callId: ""
           }))
         };
+      }
+    } else if (isOpenAIModel) {
+      modelResponse = await callOpenAIResponses({
+        model: selectedModel,
+        instructions: systemInstruction,
+        input: [prompt],
+        tools: toOpenAITools(allowedFuncDecls)
+      });
+    } else if (isMetaModel) {
+      modelResponse = await callMetaModelResponses({
+        model: selectedModel,
+        instructions: systemInstruction,
+        input: [prompt],
+        tools: toOpenAITools(allowedFuncDecls)
+      });
+    } else {
+      response = await ai!.models.generateContent({
+        model: selectedModel,
+        contents: prompt,
+        config: { systemInstruction, temperature: 0.7, tools }
+      });
+      modelResponse = {
+        id: "",
+        text: response?.text || "",
+        functionCalls: (response?.functionCalls || []).map((call: any) => ({
+          name: call.name,
+          args: call.args || {},
+          callId: ""
+        }))
+      };
+    }
 
-    const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [
-      { tool: 'Command Router', status: 'success', details: `Classified directive as '${commandClass}'` },
-      { tool: isOpenAIModel ? 'OpenAI Astra Engine' : isMetaModel ? 'Meta Muse Spark Engine' : 'Gemini Engine', status: 'success', details: `Executed via ${selectedModel}` },
-      { tool: 'Memory Sync', status: 'success', details: 'Scanned 6 active memory items' }
-    ];
+    // Only append actions after the corresponding adapter actually runs.
+    // Classification, model selection, and reading in-memory context are not external executions.
+    const actionsTakenList: Array<{ tool: string; status: string; details: string }> = [];
 
     let responseText = modelResponse.text;
     let verificationStatus: "VERIFIED" | "FAILED" | "NOT_REQUIRED" = "NOT_REQUIRED";
@@ -1109,11 +1154,12 @@ Rules for Response:
           let followUpText = "";
           if (queryStatus === "success") {
             try {
-            if (isOpenAIModel) {
+            if (isOpenAIModel || isOpenRouterModel) {
               const followUp = await callOpenAIResponses({
                 model: selectedModel,
                 instructions: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`,
                 previousResponseId: modelResponse.id,
+                ...(isOpenRouterModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {}),
                 input: [{
                   type: "function_call_output",
                   call_id: call.callId,
@@ -1235,19 +1281,74 @@ Rules for Response:
         }
       } else if (call.name === "check_connector_status") {
         const connectorId = (call.args as any)?.connectorId || "supabase";
-        const isSupabase = connectorId === "supabase";
-        const statusStr = isSupabase && supabaseUrl && supabaseApiKey ? "REAL_LIVE" : "UNCONFIGURED";
+        let statusStr = "UNCONFIGURED";
+        let probeStatus: number | null = null;
 
+        if (connectorId === "supabase" && supabaseUrl && supabaseApiKey) {
+          try {
+            const probe = await fetch(new URL("/auth/v1/health", supabaseUrl), {
+              headers: { apikey: supabaseApiKey },
+              signal: AbortSignal.timeout(8000),
+            });
+            probeStatus = probe.status;
+            statusStr = probe.ok ? `REAL_LIVE_HTTP_${probe.status}` : `UNHEALTHY_HTTP_${probe.status}`;
+          } catch {
+            statusStr = "UNREACHABLE";
+          }
+        }
+
+        const verified = statusStr.startsWith("REAL_LIVE_HTTP_");
         actionsTakenList.push({
           tool: 'Connector Health Tool',
-          status: 'success',
-          details: `Probed connector '${connectorId}': ${statusStr}`
+          status: verified ? 'success' : 'failed',
+          details: `Live probe for connector '${connectorId}': ${statusStr}${probeStatus === null ? "" : ` (HTTP ${probeStatus})`}`
         });
+        if (!verified) {
+          verificationStatus = "FAILED";
+          executionErrors.push(`CONNECTOR_PROBE_${connectorId.toUpperCase()}_${statusStr}`);
+        } else {
+          verificationStatus = "VERIFIED";
+        }
 
         responseText = `### 🔌 حالة الموصل المطلوب (${connectorId})
 * **الحالة:** \`${statusStr}\`
-* **المصادقة:** ${statusStr === 'REAL_LIVE' ? 'مفعلة وتدعم الاتصال المباشر' : 'غير متوفرة في بيئة الأسرار (UNCONFIGURED)'}`;
+* **دليل الاتصال:** ${verified ? `تم فحص نقطة الصحة فعليًا (HTTP ${probeStatus}).` : 'لم يثبت الاتصال الفعلي؛ لا يُعد وجود إعدادات وحده دليل نجاح.'}`;
+      } else if (call.name === "audit_portfolio_projects") {
+        const requestedNames = Array.isArray((call.args as any)?.projectNames)
+          ? (call.args as any).projectNames.filter((name: unknown): name is string => typeof name === "string")
+          : undefined;
+        const audit = await auditPortfolioRepositories({
+          token: process.env.GITHUB_TOKEN,
+          projectNames: requestedNames,
+        });
+        const verifiedCount = audit.results.filter((result) => result.status === "verified").length;
+        const partialCount = audit.results.filter((result) => result.status === "partial").length;
+        const allVerified = isPortfolioAuditFullyVerified(audit.results);
+        const anyEvidence = verifiedCount > 0 || partialCount > 0;
+
+        actionsTakenList.push({
+          tool: "Portfolio Repository Audit",
+          status: allVerified ? "success" : anyEvidence ? "warning" : "error",
+          details: `Read-only GitHub audit at ${audit.auditedAt}: ${verifiedCount}/${audit.results.length} repositories fully verified, ${partialCount} partial, ${audit.results.length - verifiedCount - partialCount} blocked/not checked. No code or deployment was changed.`,
+        });
+        verificationStatus = allVerified ? "VERIFIED" : "FAILED";
+        if (!allVerified) executionErrors.push("PORTFOLIO_AUDIT_PARTIAL: at least one repository or latest workflow run lacks verifiable evidence.");
+        responseText = `### Portfolio Repository Audit
+- **Checked:** ${audit.results.length}
+- **Fully verified:** ${verifiedCount}
+- **Partial:** ${partialCount}
+- **Not checked / blocked:** ${audit.results.length - verifiedCount - partialCount}
+- **Source:** GitHub REST API
+- **Timestamp:** ${audit.auditedAt}
+
+${JSON.stringify(audit.results, null, 2)}`;
       }
+    }
+
+    if (!responseText) {
+      responseText = "No model response was generated; no external action was executed.";
+      verificationStatus = "FAILED";
+      executionErrors.push("MODEL_RETURNED_EMPTY_RESPONSE");
     }
 
     // Save Execution Record into Operational Memory.
@@ -1284,10 +1385,6 @@ Rules for Response:
 
     await rememberOperationalRecord(execRecord);
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record: execRecord, content: responseText });
-
-    if (!responseText) {
-      responseText = "Execution complete with no text output.";
-    }
 
     return res.json({
       content: responseText,

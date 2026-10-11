@@ -31,7 +31,8 @@
     "test:agent-lifecycle": "node --import tsx --test --test-concurrency=1 tests/agent-lifecycle.test.ts",
     "test:meta-model": "node --import tsx --test --test-concurrency=1 tests/meta-model.test.ts",
     "test:operational-history-context": "node --import tsx --test --test-concurrency=1 tests/operational-history-context.test.ts",
-    "test:auth-personal-mode": "node --import tsx --test --test-concurrency=1 tests/auth-personal-mode.test.ts"
+    "test:auth-personal-mode": "node --import tsx --test --test-concurrency=1 tests/auth-personal-mode.test.ts",
+    "test:free-first-live-route": "node --import tsx --test --test-concurrency=1 tests/free-first-live-model-route.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

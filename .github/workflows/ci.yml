@@ -35,11 +35,33 @@ jobs:
       - name: Lint / typecheck
         run: npm run lint
 
+      - name: Workflow Studio must not fabricate live success
+        run: node --test tests/workflow-studio-no-fake-success.test.mjs
+
       - name: Personal-mode authentication fail-closed test
         run: npm run test:auth-personal-mode
 
+      - name: Live authenticated E2E (approval authorization)
+        env:
+          AUTH_E2E_SUPABASE_URL: ${{ secrets.AUTH_E2E_SUPABASE_URL }}
+          AUTH_E2E_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.AUTH_E2E_SUPABASE_PUBLISHABLE_KEY }}
+          AUTH_E2E_TEST_EMAIL: ${{ secrets.AUTH_E2E_TEST_EMAIL }}
+          AUTH_E2E_TEST_PASSWORD: ${{ secrets.AUTH_E2E_TEST_PASSWORD }}
+          AUTH_E2E_MEMBER_ORG_ID: ${{ secrets.AUTH_E2E_MEMBER_ORG_ID }}
+          AUTH_E2E_NON_MEMBER_ORG_ID: ${{ secrets.AUTH_E2E_NON_MEMBER_ORG_ID }}
+        shell: bash
+        run: |
+          if [[ -n "$AUTH_E2E_SUPABASE_URL" && -n "$AUTH_E2E_SUPABASE_PUBLISHABLE_KEY" && -n "$AUTH_E2E_TEST_EMAIL" && -n "$AUTH_E2E_TEST_PASSWORD" && -n "$AUTH_E2E_MEMBER_ORG_ID" ]]; then
+            npm run test:auth-e2e
+          else
+            echo "::notice title=Live Auth E2E skipped::Required AUTH_E2E test secrets are not configured; live authentication and approval authorization remain unverified."
+          fi
+
       - name: Free-first OmniRoute router test
         run: npm run test:free-first-router
+
+      - name: Live free-first provider route fails closed without credentials
+        run: npm run test:free-first-live-route
 
       - name: Jarvis route summary test
         run: npm run test:jarvis-route

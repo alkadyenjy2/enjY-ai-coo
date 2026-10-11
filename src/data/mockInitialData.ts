@@ -104,10 +104,10 @@ export const initialConnectors: Connector[] = [
     category: 'development',
     description: 'Inspect repositories, create PRs, commit code edits, manage issues and trigger CI/CD workflows.',
     iconName: 'Github',
-    status: 'connected',
+    status: 'discovering',
     authType: 'oauth',
     capabilities: ['read_repos', 'write_code', 'create_prs', 'manage_actions'],
-    lastVerified: '2026-08-08T19:30:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-openai',
@@ -115,10 +115,10 @@ export const initialConnectors: Connector[] = [
     category: 'ai',
     description: 'Server-side OpenAI Responses API reasoning engine for command execution, function calling, and structured outputs.',
     iconName: 'Sparkles',
-    status: 'connected',
+    status: 'discovering',
     authType: 'api_key',
     capabilities: ['responses_api', 'function_calling', 'structured_outputs'],
-    lastVerified: '2026-09-19T00:00:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-gemini',
@@ -126,10 +126,10 @@ export const initialConnectors: Connector[] = [
     category: 'ai',
     description: 'Server-side native AI reasoning engine for fast analysis, code generation, and task routing.',
     iconName: 'Sparkles',
-    status: 'connected',
+    status: 'discovering',
     authType: 'api_key',
     capabilities: ['generate_content', 'chat_stream', 'structured_json', 'function_calling', 'grounding'],
-    lastVerified: '2026-08-08T20:00:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-n8n',
@@ -137,10 +137,10 @@ export const initialConnectors: Connector[] = [
     category: 'automation',
     description: 'Self-hosted modular workflow automation engine connecting webhooks, queues, and external APIs.',
     iconName: 'Workflow',
-    status: 'connected',
+    status: 'discovering',
     authType: 'api_key',
     capabilities: ['trigger_workflows', 'listen_webhooks', 'node_execution', 'error_handling'],
-    lastVerified: '2026-08-08T18:45:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-supabase',
@@ -148,10 +148,10 @@ export const initialConnectors: Connector[] = [
     category: 'backend',
     description: 'PostgreSQL database with real-time subscriptions, row level security, and vector embeddings storage.',
     iconName: 'Database',
-    status: 'connected',
+    status: 'discovering',
     authType: 'oauth',
     capabilities: ['relational_db', 'vector_search', 'realtime_events', 'auth_management'],
-    lastVerified: '2026-08-08T17:10:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-telegram',
@@ -159,10 +159,10 @@ export const initialConnectors: Connector[] = [
     category: 'communication',
     description: 'Operational command center bot sending status updates, execution alerts, and receiving natural language commands.',
     iconName: 'MessageSquare',
-    status: 'connected',
+    status: 'discovering',
     authType: 'api_key',
     capabilities: ['receive_commands', 'send_alerts', 'interactive_buttons', 'report_delivery'],
-    lastVerified: '2026-08-08T19:50:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-gdrive',
@@ -170,10 +170,10 @@ export const initialConnectors: Connector[] = [
     category: 'productivity',
     description: 'Store documents, update tracking spreadsheets, generate reports, and manage team knowledge base.',
     iconName: 'Folder',
-    status: 'authorized',
+    status: 'discovering',
     authType: 'google_signin',
     capabilities: ['read_docs', 'update_sheets', 'file_storage'],
-    lastVerified: '2026-08-07T14:20:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-vercel',
@@ -181,10 +181,10 @@ export const initialConnectors: Connector[] = [
     category: 'cloud',
     description: 'Instant edge deployment for frontend SPAs, preview environments, and custom domains.',
     iconName: 'Cloud',
-    status: 'authorized',
+    status: 'discovering',
     authType: 'oauth',
     capabilities: ['deploy_preview', 'promote_prod', 'domain_management'],
-    lastVerified: '2026-08-06T12:00:00Z'
+    lastVerified: undefined
   },
   {
     id: 'conn-ollama',
@@ -195,7 +195,7 @@ export const initialConnectors: Connector[] = [
     status: 'discovering',
     authType: 'api_key',
     capabilities: ['local_inference', 'offline_mode', 'zero_cost'],
-    lastVerified: '2026-08-08T09:00:00Z'
+    lastVerified: undefined
   }
 ];
 
@@ -205,15 +205,15 @@ export const initialWorkflows: Workflow[] = [
     name: 'Daily System HQ Health & Lead Digest',
     description: 'Cron trigger every morning at 08:00 AM. Scans active projects, checks API health, summarizes failed runs, and delivers Telegram report.',
     triggerType: 'schedule',
-    active: true,
-    lastRun: '2026-08-08T08:00:00Z',
-    lastStatus: 'success',
-    runCount: 42,
+    active: false,
+    lastRun: undefined,
+    lastStatus: undefined,
+    runCount: 0,
     nodes: [
-      { id: 'n1', type: 'trigger', label: 'Cron Trigger (Daily 8:00 AM)', description: 'Schedule timer', config: { cron: '0 8 * * *' }, status: 'success' },
-      { id: 'n2', type: 'connector', label: 'Inspect Active Projects (Supabase)', description: 'Fetch KPIs & status', config: { table: 'projects' }, status: 'success' },
-      { id: 'n3', type: 'ai_agent', label: 'Gemini Summary Engine', description: 'Synthesize health report & actionable risks', config: { model: 'gemini-3.6-flash' }, status: 'success' },
-      { id: 'n4', type: 'connector', label: 'Send Telegram HQ Notification', description: 'Deliver formatted message', config: { channel: 'hq_chat' }, status: 'success' }
+      { id: 'n1', type: 'trigger', label: 'Cron Trigger (Daily 8:00 AM)', description: 'Schedule timer', config: { cron: '0 8 * * *' }, status: 'idle' },
+      { id: 'n2', type: 'connector', label: 'Inspect Active Projects (Supabase)', description: 'Fetch KPIs & status', config: { table: 'projects' }, status: 'idle' },
+      { id: 'n3', type: 'ai_agent', label: 'Gemini Summary Engine', description: 'Synthesize health report & actionable risks', config: { model: 'gemini-3.6-flash' }, status: 'idle' },
+      { id: 'n4', type: 'connector', label: 'Send Telegram HQ Notification', description: 'Deliver formatted message', config: { channel: 'hq_chat' }, status: 'idle' }
     ],
     connections: [
       { from: 'n1', to: 'n2' },
@@ -226,16 +226,16 @@ export const initialWorkflows: Workflow[] = [
     name: 'GitHub PR Code Review & Auto-Test Pipeline',
     description: 'Webhook trigger on new Pull Request. Runs linter, inspects modified files against Lessons Learned, and posts review comments.',
     triggerType: 'webhook',
-    active: true,
-    lastRun: '2026-08-08T15:30:00Z',
-    lastStatus: 'success',
-    runCount: 128,
+    active: false,
+    lastRun: undefined,
+    lastStatus: undefined,
+    runCount: 0,
     nodes: [
-      { id: 'n1', type: 'trigger', label: 'GitHub PR Webhook', description: 'Event: pull_request.opened', config: { repo: 'org/app' }, status: 'success' },
-      { id: 'n2', type: 'code', label: 'Extract Diff & Changed Files', description: 'Parse git diff', config: { maxFiles: 15 }, status: 'success' },
-      { id: 'n3', type: 'connector', label: 'Retrieve Lessons Learned Memory', description: 'Query memory for past fixes', config: { tags: ['code-review'] }, status: 'success' },
-      { id: 'n4', type: 'ai_agent', label: 'Coding Agent Security & Quality Audit', description: 'Review code using Gemini Pro', config: { model: 'gemini-3.1-pro-preview' }, status: 'success' },
-      { id: 'n5', type: 'connector', label: 'Post PR Comment & Status Check', description: 'GitHub API response', config: { postApproval: true }, status: 'success' }
+      { id: 'n1', type: 'trigger', label: 'GitHub PR Webhook', description: 'Event: pull_request.opened', config: { repo: 'org/app' }, status: 'idle' },
+      { id: 'n2', type: 'code', label: 'Extract Diff & Changed Files', description: 'Parse git diff', config: { maxFiles: 15 }, status: 'idle' },
+      { id: 'n3', type: 'connector', label: 'Retrieve Lessons Learned Memory', description: 'Query memory for past fixes', config: { tags: ['code-review'] }, status: 'idle' },
+      { id: 'n4', type: 'ai_agent', label: 'Coding Agent Security & Quality Audit', description: 'Review code using Gemini Pro', config: { model: 'gemini-3.1-pro-preview' }, status: 'idle' },
+      { id: 'n5', type: 'connector', label: 'Post PR Comment & Status Check', description: 'GitHub API response', config: { postApproval: true }, status: 'idle' }
     ],
     connections: [
       { from: 'n1', to: 'n2' },
@@ -249,10 +249,10 @@ export const initialWorkflows: Workflow[] = [
     name: 'Automated Error Diagnostic & Self-Fix Engine',
     description: 'Listens for system error webhooks. Diagnoses root cause, searches Lessons Learned, generates minimal safe patch, and records outcome.',
     triggerType: 'event',
-    active: true,
-    lastRun: '2026-08-07T22:15:00Z',
-    lastStatus: 'success',
-    runCount: 19,
+    active: false,
+    lastRun: undefined,
+    lastStatus: undefined,
+    runCount: 0,
     nodes: [
       { id: 'n1', type: 'trigger', label: 'System Error Listener', description: 'Catches runtime exceptions', config: { minLevel: 'ERROR' }, status: 'idle' },
       { id: 'n2', type: 'ai_agent', label: 'Root Cause Diagnoser', description: '6-step diagnostic protocol', config: { protocol: 'Diagnose->Verify->Fix->Test' }, status: 'idle' },
@@ -495,8 +495,8 @@ export const initialCommandTemplates: CommandTemplate[] = [
     category: 'diagnostics',
     isPinned: true,
     tags: ['daily', 'audit', 'health'],
-    usageCount: 42,
-    lastUsedAt: '2026-08-21T16:30:00Z'
+    usageCount: 0,
+    lastUsedAt: undefined
   },
   {
     id: 'tmpl-2',
@@ -506,8 +506,8 @@ export const initialCommandTemplates: CommandTemplate[] = [
     category: 'workflow',
     isPinned: true,
     tags: ['workflow', 'automation', 'crm'],
-    usageCount: 28,
-    lastUsedAt: '2026-08-21T15:10:00Z'
+    usageCount: 0,
+    lastUsedAt: undefined
   },
   {
     id: 'tmpl-3',
@@ -517,8 +517,8 @@ export const initialCommandTemplates: CommandTemplate[] = [
     category: 'leads',
     isPinned: true,
     tags: ['outscraper', 'leads', 'ghl'],
-    usageCount: 35,
-    lastUsedAt: '2026-08-21T17:45:00Z',
+    usageCount: 0,
+    lastUsedAt: undefined,
     variables: [
       { name: 'location', label: 'Target Location', defaultValue: 'Dallas, TX', placeholder: 'City, State' },
       { name: 'niche', label: 'Niche / Specialty', defaultValue: 'Residential Roofing', placeholder: 'Niche' }
@@ -532,8 +532,8 @@ export const initialCommandTemplates: CommandTemplate[] = [
     category: 'social',
     isPinned: false,
     tags: ['tavily', 'postiz', 'content'],
-    usageCount: 19,
-    lastUsedAt: '2026-08-20T19:00:00Z',
+    usageCount: 0,
+    lastUsedAt: undefined,
     variables: [
       { name: 'topic', label: 'Research Topic', defaultValue: 'AI Operations & Autonomous Agents 2026', placeholder: 'Topic' }
     ]
@@ -546,8 +546,8 @@ export const initialCommandTemplates: CommandTemplate[] = [
     category: 'diagnostics',
     isPinned: true,
     tags: ['self-heal', 'debugging', 'lessons'],
-    usageCount: 14,
-    lastUsedAt: '2026-08-21T12:20:00Z'
+    usageCount: 0,
+    lastUsedAt: undefined
   },
   {
     id: 'tmpl-6',
@@ -557,7 +557,18 @@ export const initialCommandTemplates: CommandTemplate[] = [
     category: 'deployment',
     isPinned: false,
     tags: ['deployment', 'cloud-run', 'ci-cd'],
-    usageCount: 8,
-    lastUsedAt: '2026-08-19T14:15:00Z'
+    usageCount: 0,
+    lastUsedAt: undefined
+  },
+  {
+    id: 'tmpl-7',
+    title: 'Portfolio Blocker Sweep',
+    description: 'Read-only audit of canonical GitHub repositories and latest Actions-run evidence; private or inaccessible repositories remain explicitly unverified.',
+    prompt: 'Audit all projects and blockers. Run the read-only GitHub portfolio audit, report repository visibility and latest Actions status, separate verified evidence from unverified blockers, and do not claim completion or deploy anything.',
+    category: 'diagnostics',
+    isPinned: true,
+    tags: ['portfolio', 'blockers', 'github', 'evidence'],
+    usageCount: 0,
+    lastUsedAt: undefined
   }
 ];
