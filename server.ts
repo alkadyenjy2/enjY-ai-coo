@@ -18,7 +18,7 @@ import { probeN8nHealth } from "./src/adapters/n8n-health";
 import { submitN8nCommand } from "./src/adapters/n8n-bridge";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
-import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
+import { buildSystemHealthProbe, isSystemHealthCommand, shouldUseDeterministicSystemHealth } from "./src/core/system-health";
 import { getPortfolioContext } from "./src/core/portfolio-context";
 import { auditPortfolioRepositories } from "./src/core/github-portfolio-audit";
 import { isPortfolioAuditCommand, isPortfolioAuditFullyVerified } from "./src/core/portfolio-audit-policy";
@@ -650,9 +650,9 @@ app.post("/api/agent/command", async (req, res) => {
     }
   }
 
-  // 4. SYSTEM_HEALTH uses a deterministic live connector probe when the configured free model is unavailable.
-  // This avoids silently downgrading a real health check to an offline simulation.
-  if (commandClass === "SYSTEM_HEALTH" && !process.env.GEMINI_API_KEY) {
+  // 4. SYSTEM_HEALTH is deterministic and read-only; it must not depend on model quota.
+  // Only the actual Supabase read below can mark the connector check VERIFIED.
+  if (shouldUseDeterministicSystemHealth(commandClass)) {
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim();
     const supabaseApiKey = getSupabaseReadApiKey();
     const probe = buildSystemHealthProbe({
@@ -664,22 +664,24 @@ app.post("/api/agent/command", async (req, res) => {
     });
     const actionsTaken = [
       { tool: "Command Router", status: "success", details: "Classified directive as SYSTEM_HEALTH" },
-      { tool: "Connector Health Tool", status: probe.status === "REAL_LIVE" ? "success" : "failed", details: probe.evidence },
+      { tool: "Connector Health Tool", status: probe.status === "CONFIGURED" ? "pending" : "failed", details: probe.evidence },
     ];
     let verificationStatus: "VERIFIED" | "FAILED" = "FAILED";
     let liveEvidence = probe.evidence;
-    if (probe.status === "REAL_LIVE") {
+    if (probe.status === "CONFIGURED") {
       try {
         const response = await fetch(supabaseUrl.replace(/\/+$/, "") + "/rest/v1/audit_logs?select=id&limit=1", {
           headers: { apikey: supabaseApiKey, Authorization: "Bearer " + supabaseApiKey },
         });
         const payload = await response.json().catch(() => null);
         verificationStatus = getSupabaseQueryActionStatus(response.status, payload) === "success" ? "VERIFIED" : "FAILED";
-        liveEvidence = "Supabase audit_logs probe HTTP " + response.status + "; live read path verified.";
+        liveEvidence = "Supabase audit_logs probe HTTP " + response.status + (verificationStatus === "VERIFIED" ? "; live read verified." : "; live read not verified.");
       } catch (error: any) {
         liveEvidence = `Supabase audit_logs probe failed: ${error?.message || String(error)}`;
       }
     }
+    actionsTaken[1].status = verificationStatus === "VERIFIED" ? "success" : "failed";
+    actionsTaken[1].details = liveEvidence;
     const record: OperationalExecutionRecord = {
       id: `exec-${Date.now()}`, timestamp: new Date().toISOString(), command: userPromptStr,
       project: projectNameStr, intent: commandClass, tool: "Connector Health Tool",
