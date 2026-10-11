@@ -16,6 +16,7 @@ import { resolveJarvisModel } from "./src/ai-gateway/free-first-router";
 import { isLiveModelRouteConfigured, resolveLiveModelRoute } from "./src/ai-gateway/live-model-route";
 import { probeN8nHealth } from "./src/adapters/n8n-health";
 import { submitN8nCommand } from "./src/adapters/n8n-bridge";
+import { shouldRouteN8nApproval } from "./src/ai-gateway/n8n-command-policy";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand, shouldUseDeterministicSystemHealth } from "./src/core/system-health";
@@ -196,6 +197,15 @@ app.post("/api/agent/n8n-command", async (req, res) => {
       : "";
   if (!command.trim() || command.trim().length > 5000) {
     return res.status(400).json({ success: false, status: "BLOCKED", error: "A command of 1 to 5000 characters is required." });
+  }
+  const commandClass = classifyCommand(command);
+  if (!shouldRouteN8nApproval(commandClass)) {
+    return res.status(409).json({
+      success: false,
+      status: "NOT_ROUTED",
+      commandClass,
+      error: "Read-only diagnostics, reporting, and scholarship discovery must use the main command route, not the human-approval queue.",
+    });
   }
   const result = await submitN8nCommand(command, { webhookUrl: process.env.N8N_COMMAND_WEBHOOK_URL });
   if (result.status === "WAITING_FOR_APPROVAL") {

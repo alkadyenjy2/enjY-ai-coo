@@ -35,7 +35,8 @@
     "test:free-first-live-route": "node --import tsx --test --test-concurrency=1 tests/free-first-live-model-route.test.ts",
     "test:live-model-route": "node --import tsx --test --test-concurrency=1 tests/live-model-route.test.ts",
     "test:n8n-health": "node --import tsx --test --test-concurrency=1 tests/n8n-health.test.ts",
-    "test:n8n-bridge": "node --import tsx --test --test-concurrency=1 tests/n8n-bridge.test.ts"
+    "test:n8n-bridge": "node --import tsx --test --test-concurrency=1 tests/n8n-bridge.test.ts",
+    "test:n8n-command-policy": "node --import tsx --test --test-concurrency=1 tests/n8n-command-policy.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
