@@ -77,7 +77,7 @@ export async function callOpenAIResponses(options: {
 }): Promise<OpenAIResponseResult> {
   const apiKey = options.apiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error(options.baseUrl ? "Configured Responses API provider key is not available." : "OPENAI_API_KEY is not configured.");
-  const baseUrl = (options.baseUrl || "https://api.openai.com/v1").replace(/\\/+$/, "");
+  const baseUrl = (options.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
 
   const body: Record<string, any> = {
     model: options.model,
