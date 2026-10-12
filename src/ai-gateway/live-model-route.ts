@@ -2,7 +2,7 @@ import { selectRoutes } from './free-first-router';
 import { FREE_AI_REGISTRY } from '../data/free-ai-registry';
 
 export interface LiveModelRoute {
-  providerId: 'openrouter' | 'gemini-api';
+  providerId: 'openrouter' | 'gemini-api' | 'groq';
   model: string;
   apiKey: string;
   baseUrl: string | null;
@@ -23,6 +23,12 @@ const ADAPTERS = {
     defaultModel: 'gemini-3.6-flash',
     baseUrl: null,
   },
+  groq: {
+    envKey: 'GROQ_API_KEY',
+    modelEnvKey: 'JARVIS_GROQ_MODEL',
+    defaultModel: 'openai/gpt-oss-120b',
+    baseUrl: 'https://api.groq.com/openai/v1',
+  },
 } as const;
 
 /**
@@ -38,7 +44,9 @@ export function resolveLiveModelRoute(env: Environment = process.env): LiveModel
   });
 
   for (const candidate of candidates) {
-    if (candidate.toolId !== 'openrouter' && candidate.toolId !== 'gemini-api') continue;
+    if (candidate.toolId !== 'openrouter' && candidate.toolId !== 'gemini-api' && candidate.toolId !== 'groq') continue;
+    // Groq model usage is metered; require an explicit production cost gate before selecting it.
+    if (candidate.toolId === 'groq' && env.JARVIS_ALLOW_GROQ_BILLABLE !== 'true') continue;
     const adapter = ADAPTERS[candidate.toolId];
     const apiKey = (env[adapter.envKey] || '').trim();
     if (!apiKey) continue;
