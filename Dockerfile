@@ -15,9 +15,11 @@ ENV NODE_ENV=production
 ENV PORT=3000
 WORKDIR /app
 
-COPY --from=build --chown=node:node /app/package.json ./package.json
-COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
 COPY --from=build --chown=node:node /app/dist ./dist
+RUN chown -R node:node /app
 
 USER node
 EXPOSE 3000
