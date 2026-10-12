@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: jarvis-coo-staging
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeploy: false
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: NODE_ENV
+        value: production
+      - key: REQUIRE_LIVE_DEPENDENCIES
+        value: "true"

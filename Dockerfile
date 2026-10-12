@@ -1,0 +1,26 @@
+# Portable container build for the existing Express + Vite application.
+# Configure provider credentials and persistence in the deployment platform's
+# secret manager; never bake .env files or credentials into the image.
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM node:22-bookworm-slim AS runtime
+ENV NODE_ENV=production
+ENV PORT=3000
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=build --chown=node:node /app/dist ./dist
+RUN chown -R node:node /app
+
+USER node
+EXPOSE 3000
+CMD ["npm", "start"]
