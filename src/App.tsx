@@ -20,6 +20,13 @@ import { apiFetch } from './auth/client';
 import { buildOperationalHistoryUrl } from './utils/operationalHistory';
 import { parseReadOnlyStatusResult } from './utils/n8nReadOnlyResponse';
 
+const isPasswordRecoveryRoute = () => {
+  if (typeof window === 'undefined') return false;
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  return query.get('auth') === 'recovery' || query.get('type') === 'recovery' || hash.get('type') === 'recovery';
+};
+
 export default function App() {
   const [currentView, setCurrentView] = useState<NavView>('chat');
   const [userProfile, setUserProfile] = useState<UserProfile>(initialUserProfile);
@@ -37,12 +44,17 @@ export default function App() {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [passwordRecovery, setPasswordRecovery] = useState(() => isPasswordRecoveryRoute());
   const [authenticated, setAuthenticated] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [pendingApproval, setPendingApproval] = useState<{ id: string; prompt: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    if (passwordRecovery) {
+      setAuthLoading(false);
+      return () => { cancelled = true; };
+    }
     const loadAuthContext = async () => {
       const response = await apiFetch('/api/auth/me');
       const data = await response.json().catch(() => ({}));
@@ -63,7 +75,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [passwordRecovery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,6 +228,13 @@ export default function App() {
     return <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center font-sans"><p className="text-sm text-zinc-400">Verifying secure session…</p></main>;
   }
 
+  if (passwordRecovery) {
+    return <AuthScreen initialMode="recovery" onRecoveryComplete={() => {
+      setPasswordRecovery(false);
+      setAuthenticated(false);
+      setOrganizationId(null);
+    }} />;
+  }
   if (!authenticated) return <AuthScreen />;
 
   const approvePendingAction = async () => {
