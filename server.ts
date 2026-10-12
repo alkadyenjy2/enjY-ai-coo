@@ -1238,12 +1238,12 @@ Rules for Response:
           let followUpText = "";
           if (queryStatus === "success") {
             try {
-            if (isOpenAIModel || isOpenRouterModel) {
+            if (isOpenAIModel || isOpenAICompatibleLiveModel) {
               const followUp = await callOpenAIResponses({
                 model: selectedModel,
                 instructions: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`,
                 previousResponseId: modelResponse.id,
-                ...(isOpenRouterModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {}),
+                ...(isOpenAICompatibleLiveModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {}),
                 input: [{
                   type: "function_call_output",
                   call_id: call.callId,
