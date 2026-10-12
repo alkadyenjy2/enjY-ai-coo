@@ -175,7 +175,7 @@ export const AuthScreen = ({ initialMode = 'sign-in', onRecoveryComplete }: Auth
           {mode !== 'recovery' && (
             <button
               type="button"
-              onClick={() => { setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up'); setError(''); setMessage(''); }}
+              onClick={() => { setMode(mode === 'sign-up' ? 'sign-in' : mode === 'forgot-password' ? 'sign-in' : 'sign-up'); setError(''); setMessage(''); }}
               className="w-full text-xs text-zinc-400 hover:text-white py-2"
             >
               {mode === 'sign-up' ? 'Already have an account? Sign in'
