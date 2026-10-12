@@ -35,7 +35,7 @@ Configure the existing provider and persistence credentials through the host's s
 ## Verify before any production cutover
 
 1. Confirm the image builds from the target commit.
-2. Deploy to a private/staging URL first; do not change the production domain.
+2. Deploy to a separate staging URL; assume it is publicly reachable. Do not put real production data on it, and do not change the production domain.
 3. Check `GET /api/health` for basic process health.
 4. Check `GET /api/readiness` (also `/api/ready` and `/api/healthz`). A production candidate must return HTTP 200 with `status: "ready"`; HTTP 503 means a required live dependency is not ready.
 5. Verify authentication is enforced on protected routes (an unauthenticated `/api/auth/me` should not become public).
