@@ -47,8 +47,7 @@ export const AuthScreen = ({ initialMode = 'sign-in', onRecoveryComplete }: Auth
           setMode('sign-in');
         }
       } else if (mode === 'forgot-password') {
-        const redirectTo = new URL(window.location.pathname, window.location.origin);
-        redirectTo.searchParams.set('auth', 'recovery');
+        const redirectTo = new URL('/?auth=recovery', window.location.origin);
         const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: redirectTo.toString(),
         });
