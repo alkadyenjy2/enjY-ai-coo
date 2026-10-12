@@ -13,9 +13,15 @@ docker run --rm -p 3000:3000 --env-file .env jarvis-coo:local
 
 Use a local, untracked `.env` file only for development. Never commit it or bake secrets into the image.
 
+## Render staging option
+
+The repository includes `render.yaml` for a **free, non-auto-deploy staging service** named `jarvis-coo-staging`. To use it, connect this GitHub repository in Render and create the Blueprint from that file. Review every setting before confirming creation. The configuration uses the basic `/api/health` check only; it does not imply that live dependencies are ready.
+
+Render's free web services spin down after 15 minutes without inbound traffic, can take about a minute to wake, and have ephemeral filesystems. Render explicitly says free instances are not for production applications. Use this only to test the container and basic HTTP behavior—not as an always-on JARVIS replacement. See [Render free instance limitations](https://render.com/docs/free) and [Docker deployment documentation](https://render.com/docs/docker).
+
 ## Host requirements
 
-Choose a Docker-compatible host that supports:
+For a durable production alternative, choose a Docker-compatible host that supports:
 - a long-running Node.js HTTP process and inbound HTTPS;
 - configurable secret/environment variables;
 - outbound HTTPS to the configured providers and persistence service;
