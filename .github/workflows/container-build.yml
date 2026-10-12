@@ -1,0 +1,36 @@
+name: Container Build
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/container-build.yml"
+  push:
+    branches:
+      - main
+      - chore/jarvis-container-fallback-20261012
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/container-build.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build container image (no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: jarvis-coo:ci
