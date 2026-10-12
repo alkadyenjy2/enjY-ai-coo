@@ -47,7 +47,7 @@ export const FREE_AI_REGISTRY: AIRegistryEntry[] = [
     requiresAccount: true,
     requiresCard: false,
     automationLevel: 'FULL_API',
-    priority: 95,
+    priority: 80,
     enabled: true,
     verificationStatus: 'VERIFIED',
     lastVerifiedAt: VERIFIED_AT,
