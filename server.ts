@@ -813,9 +813,9 @@ app.post("/api/agent/command", async (req, res) => {
       ? null
       : resolveLiveModelRoute();
     let selectedModel = liveRoute?.model || resolveJarvisModel(model);
-    let isOpenRouterModel = liveRoute?.providerId === "openrouter" && selectedModel === liveRoute.model;
+    let isOpenAICompatibleLiveModel = (liveRoute?.providerId === "openrouter" || liveRoute?.providerId === "groq") && selectedModel === liveRoute.model;
     const isOpenAIRequested = selectedModel === "gpt-6-astra";
-    let ai = isOpenAIRequested || isOpenRouterModel ? null : getGeminiClient();
+    let ai = isOpenAIRequested || isOpenAICompatibleLiveModel ? null : getGeminiClient();
     
     // System instruction detailing the Master Prompt Core AI Agent rules
     const systemInstruction = `
@@ -850,7 +850,7 @@ Rules for Response:
 5. Never return generic Master COO Briefing unless command is SYSTEM_HEALTH or REPORTING.
     `.trim();
 
-    if (!ai && !isOpenAIRequested && !isOpenRouterModel) {
+    if (!ai && !isOpenAIRequested && !isOpenAICompatibleLiveModel) {
       const blockedResult = createOfflineFallbackResult({
         command: userPromptStr,
         project: projectNameStr,
@@ -994,7 +994,7 @@ Rules for Response:
     let response: any = null;
     let modelResponse: { id: string; text: string; functionCalls: Array<{ name: string; args: Record<string, any>; callId: string }> };
 
-    if (isOpenRouterModel) {
+    if (isOpenAICompatibleLiveModel) {
       try {
         modelResponse = await callOpenAIResponses({
           model: selectedModel,
@@ -1006,8 +1006,8 @@ Rules for Response:
         });
       } catch (openRouterError) {
         // Provider access is only considered usable after a real request succeeds.
-        // If OpenRouter fails, try the already-integrated Gemini adapter only when
-        // its credential is configured; otherwise preserve the fail-closed error.
+        // If an OpenAI-compatible free-first provider fails transiently, try the
+        // already-integrated Gemini adapter only when its credential is configured.
         const providerErrorText = String((openRouterError as any)?.message || openRouterError);
         // Quota, rate-limit, billing, and auth failures must stop here. Do not
         // rotate providers to evade a provider's access or quota restrictions.
@@ -1023,7 +1023,7 @@ Rules for Response:
           config: { systemInstruction, temperature: 0.7, tools }
         });
         selectedModel = fallbackModel;
-        isOpenRouterModel = false;
+        isOpenAICompatibleLiveModel = false;
         ai = fallbackAi;
         modelResponse = {
           id: "",
@@ -1238,12 +1238,12 @@ Rules for Response:
           let followUpText = "";
           if (queryStatus === "success") {
             try {
-            if (isOpenAIModel || isOpenRouterModel) {
+            if (isOpenAIModel || isOpenAICompatibleLiveModel) {
               const followUp = await callOpenAIResponses({
                 model: selectedModel,
                 instructions: `You are the Core AI COO. Command classification is ${commandClass}. Output the response strictly tailored to this classification.`,
                 previousResponseId: modelResponse.id,
-                ...(isOpenRouterModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {}),
+                ...(isOpenAICompatibleLiveModel && liveRoute ? { apiKey: liveRoute.apiKey, baseUrl: liveRoute.baseUrl || undefined } : {}),
                 input: [{
                   type: "function_call_output",
                   call_id: call.callId,

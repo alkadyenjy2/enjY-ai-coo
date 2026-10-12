@@ -51,8 +51,9 @@ export const FREE_AI_REGISTRY: AIRegistryEntry[] = [
     enabled: true,
     verificationStatus: 'VERIFIED',
     lastVerifiedAt: VERIFIED_AT,
-    verificationSource: 'Groq billing/free tier documentation',
+    verificationSource: 'Groq API model and pricing documentation',
     fallbackToolIds: ['mistral', 'cerebras', 'huggingface'],
+    notes: 'Metered provider: live route remains disabled unless JARVIS_ALLOW_GROQ_BILLABLE=true is explicitly configured.',
   },
   {
     toolId: 'mistral',

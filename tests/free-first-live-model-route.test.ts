@@ -31,8 +31,20 @@ test('uses the existing Gemini adapter when it is the only supported provider co
   });
 });
 
-test('does not select registry providers without an integrated live adapter', () => {
+test('keeps metered Groq disabled unless its explicit billing gate is enabled', () => {
   assert.equal(resolveLiveModelRoute({ GROQ_API_KEY: 'test-groq-key' }), null);
+});
+
+test('selects Groq Responses API only when the explicit billing gate is enabled', () => {
+  assert.deepEqual(resolveLiveModelRoute({
+    GROQ_API_KEY: 'test-groq-key',
+    JARVIS_ALLOW_GROQ_BILLABLE: 'true',
+  }), {
+    providerId: 'groq',
+    model: 'openai/gpt-oss-120b',
+    apiKey: 'test-groq-key',
+    baseUrl: 'https://api.groq.com/openai/v1',
+  });
 });
 
 test('trims credentials and refuses blank configured values', () => {
