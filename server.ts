@@ -18,6 +18,7 @@ import { probeN8nMcpHealth } from "./src/adapters/n8n-mcp-health";
 import { submitN8nCommand } from "./src/adapters/n8n-bridge";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand } from "./src/core/system-health";
+import { isSecureN8nWebhookConfigured } from "./src/core/readiness";
 import { getPortfolioContext } from "./src/core/portfolio-context";
 import { executeBrowserSkill } from "./src/adapters/browserskill";
 import { createMediaExecutionJob } from "./src/execution/media-execution.ts";
@@ -131,9 +132,9 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     gemini: hasGemini,
     meta: hasMetaModel,
     supabase: hasSupabase,
-    execution: true,
+    executionConfigured: isSecureN8nWebhookConfigured(process.env.N8N_COMMAND_WEBHOOK_URL),
   };
-  const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.execution));
+  const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.executionConfigured));
   return res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "degraded",
     requireLiveDependencies,
