@@ -64,6 +64,7 @@ export async function submitN8nCommand(
         const parsed = new URL(approvalUrl);
         return parsed.protocol === "https:"
           && parsed.origin === target.origin
+          && parsed.pathname.startsWith("/form-waiting/")
           && !parsed.username
           && !parsed.password
           && !parsed.hash
