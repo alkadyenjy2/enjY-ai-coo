@@ -143,3 +143,15 @@ test("n8n command bridge returns persisted model-free status without requiring a
   assert.equal(result.projectRowsRead, 9);
   assert.match(result.result, /Status: BLOCKED/);
 });
+
+test("n8n command bridge rejects same-origin approval URLs outside the waiting form route", async () => {
+  const result = await submitN8nCommand("Read status", {
+    webhookUrl: "https://zeoutsourse.app.n8n.cloud/webhook/secret",
+  }, async () => ok({
+    accepted: true,
+    status: "WAITING_FOR_APPROVAL",
+    approvalUrl: "https://zeoutsourse.app.n8n.cloud/admin/delete",
+  }));
+  assert.equal(result.status, "WAITING_FOR_APPROVAL");
+  assert.equal(result.approvalUrl, undefined);
+});
