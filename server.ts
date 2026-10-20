@@ -20,6 +20,7 @@ import { shouldRouteN8nApproval } from "./src/ai-gateway/n8n-command-policy";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand, shouldUseDeterministicSystemHealth } from "./src/core/system-health";
+import { isTrustedN8nWebhookConfigured } from "./src/core/readiness";
 import { getPortfolioContext } from "./src/core/portfolio-context";
 import { auditPortfolioRepositories } from "./src/core/github-portfolio-audit";
 import { isPortfolioAuditCommand, isPortfolioAuditFullyVerified } from "./src/core/portfolio-audit-policy";
@@ -136,9 +137,9 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     gemini: hasGemini,
     meta: hasMetaModel,
     supabase: hasSupabase,
-    execution: true,
+    executionConfigured: isTrustedN8nWebhookConfigured(process.env.N8N_COMMAND_WEBHOOK_URL),
   };
-  const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.execution));
+  const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.executionConfigured));
   return res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "degraded",
     requireLiveDependencies,
