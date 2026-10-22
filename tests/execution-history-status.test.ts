@@ -22,7 +22,7 @@ test("durable persistence is confirmed only by a Supabase result with a returned
   assert.equal(isDurablePersistenceConfirmed({ persisted: true, source: "supabase", recordId: "audit-1" }), true);
   assert.equal(isDurablePersistenceConfirmed({ persisted: true, source: "supabase" }), false);
   assert.equal(isDurablePersistenceConfirmed({ persisted: true, source: "memory" }), false);
-  assert.equal(isDurablePersistenceConfirmed({ persisted: false, source: "memory", error: "HTTP 401" }), false);
+  assert.equal(isDurablePersistenceConfirmed({ persisted: false, source: "memory" }), false);
 });
 
 test("readback requires the exact execution id from tenant-scoped Supabase history", async () => {
