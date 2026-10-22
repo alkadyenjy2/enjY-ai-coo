@@ -30,6 +30,7 @@ import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, ver
 import { adminClient, claimApprovedDurableJob, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 import { discoverScholarships, formatScholarshipResults, isScholarshipDiscoveryIntent } from "./src/agents/scholarship-discovery";
 import { createOfflineFallbackResult } from "./src/execution/offline-fallback.ts";
+import { buildPublicExecutionHistoryStatus, isDurablePersistenceConfirmed, isExecutionHistoryReadbackConfirmed, shouldReportSystemHealthSuccess } from "./src/core/execution-history-status.ts";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -115,7 +116,7 @@ app.get("/api/health", (req, res) => {
     version: "2.5.0",
     hasApiKey: hasOpenAI || hasGemini || hasMetaModel,
     modelProviders: { openai: hasOpenAI, gemini: hasGemini, meta: hasMetaModel },
-    executionHistoryCount: operationalMemoryRecords.length,
+    ...buildPublicExecutionHistoryStatus(operationalMemoryRecords.length),
     timestamp: new Date().toISOString()
   });
 });
@@ -685,9 +686,36 @@ app.post("/api/agent/command", async (req, res) => {
         errors: verified ? [] : ["n8n project status remains BLOCKED; see returned result."],
         approvalStatus: "AUTO_APPROVED"
       };
-      await rememberOperationalRecord(record);
-      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: n8nStatus.result });
-      return res.json({ content: n8nStatus.result, response: n8nStatus.result, executionRecord: record, actionsTaken });
+      const persistence = await rememberOperationalRecord(record);
+      const persistenceConfirmed = isDurablePersistenceConfirmed(persistence);
+      const historyReadback = persistenceConfirmed ? await fetchPersistedOperationalRecords(100) : null;
+      const readbackVerified = isExecutionHistoryReadbackConfirmed(historyReadback, record.id);
+      const executionHistoryVerified = shouldReportSystemHealthSuccess(
+        verified,
+        persistenceConfirmed,
+        readbackVerified,
+      );
+      const persistenceError = persistence.error || historyReadback?.error ||
+        (!persistenceConfirmed ? "Durable Supabase write was not confirmed with a returned audit row ID." :
+          !readbackVerified ? "The execution record could not be read back from tenant-scoped Supabase history." : undefined);
+      const resultContent = executionHistoryVerified
+        ? n8nStatus.result
+        : n8nStatus.result + " Execution history persistence/readback was not verified; this command is not reported as successful.";
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: resultContent });
+      return res.status(executionHistoryVerified ? 200 : 503).json({
+        success: executionHistoryVerified,
+        content: resultContent,
+        response: resultContent,
+        executionRecord: record,
+        actionsTaken,
+        persistence: {
+          persisted: persistenceConfirmed,
+          source: persistence.source,
+          recordId: persistence.recordId || null,
+          readbackVerified,
+          error: persistenceError || null,
+        },
+      });
     }
 
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim();
@@ -729,9 +757,36 @@ app.post("/api/agent/command", async (req, res) => {
       final_state_reason: verificationStatus === "VERIFIED" ? "System health verified against the live Supabase connector." : "System health could not be verified against a live connector.",
       errors: verificationStatus === "VERIFIED" ? [] : [liveEvidence], approvalStatus: "AUTO_APPROVED"
     };
-    await rememberOperationalRecord(record);
-    recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: liveEvidence });
-    return res.json({ content: liveEvidence, response: liveEvidence, executionRecord: record, actionsTaken });
+    const persistence = await rememberOperationalRecord(record);
+    const persistenceConfirmed = isDurablePersistenceConfirmed(persistence);
+    const historyReadback = persistenceConfirmed ? await fetchPersistedOperationalRecords(100) : null;
+    const readbackVerified = isExecutionHistoryReadbackConfirmed(historyReadback, record.id);
+    const executionHistoryVerified = shouldReportSystemHealthSuccess(
+      verificationStatus === "VERIFIED",
+      persistenceConfirmed,
+      readbackVerified,
+    );
+    const persistenceError = persistence.error || historyReadback?.error ||
+      (!persistenceConfirmed ? "Durable Supabase write was not confirmed with a returned audit row ID." :
+        !readbackVerified ? "The execution record could not be read back from tenant-scoped Supabase history." : undefined);
+    const resultContent = executionHistoryVerified
+      ? liveEvidence
+      : liveEvidence + " Execution history persistence/readback was not verified; this command is not reported as successful.";
+    recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: resultContent });
+    return res.status(executionHistoryVerified ? 200 : 503).json({
+      success: executionHistoryVerified,
+      content: resultContent,
+      response: resultContent,
+      executionRecord: record,
+      actionsTaken,
+      persistence: {
+        persisted: persistenceConfirmed,
+        source: persistence.source,
+        recordId: persistence.recordId || null,
+        readbackVerified,
+        error: persistenceError || null,
+      },
+    });
   }
 
   // 4. Sensitive Action Gate (NEEDS_APPROVAL)

@@ -89,6 +89,8 @@ jobs:
 
       - name: Operational log mapping test
         run: npm run test:operational-logs
+      - name: Execution history persistence truthfulness test
+        run: node --import tsx --test --test-concurrency=1 tests/execution-history-status.test.ts
 
       - name: Operational history organization context test
         run: npm run test:operational-history-context
