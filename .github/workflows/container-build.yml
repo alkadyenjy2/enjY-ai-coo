@@ -8,16 +8,29 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/container-build.yml"
+      - "server.ts"
+      - "src/**"
+      - "index.html"
+      - "public/**"
+      - "vite.config.*"
+      - "tsconfig*.json"
   push:
     branches:
       - main
       - chore/jarvis-container-fallback-20261012
+      - fix/container-build-source-paths-20261021
     paths:
       - "Dockerfile"
       - ".dockerignore"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/container-build.yml"
+      - "server.ts"
+      - "src/**"
+      - "index.html"
+      - "public/**"
+      - "vite.config.*"
+      - "tsconfig*.json"
 
 permissions:
   contents: read
