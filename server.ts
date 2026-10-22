@@ -30,7 +30,7 @@ import { kolboMediaExecutionProvider, startKolboMediaJob, pollKolboMediaJob, ver
 import { adminClient, claimApprovedDurableJob, createDurableJob, enqueueDurableJob, getDurableJob, updateDurableJob } from "./src/execution/durable-jobs.ts";
 import { discoverScholarships, formatScholarshipResults, isScholarshipDiscoveryIntent } from "./src/agents/scholarship-discovery";
 import { createOfflineFallbackResult } from "./src/execution/offline-fallback.ts";
-import { buildPublicExecutionHistoryStatus, isDurablePersistenceConfirmed } from "./src/core/execution-history-status.ts";
+import { buildPublicExecutionHistoryStatus, isDurablePersistenceConfirmed, isExecutionHistoryReadbackConfirmed, shouldReportSystemHealthSuccess } from "./src/core/execution-history-status.ts";
 
 // Global Process Crash Prevention Guard
 process.on("uncaughtException", (err) => {
@@ -733,11 +733,12 @@ app.post("/api/agent/command", async (req, res) => {
     const persistence = await rememberOperationalRecord(record);
     const persistenceConfirmed = isDurablePersistenceConfirmed(persistence);
     const historyReadback = persistenceConfirmed ? await fetchPersistedOperationalRecords(100) : null;
-    const readbackVerified = Boolean(
-      historyReadback?.source === "supabase" &&
-      historyReadback.records.some((persistedRecord) => persistedRecord.id === record.id),
+    const readbackVerified = isExecutionHistoryReadbackConfirmed(historyReadback, record.id);
+    const executionHistoryVerified = shouldReportSystemHealthSuccess(
+      verificationStatus === "VERIFIED",
+      persistenceConfirmed,
+      readbackVerified,
     );
-    const executionHistoryVerified = persistenceConfirmed && readbackVerified;
     const persistenceError = persistence.error || historyReadback?.error ||
       (!persistenceConfirmed ? "Durable Supabase write was not confirmed with a returned audit row ID." :
         !readbackVerified ? "The execution record could not be read back from tenant-scoped Supabase history." : undefined);
@@ -745,8 +746,8 @@ app.post("/api/agent/command", async (req, res) => {
       ? liveEvidence
       : liveEvidence + " Execution history persistence/readback was not verified; this command is not reported as successful.";
     recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: resultContent });
-    return res.status(verificationStatus === "VERIFIED" && executionHistoryVerified ? 200 : 503).json({
-      success: verificationStatus === "VERIFIED" && executionHistoryVerified,
+    return res.status(executionHistoryVerified ? 200 : 503).json({
+      success: executionHistoryVerified,
       content: resultContent,
       response: resultContent,
       executionRecord: record,
