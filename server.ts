@@ -686,9 +686,36 @@ app.post("/api/agent/command", async (req, res) => {
         errors: verified ? [] : ["n8n project status remains BLOCKED; see returned result."],
         approvalStatus: "AUTO_APPROVED"
       };
-      await rememberOperationalRecord(record);
-      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: n8nStatus.result });
-      return res.json({ content: n8nStatus.result, response: n8nStatus.result, executionRecord: record, actionsTaken });
+      const persistence = await rememberOperationalRecord(record);
+      const persistenceConfirmed = isDurablePersistenceConfirmed(persistence);
+      const historyReadback = persistenceConfirmed ? await fetchPersistedOperationalRecords(100) : null;
+      const readbackVerified = isExecutionHistoryReadbackConfirmed(historyReadback, record.id);
+      const executionHistoryVerified = shouldReportSystemHealthSuccess(
+        verified,
+        persistenceConfirmed,
+        readbackVerified,
+      );
+      const persistenceError = persistence.error || historyReadback?.error ||
+        (!persistenceConfirmed ? "Durable Supabase write was not confirmed with a returned audit row ID." :
+          !readbackVerified ? "The execution record could not be read back from tenant-scoped Supabase history." : undefined);
+      const resultContent = executionHistoryVerified
+        ? n8nStatus.result
+        : n8nStatus.result + " Execution history persistence/readback was not verified; this command is not reported as successful.";
+      recentCommandCache.set(cacheKey, { timestamp: Date.now(), record, content: resultContent });
+      return res.status(executionHistoryVerified ? 200 : 503).json({
+        success: executionHistoryVerified,
+        content: resultContent,
+        response: resultContent,
+        executionRecord: record,
+        actionsTaken,
+        persistence: {
+          persisted: persistenceConfirmed,
+          source: persistence.source,
+          recordId: persistence.recordId || null,
+          readbackVerified,
+          error: persistenceError || null,
+        },
+      });
     }
 
     const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").trim();
