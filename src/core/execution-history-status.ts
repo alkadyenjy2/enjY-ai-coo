@@ -26,3 +26,20 @@ export function isDurablePersistenceConfirmed(
 ): boolean {
   return result.persisted === true && result.source === "supabase" && typeof result.recordId === "string" && result.recordId.trim().length > 0;
 }
+
+export function isExecutionHistoryReadbackConfirmed(
+  history: { source: "supabase" | "memory"; records: Array<{ id: string }> } | null,
+  executionId: string,
+): boolean {
+  return history?.source === "supabase" &&
+    Array.isArray(history.records) &&
+    history.records.some((record) => record.id === executionId);
+}
+
+export function shouldReportSystemHealthSuccess(
+  healthProbeVerified: boolean,
+  persistenceConfirmed: boolean,
+  readbackVerified: boolean,
+): boolean {
+  return healthProbeVerified && persistenceConfirmed && readbackVerified;
+}
