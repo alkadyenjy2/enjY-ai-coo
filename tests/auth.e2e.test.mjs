@@ -105,7 +105,11 @@ test(
       assert.equal(historyResponse.status, 200);
       const history = await historyResponse.json();
       assert.equal(typeof history.total, 'number');
-      assert.ok(['supabase', 'memory'].includes(history.source));
+      assert.equal(
+        history.source,
+        'supabase',
+        'history must come from tenant-scoped durable Supabase storage; process memory is not an E2E persistence pass'
+      );
     });
   }
 );
