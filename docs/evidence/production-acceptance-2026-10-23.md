@@ -6,6 +6,7 @@
 - Vercel deployment: `dpl_36bVTvgZsUvFpko9pTgLvDgCvqGJ`
 - Vercel project: `prj_7pAXdcpNnzbl7qdkFRwrgJuihO4L`
 - Reported deployed source commit: `6b43b447b9ea6fa4d876cc847e9c38d0c50e4653`
+- Production `SUPABASE_URL` hostname maps to project ref `aislifqpskbduzvvbepz`; Supabase project list identifies it as `core ai`, region `eu-west-1`, status `ACTIVE_HEALTHY`. Secret values were not printed or committed.
 - Evidence capture date: 2026-10-23 (UTC timestamps below).
 - This file records observations and limitations. It is not a claim of production acceptance. Git history is tamper-evident by commit identity, not absolutely immutable; retain CI artifacts and deployment logs for stronger provenance.
 
@@ -32,62 +33,64 @@
     "timestamp": "2026-10-23T02:00:39.508Z"
   }
   ```
-- Interpretation: endpoint reports its configured readiness checks passing except Meta. It does **not** disclose a Supabase project ref or the latest durable write timestamp, and does not prove that a newly-created execution can be read back independently.
+- Interpretation: endpoint reports its configured readiness checks passing except Meta. It does not expose a durable-write watermark or prove that a newly-created execution can be read back independently.
 
 ### `GET /api/health`
 
 - Observed at: `2026-10-23T02:01:01.576Z`
 - HTTP: `200 OK`
-- Content type: JSON
-- Response:
-  ```json
-  {
-    "status": "ok",
-    "system": "Core AI Operations Agent",
-    "version": "2.5.0",
-    "hasApiKey": true,
-    "modelProviders": {
-      "openai": true,
-      "gemini": true,
-      "meta": false
-    },
-    "executionHistoryCount": null,
-    "inMemoryExecutionHistoryCount": 0,
-    "executionHistoryCountSource": "authenticated_tenant_history",
-    "executionHistoryCountAvailable": false,
-    "timestamp": "2026-10-23T02:01:01.576Z"
-  }
-  ```
-- Interpretation: process responds; authenticated tenant execution history is unavailable to this unauthenticated check. This is not proof of durable persistence.
+- Response reported process status `ok`, version `2.5.0`, OpenAI/Gemini configured, Meta unavailable, and authenticated tenant execution history unavailable.
+- Interpretation: process responds; this is not proof of durable persistence.
 
-### `GET /api/auth/me` — inconclusive
+### `GET /api/auth/me`
 
-- The Vercel fetch helper returned `401` at its `share_link` stage with `deployment_authentication_required`.
-- The response indicates that the temporary Vercel access/share link was not accepted; it did **not** establish the application's own authentication endpoint status. Do not classify this as an application-auth failure or as proof of a Deployment Protection outage.
-- An ordinary browser/client session test remains required.
+- Direct unauthenticated HTTP request from the remote Windows laptop returned `401 Unauthorized`.
+- Interpretation: consistent with an endpoint requiring an application session. It does not test successful authentication and does not establish a Vercel Deployment Protection failure.
+
+### Independent production database inspection (read-only)
+
+- Production Supabase project ref: `aislifqpskbduzvvbepz` (`core ai`, `eu-west-1`).
+- Query executed at: `2026-10-23 02:33:24 UTC`.
+- `public.audit_logs` rows where `type = 'ai_core_execution'`: `49`.
+- Latest observed execution row: `2026-10-07 23:21:11.900647 UTC`.
+- Latest observed successful execution row: `2026-10-07 23:19:30.246715 UTC`.
+- Latest observed row had execution ID `exec-1791415271581`, status `failed`.
+- Interpretation: no execution row newer than Oct 7 appeared in this query. This may mean no executions occurred; it does not alone prove a persistence regression. A fresh correlated request/readback test is still missing.
 
 ## Acceptance status
 
 **PARTIAL / BLOCKED — Production Acceptance Not Verified**
 
-Confirmed: canonical deployment metadata ties the production alias/deployment to source commit `6b43b447b9ea6fa4d876cc847e9c38d0c50e4653`; live unauthenticated readiness and health routes return JSON.
+Confirmed:
+- Canonical deployment metadata ties the production alias/deployment to source commit `6b43b447b9ea6fa4d876cc847e9c38d0c50e4653`.
+- Unauthenticated readiness and health routes return JSON.
+- Production Supabase project identity is confirmed by matching the production environment's `SUPABASE_URL` project ref against the Supabase project list.
+- Direct unauthenticated `/api/auth/me` returns `401 Unauthorized`.
 
 Not yet verified:
-1. Runtime Supabase project identity / project ref.
-2. Authenticated `/api/auth/me` behavior with a normal user session.
-3. A live `SYSTEM_HEALTH` execution returning an `execution_id`, followed by an independent direct DB read of the same row with a timestamp after the request.
-4. Negative persistence-gate test in an isolated test environment proving failed durable writes cannot report success.
-5. Cross-organization isolation under live authenticated identities.
+1. Successful authenticated `/api/auth/me` behavior with a normal test-user session.
+2. A live `SYSTEM_HEALTH` execution returning an `execution_id`, followed by an independent direct DB read of that exact row with a timestamp after the request.
+3. Negative persistence-gate test in an isolated test environment proving failed durable writes cannot report success.
+4. Cross-organization isolation under distinct live authenticated test identities.
 
-## Next acceptance test
+## Blocking dependency and safe closure plan
 
-Run in a controlled test environment using test-specific credentials and a separate direct database read credential:
+The repository CI workflow skips live authenticated E2E unless these test-only GitHub Actions secrets are configured:
+- `AUTH_E2E_SUPABASE_URL`
+- `AUTH_E2E_SUPABASE_PUBLISHABLE_KEY`
+- `AUTH_E2E_TEST_EMAIL`
+- `AUTH_E2E_TEST_PASSWORD`
+- `AUTH_E2E_MEMBER_ORG_ID`
+- `AUTH_E2E_NON_MEMBER_ORG_ID` (recommended for the non-member isolation assertion)
 
-1. Read `/api/ready` and record non-secret DB project ref and latest successful durable-write timestamp once the endpoint exposes them.
-2. Read `/api/auth/me` with a normal authenticated session; verify expected user and organization.
-3. Trigger `SYSTEM_HEALTH`; capture its `execution_id` and request timestamp.
-4. Query the DB independently for that exact `execution_id`; verify organization, status, and `created_at` after the request.
-5. In isolation only, force persistence failure and verify the caller receives failure, not success.
-6. Test cross-organization reads/writes with distinct test identities.
+These must refer to a dedicated test project/user and two test organizations; do not use production credentials or customer data. Current connector capabilities available in this session do not provide a safe way to create or inject GitHub Actions repository secrets, and no authenticated application test session was available. Therefore these tests cannot honestly be marked passed yet.
 
-Never log or commit credentials, tokens, raw secret values, or customer data. Do not run destructive/negative tests against production.
+Once test-only secrets exist:
+1. Run the existing `npm run test:auth-e2e` through CI and confirm it actually executes rather than skips.
+2. Run `SYSTEM_HEALTH` in the test environment; record request timestamp and `execution_id`.
+3. Independently query `public.audit_logs` for that exact ID; compare status, organization, and `created_at`.
+4. In the isolated test environment, simulate persistence failure and assert the API/workflow returns failure rather than success.
+5. Use member and non-member test identities to verify cross-organization reads/writes are denied.
+6. Preserve run URLs and sanitized outputs as acceptance evidence.
+
+Never log or commit credentials, tokens, raw secret values, or customer data. Do not run destructive/negative tests against production. Mark every unexecuted test `NOT TESTED`, not passed.
