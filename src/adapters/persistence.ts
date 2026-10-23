@@ -170,6 +170,7 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
     event_metadata: metadata,
     workflow_name: 'Core AI Agent',
     execution_id: record.id,
+    idempotency_key: record.id,
     provider: 'ai_core_runtime',
     payload_hash: createHash('sha256').update(JSON.stringify(metadata)).digest('hex'),
     error_code: record.errors.length > 0 ? 'AGENT_EXECUTION_ERROR' : null,
@@ -178,9 +179,9 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
   };
 
   try {
-    const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
+    const response = await fetch(`${config.url}/rest/v1/audit_logs?on_conflict=organization_id,idempotency_key`, {
       method: 'POST',
-      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
+      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'resolution=ignore-duplicates,return=representation' },
       body: JSON.stringify(body),
     });
 
@@ -193,7 +194,30 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
     }
 
     const data = await response.json().catch(() => []);
-    const recordId = Array.isArray(data) && data[0]?.id ? String(data[0].id) : undefined;
+    if (Array.isArray(data) && data[0]?.id) {
+      return { persisted: true, source: 'supabase', recordId: String(data[0].id) };
+    }
+
+    // PostgREST returns an empty representation when a duplicate is ignored. Resolve
+    // the conflict to the canonical tenant-scoped audit row before claiming persistence.
+    const lookup = new URL(`${config.url}/rest/v1/audit_logs`);
+    lookup.searchParams.set('select', 'id');
+    lookup.searchParams.set('organization_id', `eq.${context.organizationId}`);
+    lookup.searchParams.set('idempotency_key', `eq.${record.id}`);
+    lookup.searchParams.set('type', 'eq.ai_core_execution');
+    lookup.searchParams.set('limit', '1');
+    const existingResponse = await fetch(lookup.toString(), {
+      method: 'GET',
+      headers: getAuthenticatedPersistenceHeaders(config, context.accessToken),
+    });
+    if (!existingResponse.ok) {
+      return { persisted: false, source: 'memory', error: `Supabase audit idempotency lookup returned HTTP ${existingResponse.status}.` };
+    }
+    const existing = await existingResponse.json().catch(() => []);
+    const recordId = Array.isArray(existing) && existing[0]?.id ? String(existing[0].id) : undefined;
+    if (!recordId) {
+      return { persisted: false, source: 'memory', error: 'Supabase ignored an audit insert but no canonical row could be read back.' };
+    }
     return { persisted: true, source: 'supabase', recordId };
   } catch (error: any) {
     return {
