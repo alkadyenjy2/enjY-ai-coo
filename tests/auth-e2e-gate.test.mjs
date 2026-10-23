@@ -27,7 +27,7 @@ test('live auth E2E cannot run as a partial pass without cross-tenant fixture', 
 test('live auth E2E requires durable Supabase history instead of process memory', () => {
   assert.match(
     authE2E,
-    /assert\.equal\(history\.source,\s*['"]supabase['"]/,
+    /assert\.equal\(\s*history\.source,\s*['"]supabase['"]/,
     'live auth E2E must fail unless history is read from durable Supabase storage'
   );
 });
