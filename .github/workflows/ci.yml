@@ -66,10 +66,10 @@ jobs:
           AUTH_E2E_NON_MEMBER_ORG_ID: ${{ secrets.AUTH_E2E_NON_MEMBER_ORG_ID }}
         shell: bash
         run: |
-          if [[ -n "$AUTH_E2E_SUPABASE_URL" && -n "$AUTH_E2E_SUPABASE_PUBLISHABLE_KEY" && -n "$AUTH_E2E_TEST_EMAIL" && -n "$AUTH_E2E_TEST_PASSWORD" && -n "$AUTH_E2E_MEMBER_ORG_ID" ]]; then
+          if [[ -n "$AUTH_E2E_SUPABASE_URL" && -n "$AUTH_E2E_SUPABASE_PUBLISHABLE_KEY" && -n "$AUTH_E2E_TEST_EMAIL" && -n "$AUTH_E2E_TEST_PASSWORD" && -n "$AUTH_E2E_MEMBER_ORG_ID" && -n "$AUTH_E2E_NON_MEMBER_ORG_ID" ]]; then
             npm run test:auth-e2e
           else
-            echo "::notice title=Live Auth E2E skipped::Required AUTH_E2E test secrets are not configured; live authentication and approval authorization remain unverified."
+            echo "::notice title=Live Auth E2E skipped::All six AUTH_E2E test-only secrets, including member and non-member organization IDs, are required; live authentication, approval authorization, and cross-tenant denial remain unverified."
           fi
 
       - name: Live free-first model route readiness test
