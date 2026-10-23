@@ -9,7 +9,7 @@ const authE2EPath = fileURLToPath(new URL('./auth.e2e.test.mjs', import.meta.url
 const authE2E = await readFile(authE2EPath, 'utf8');
 
 test('live auth E2E cannot run as a partial pass without cross-tenant fixture', () => {
-  const authGate = workflow.match(/if \[\[ ([^\n]+) \]\]; then\n\s+npm run test:auth-e2e/);
+  const authGate = workflow.match(/if \[\[ ([^\r\n]+) \]\]; then\r?\n\s+npm run test:auth-e2e/);
   assert.ok(authGate, 'CI must have an explicit gate for the live auth E2E command');
   for (const secret of [
     'AUTH_E2E_SUPABASE_URL',
@@ -27,7 +27,7 @@ test('live auth E2E cannot run as a partial pass without cross-tenant fixture', 
 test('live auth E2E requires durable Supabase history instead of process memory', () => {
   assert.match(
     authE2E,
-    /assert\\.equal\\(history\\.source,\\s*['\"]supabase['\"]/,
+    /assert\.equal\(history\.source,\s*['"]supabase['"]/,
     'live auth E2E must fail unless history is read from durable Supabase storage'
   );
 });
