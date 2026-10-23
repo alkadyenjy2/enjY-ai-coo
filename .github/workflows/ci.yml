@@ -40,6 +40,8 @@ jobs:
 
       - name: Workflow Studio must not fabricate live success
         run: node --test tests/workflow-studio-no-fake-success.test.mjs
+      - name: Auth E2E gate requires both tenant fixtures
+        run: node --test tests/auth-e2e-gate.test.mjs
 
       - name: n8n command bridge contract test
         run: npm run test:n8n-bridge
@@ -66,10 +68,10 @@ jobs:
           AUTH_E2E_NON_MEMBER_ORG_ID: ${{ secrets.AUTH_E2E_NON_MEMBER_ORG_ID }}
         shell: bash
         run: |
-          if [[ -n "$AUTH_E2E_SUPABASE_URL" && -n "$AUTH_E2E_SUPABASE_PUBLISHABLE_KEY" && -n "$AUTH_E2E_TEST_EMAIL" && -n "$AUTH_E2E_TEST_PASSWORD" && -n "$AUTH_E2E_MEMBER_ORG_ID" ]]; then
+          if [[ -n "$AUTH_E2E_SUPABASE_URL" && -n "$AUTH_E2E_SUPABASE_PUBLISHABLE_KEY" && -n "$AUTH_E2E_TEST_EMAIL" && -n "$AUTH_E2E_TEST_PASSWORD" && -n "$AUTH_E2E_MEMBER_ORG_ID" && -n "$AUTH_E2E_NON_MEMBER_ORG_ID" ]]; then
             npm run test:auth-e2e
           else
-            echo "::notice title=Live Auth E2E skipped::Required AUTH_E2E test secrets are not configured; live authentication and approval authorization remain unverified."
+            echo "::notice title=Live Auth E2E skipped::All six AUTH_E2E test-only secrets, including member and non-member organization IDs, are required; live authentication, approval authorization, and cross-tenant denial remain unverified."
           fi
 
       - name: Live free-first model route readiness test
