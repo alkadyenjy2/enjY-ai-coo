@@ -40,6 +40,8 @@ jobs:
 
       - name: Workflow Studio must not fabricate live success
         run: node --test tests/workflow-studio-no-fake-success.test.mjs
+      - name: Auth E2E gate requires both tenant fixtures
+        run: node --test tests/auth-e2e-gate.test.mjs
 
       - name: n8n command bridge contract test
         run: npm run test:n8n-bridge
