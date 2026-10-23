@@ -57,6 +57,15 @@
 - Latest observed row had execution ID `exec-1791415271581`, status `failed`.
 - Interpretation: no execution row newer than Oct 7 appeared in this query. This may mean no executions occurred; it does not alone prove a persistence regression. A fresh correlated request/readback test is still missing.
 
+### CI and architecture-freeze verification
+
+- CI run for the evidence commit merged into PR #62: https://github.com/alkadyenjy2/enjY-ai-coo/actions/runs/39890246546
+- Architecture-freeze verification: https://github.com/alkadyenjy2/enjY-ai-coo/actions/runs/39890246568
+- Both workflows completed with conclusion `success`.
+- CI build, lint/typecheck, and the configured unit/contract tests completed successfully, including execution-history persistence truthfulness and persistence tenant-context tests.
+- **Important:** the step named “Live authenticated E2E (approval authorization)” was marked successful only because its conditional skip path ran. The actual log explicitly says required `AUTH_E2E_*` secrets are not configured and live authentication/approval authorization remain unverified. The step's green status is not a passing live E2E result.
+- The CI install also reported one high-severity npm audit finding; it has not been triaged or remediated as part of this acceptance check.
+
 ## Acceptance status
 
 **PARTIAL / BLOCKED — Production Acceptance Not Verified**
@@ -66,12 +75,14 @@ Confirmed:
 - Unauthenticated readiness and health routes return JSON.
 - Production Supabase project identity is confirmed by matching the production environment's `SUPABASE_URL` project ref against the Supabase project list.
 - Direct unauthenticated `/api/auth/me` returns `401 Unauthorized`.
+- CI and architecture-freeze checks pass for the evidence commit/PR merge commit; unit/contract tests cover persistence and tenant-context behavior.
 
 Not yet verified:
 1. Successful authenticated `/api/auth/me` behavior with a normal test-user session.
 2. A live `SYSTEM_HEALTH` execution returning an `execution_id`, followed by an independent direct DB read of that exact row with a timestamp after the request.
 3. Negative persistence-gate test in an isolated test environment proving failed durable writes cannot report success.
 4. Cross-organization isolation under distinct live authenticated test identities.
+5. Triage/remediation decision for the high-severity npm audit finding.
 
 ## Blocking dependency and safe closure plan
 
@@ -83,7 +94,7 @@ The repository CI workflow skips live authenticated E2E unless these test-only G
 - `AUTH_E2E_MEMBER_ORG_ID`
 - `AUTH_E2E_NON_MEMBER_ORG_ID` (recommended for the non-member isolation assertion)
 
-These must refer to a dedicated test project/user and two test organizations; do not use production credentials or customer data. Current connector capabilities available in this session do not provide a safe way to create or inject GitHub Actions repository secrets, and no authenticated application test session was available. Therefore these tests cannot honestly be marked passed yet.
+The latest CI logs confirm all of these values were empty/unconfigured for the run. The connected remote Windows session also has none of these variables set at process, user, or machine scope. These must refer to a dedicated test project/user and two test organizations; do not use production credentials or customer data. Current connector capabilities available in this session do not provide a safe way to create or inject GitHub Actions repository secrets, and no authenticated application test session was available. Therefore these tests cannot honestly be marked passed yet.
 
 Once test-only secrets exist:
 1. Run the existing `npm run test:auth-e2e` through CI and confirm it actually executes rather than skips.
@@ -91,6 +102,7 @@ Once test-only secrets exist:
 3. Independently query `public.audit_logs` for that exact ID; compare status, organization, and `created_at`.
 4. In the isolated test environment, simulate persistence failure and assert the API/workflow returns failure rather than success.
 5. Use member and non-member test identities to verify cross-organization reads/writes are denied.
-6. Preserve run URLs and sanitized outputs as acceptance evidence.
+6. Triage the high-severity npm audit finding using a non-breaking dependency update and regression tests.
+7. Preserve run URLs and sanitized outputs as acceptance evidence.
 
 Never log or commit credentials, tokens, raw secret values, or customer data. Do not run destructive/negative tests against production. Mark every unexecuted test `NOT TESTED`, not passed.
