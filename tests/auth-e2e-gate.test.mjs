@@ -7,7 +7,7 @@ const workflowPath = fileURLToPath(new URL('../.github/workflows/ci.yml', import
 const workflow = await readFile(workflowPath, 'utf8');
 
 test('live auth E2E cannot run as a partial pass without cross-tenant fixture', () => {
-  const authGate = workflow.match(/if \\[\\[ ([^\\n]+) \\]\\]; then\\n\\s+npm run test:auth-e2e/);
+  const authGate = workflow.match(/if \[\[ ([^\n]+) \]\]; then\n\s+npm run test:auth-e2e/);
   assert.ok(authGate, 'CI must have an explicit gate for the live auth E2E command');
   for (const secret of [
     'AUTH_E2E_SUPABASE_URL',
