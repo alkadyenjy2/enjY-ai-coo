@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 
 const workflowPath = fileURLToPath(new URL('../.github/workflows/ci.yml', import.meta.url));
 const workflow = await readFile(workflowPath, 'utf8');
+const authE2EPath = fileURLToPath(new URL('./auth.e2e.test.mjs', import.meta.url));
+const authE2E = await readFile(authE2EPath, 'utf8');
 
 test('live auth E2E cannot run as a partial pass without cross-tenant fixture', () => {
   const authGate = workflow.match(/if \[\[ ([^\n]+) \]\]; then\n\s+npm run test:auth-e2e/);
@@ -20,4 +22,12 @@ test('live auth E2E cannot run as a partial pass without cross-tenant fixture', 
     assert.ok(authGate[1].includes('$' + secret), 'CI gate must require ' + secret);
   }
   assert.match(workflow, /cross-tenant denial remain unverified/);
+});
+
+test('live auth E2E requires durable Supabase history instead of process memory', () => {
+  assert.match(
+    authE2E,
+    /assert\\.equal\\(history\\.source,\\s*['\"]supabase['\"]/,
+    'live auth E2E must fail unless history is read from durable Supabase storage'
+  );
 });
