@@ -178,9 +178,12 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
   };
 
   try {
-    const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
+    const response = await fetch(`${config.url}/rest/v1/audit_logs?on_conflict=organization_id,execution_id,type`, {
       method: 'POST',
-      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
+      headers: {
+        ...getAuthenticatedPersistenceHeaders(config, context.accessToken),
+        Prefer: 'resolution=ignore-duplicates,return=representation',
+      },
       body: JSON.stringify(body),
     });
 
@@ -188,7 +191,7 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
       return {
         persisted: false,
         source: 'memory',
-        error: `Supabase audit_logs write returned HTTP ${response.status}.`,
+        error: `Supabase audit_logs idempotent write returned HTTP ${response.status}. Ensure the audit idempotency migration is applied.`,
       };
     }
 
@@ -238,9 +241,12 @@ export async function persistLearningFeedback(entry: FeedbackEntry): Promise<Per
   };
 
   try {
-    const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
+    const response = await fetch(`${config.url}/rest/v1/audit_logs?on_conflict=organization_id,execution_id,type`, {
       method: 'POST',
-      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
+      headers: {
+        ...getAuthenticatedPersistenceHeaders(config, context.accessToken),
+        Prefer: 'resolution=ignore-duplicates,return=representation',
+      },
       body: JSON.stringify(body),
     });
     if (!response.ok) {
