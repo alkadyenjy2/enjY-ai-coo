@@ -1,0 +1,32 @@
+{
+  "evidence_type": "public_readiness_probe",
+  "observed_at": "2026-10-25T17:16:46.650Z",
+  "target": "https://enj-y-ai-coo.vercel.app/api/ready",
+  "retrieval_method": "Upsy cloud browser, unauthenticated GET navigation",
+  "http_status": null,
+  "http_status_note": "Browser snapshot exposed the JSON body but did not expose the HTTP status code.",
+  "response": {
+    "status": "ready",
+    "requireLiveDependencies": true,
+    "checks": {
+      "process": true,
+      "openai": true,
+      "gemini": true,
+      "meta": false,
+      "supabase": true,
+      "executionConfigured": true
+    },
+    "timestamp": "2026-10-25T17:16:46.650Z"
+  },
+  "verified": {
+    "public_endpoint_returns_readiness_json": true,
+    "configured_dependency_flags_reported": true,
+    "actual_supabase_connectivity": false,
+    "supabase_project_identity": false,
+    "successful_authenticated_login": false,
+    "durable_execution_write_and_independent_readback": false,
+    "tenant_isolation": false
+  },
+  "interpretation": "The endpoint reports configuration-derived readiness flags. It does not currently expose a database fingerprint or demonstrate a live database read/write. `supabase: true` is not proof that the runtime is connected to the intended Supabase project.",
+  "production_mutation_performed": false
+}
