@@ -170,6 +170,7 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
     event_metadata: metadata,
     workflow_name: 'Core AI Agent',
     execution_id: record.id,
+    idempotency_key: `${context.organizationId}:ai_core_execution:${record.id}`,
     provider: 'ai_core_runtime',
     payload_hash: createHash('sha256').update(JSON.stringify(metadata)).digest('hex'),
     error_code: record.errors.length > 0 ? 'AGENT_EXECUTION_ERROR' : null,
@@ -178,9 +179,14 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
   };
 
   try {
-    const response = await fetch(`${config.url}/rest/v1/audit_logs`, {
+    const idempotencyKey = String(body.idempotency_key);
+    const upsertQuery = new URLSearchParams({ on_conflict: 'idempotency_key' });
+    const response = await fetch(`${config.url}/rest/v1/audit_logs?${upsertQuery.toString()}`, {
       method: 'POST',
-      headers: { ...getAuthenticatedPersistenceHeaders(config, context.accessToken), Prefer: 'return=representation' },
+      headers: {
+        ...getAuthenticatedPersistenceHeaders(config, context.accessToken),
+        Prefer: 'resolution=ignore-duplicates,return=representation',
+      },
       body: JSON.stringify(body),
     });
 
@@ -192,8 +198,39 @@ export async function persistOperationalRecord(record: OperationalRecordLike): P
       };
     }
 
-    const data = await response.json().catch(() => []);
-    const recordId = Array.isArray(data) && data[0]?.id ? String(data[0].id) : undefined;
+    const inserted = await response.json().catch(() => []);
+    if (Array.isArray(inserted) && inserted[0]?.id) {
+      return { persisted: true, source: 'supabase', recordId: String(inserted[0].id) };
+    }
+
+    // A concurrent/retried request may hit the unique key and be ignored.
+    // Read back the canonical row so callers can verify durable persistence.
+    const lookup = new URLSearchParams({
+      select: 'id',
+      organization_id: `eq.${context.organizationId}`,
+      type: 'eq.ai_core_execution',
+      idempotency_key: `eq.${idempotencyKey}`,
+      limit: '1',
+    });
+    const readback = await fetch(`${config.url}/rest/v1/audit_logs?${lookup.toString()}`, {
+      headers: getAuthenticatedPersistenceHeaders(config, context.accessToken),
+    });
+    if (!readback.ok) {
+      return {
+        persisted: false,
+        source: 'memory',
+        error: `Supabase audit_logs idempotency readback returned HTTP ${readback.status}.`,
+      };
+    }
+    const existing = await readback.json().catch(() => []);
+    const recordId = Array.isArray(existing) && existing[0]?.id ? String(existing[0].id) : undefined;
+    if (!recordId) {
+      return {
+        persisted: false,
+        source: 'memory',
+        error: 'Supabase audit_logs idempotency conflict occurred but the canonical row could not be read back.',
+      };
+    }
     return { persisted: true, source: 'supabase', recordId };
   } catch (error: any) {
     return {
