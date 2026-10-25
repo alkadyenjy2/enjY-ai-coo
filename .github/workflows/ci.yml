@@ -100,6 +100,9 @@ jobs:
       - name: Persistence tenant context test
         run: npm run test:persistence-context
 
+      - name: Audit log idempotency regression test
+        run: npm run test:audit-idempotency
+
       - name: OpenAI Responses adapter test
         run: node --import tsx --test --test-concurrency=1 tests/openai.test.ts
 
