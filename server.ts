@@ -20,7 +20,7 @@ import { shouldRouteN8nApproval } from "./src/ai-gateway/n8n-command-policy";
 import { callMetaModelResponses } from "./src/adapters/meta-model";
 import { buildLifecycleHistory } from "./src/core/agent-lifecycle";
 import { buildSystemHealthProbe, isSystemHealthCommand, shouldUseDeterministicSystemHealth } from "./src/core/system-health";
-import { isTrustedN8nWebhookConfigured } from "./src/core/readiness";
+import { getPublicDatabaseFingerprint, isTrustedN8nWebhookConfigured } from "./src/core/readiness";
 import { getPortfolioContext } from "./src/core/portfolio-context";
 import { auditPortfolioRepositories } from "./src/core/github-portfolio-audit";
 import { isPortfolioAuditCommand, isPortfolioAuditFullyVerified } from "./src/core/portfolio-audit-policy";
@@ -122,7 +122,7 @@ app.get("/api/health", (req, res) => {
 });
 
 // API Route: Readiness Check
-const readinessHandler = (_req: express.Request, res: express.Response) => {
+const readinessHandler = async (_req: express.Request, res: express.Response) => {
   const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
   const hasGemini = Boolean(process.env.GEMINI_API_KEY);
   const hasMetaModel = Boolean(process.env.META_MODEL_API_KEY);
@@ -141,10 +141,16 @@ const readinessHandler = (_req: express.Request, res: express.Response) => {
     executionConfigured: isTrustedN8nWebhookConfigured(process.env.N8N_COMMAND_WEBHOOK_URL),
   };
   const ready = checks.process && (!requireLiveDependencies || (hasModelProvider && checks.supabase && checks.executionConfigured));
+  // This is a read-only, best-effort public-key probe. It never uses a service-role key,
+  // and RLS/permission failures return null evidence instead of exposing table details.
+  const databaseFingerprint = await getPublicDatabaseFingerprint(process.env);
   return res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "degraded",
     requireLiveDependencies,
     checks,
+    supabase_project_ref: databaseFingerprint.supabase_project_ref,
+    last_successful_write: databaseFingerprint.last_successful_write,
+    last_execution_id: databaseFingerprint.last_execution_id,
     timestamp: new Date().toISOString(),
   });
 };
